@@ -1,0 +1,13 @@
+# Python Çöpleri
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Veritabanı ve Çevre Değişkenleri
+.env
+venv/
+env/
+
+# İşletim Sistemi Dosyaları
+.DS_Store
+Thumbs.db

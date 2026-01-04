@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Webtoon Toplu Yükleme Testi</title>
+    <style>
+        body { font-family: sans-serif; padding: 50px; background-color: #f4f4f9; }
+        .kutu { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        input, button { width: 100%; padding: 10px; margin-top: 10px; box-sizing: border-box; }
+        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #45a049; }
+        #sonuc { margin-top: 20px; padding: 10px; border: 1px solid #ddd; background: #eee; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="kutu">
+    <h2>🚀 Webtoon Bölüm Yükleyici</h2>
+    <p>Bölüm ID'sini gir ve tüm sayfaları tek seferde seç!</p>
+    
+    <label>Bölüm ID:</label>
+    <input type="number" id="bolum_id" value="1" placeholder="Örn: 1">
+
+    <label>Resim Dosyaları (Hepsini Seç):</label>
+    <input type="file" id="resimler" multiple accept="image/*">
+
+    <button onclick="yukle()">YÜKLE</button>
+
+    <div id="sonuc"></div>
+</div>
+
+<script>
+    async function yukle() {
+        const bolumId = document.getElementById("bolum_id").value;
+        const dosyaInput = document.getElementById("resimler");
+        const sonucKutusu = document.getElementById("sonuc");
+
+        if (dosyaInput.files.length === 0) {
+            alert("Lütfen en az bir resim seç!");
+            return;
+        }
+
+        const formData = new FormData();
+        
+        // Seçilen tüm dosyaları paketliyoruz
+        for (let i = 0; i < dosyaInput.files.length; i++) {
+            formData.append("dosyalar", dosyaInput.files[i]);
+        }
+
+        sonucKutusu.style.display = "block";
+        sonucKutusu.innerHTML = "⏳ Yükleniyor...";
+
+        try {
+            // Backend'e gönderiyoruz (Query parametresi olarak bolum_id ekliyoruz)
+            const response = await fetch(`http://127.0.0.1:8000/bolum-resimleri-toplu-yukle?bolum_id=${bolumId}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                sonucKutusu.innerHTML = `✅ <b>BAŞARILI!</b><br>${data.mesaj}`;
+                sonucKutusu.style.color = "green";
+            } else {
+                sonucKutusu.innerHTML = `❌ <b>HATA:</b> ${data.detail || "Bilinmeyen hata"}`;
+                sonucKutusu.style.color = "red";
+            }
+        } catch (error) {
+            sonucKutusu.innerHTML = `❌ <b>Bağlantı Hatası:</b> Sunucu çalışıyor mu?`;
+            sonucKutusu.style.color = "red";
+        }
+    }
+</script>
+
+</body>
+</html>
