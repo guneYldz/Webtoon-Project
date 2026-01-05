@@ -16,7 +16,7 @@ class EpisodeImageSchema(BaseModel):
 class EpisodeListSchema(BaseModel):
     id: int
     title: str
-    episode_number: str
+    episode_number: int  # 👈 DÜZELTİLDİ: 'str' yerine 'int' yaptık!
     created_at: Optional[datetime]
     # Not: Bölüm listesinde resimlere gerek yok, sadece başlık yeter.
 
@@ -47,14 +47,19 @@ class WebtoonDetail(WebtoonCard):
     class Config:
         from_attributes = True
 
+# --- 3. Diğer İşlem Şemaları ---
+
 class CommentCreate(BaseModel):
     bolum_id: int
     yorum: str
 
-# schemas.py dosyasına eklenecek:
 class FavoriteCreate(BaseModel):
     webtoon_id: int
 
-
 class LikeCreate(BaseModel):
     episode_id: int
+
+class EpisodeCreate(BaseModel):
+    webtoon_id: int
+    title: str
+    episode_number: int

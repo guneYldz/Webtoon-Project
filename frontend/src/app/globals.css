@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Koyu Tema Ayarları */
+body {
+  background-color: #121212; /* Çok koyu gri (neredeyse siyah) */
+  color: #e0e0e0;            /* Yazılar açık gri */
+}
+
+/* Scrollbar (Kaydırma çubuğu) Güzelleştirme */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a1a; 
+}
+::-webkit-scrollbar-thumb {
+  background: #333; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555; 
+}

@@ -1,13 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, status
 from sqlalchemy.orm import Session
 from typing import List
-from pydantic import BaseModel
 import shutil
 import os
-import uuid # Rastgele isim oluşturmak için
 
 from database import get_db
 import models
+import schemas # Şemaları buradan çekeceğiz
 
 # Router Ayarları
 router = APIRouter(
@@ -15,21 +14,15 @@ router = APIRouter(
     tags=["Bölümler & Resim Yükleme"]
 )
 
-# --- GİRİŞ ŞEMASI (Veri Kalıbı) ---
-class EpisodeCreate(BaseModel):
-    webtoon_id: int
-    title: str          # Örn: "Bölüm 1: Başlangıç"
-    episode_number: int # Örn: 1 (Sayı olmalı)
-
 # 1. BÖLÜM EKLEME
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def bolum_ekle(episode: EpisodeCreate, db: Session = Depends(get_db)):
+def bolum_ekle(episode: schemas.EpisodeCreate, db: Session = Depends(get_db)):
     # Webtoon var mı kontrol et
     webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == episode.webtoon_id).first()
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı!")
 
-    # Aynı bölüm numarası var mı? (Örn: 1. bölüm zaten varsa tekrar ekleme)
+    # Aynı bölüm numarası var mı?
     var_mi = db.query(models.Episode).filter(
         models.Episode.webtoon_id == episode.webtoon_id,
         models.Episode.episode_number == episode.episode_number
@@ -42,7 +35,8 @@ def bolum_ekle(episode: EpisodeCreate, db: Session = Depends(get_db)):
     yeni_bolum = models.Episode(
         webtoon_id=episode.webtoon_id, 
         title=episode.title, 
-        episode_number=episode.episode_number
+        episode_number=episode.episode_number,
+        view_count=0  # Başlangıçta 0 olsun
     )
     db.add(yeni_bolum)
     db.commit()
@@ -50,7 +44,7 @@ def bolum_ekle(episode: EpisodeCreate, db: Session = Depends(get_db)):
     return {"mesaj": "Bölüm Başarıyla Oluşturuldu", "id": yeni_bolum.id}
 
 
-# 2. TOPLU RESİM YÜKLEME (Senin kodunun geliştirilmiş hali)
+# 2. TOPLU RESİM YÜKLEME
 @router.post("/{episode_id}/upload-images")
 def resim_yukle(
     episode_id: int, 
@@ -62,23 +56,21 @@ def resim_yukle(
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı!")
 
-    # Mevcut resim sayısını al (Sıralamayı bozmamak için)
-    mevcut_sayi = db.query(models.EpisodeImage).filter(models.EpisodeImage.episode_id == episode_id).count()
-    baslangic = mevcut_sayi + 1
-    
     # Klasör Yolu: static/images/{webtoon_id}/{episode_id}/
-    # Bu sayede her bölümün resmi kendi klasöründe durur, karışmaz.
     klasor_yolu = f"static/images/{bolum.webtoon_id}/{episode_id}"
     
     if not os.path.exists(klasor_yolu):
         os.makedirs(klasor_yolu) # Klasör yoksa oluştur
 
+    # Mevcut resim sayısını al (Sıralamayı bozmamak için)
+    mevcut_sayi = db.query(models.EpisodeImage).filter(models.EpisodeImage.episode_id == episode_id).count()
+    
     yuklenenler = []
 
     for i, dosya in enumerate(dosyalar):
-        sira = baslangic + i
+        sira = mevcut_sayi + i + 1
         
-        # Dosya adını güvenli hale getiriyoruz (Türkçe karakter sorununu önler)
+        # Dosya adını güvenli hale getir
         uzanti = dosya.filename.split(".")[-1]
         yeni_ad = f"page_{sira}.{uzanti}" 
         dosya_yolu = f"{klasor_yolu}/{yeni_ad}"
@@ -88,11 +80,9 @@ def resim_yukle(
             shutil.copyfileobj(dosya.file, buffer)
 
         # Veritabanına kaydet
-        # Not: Frontend'in erişmesi için başındaki 'static/' kısmını veritabanına yazarken 
-        # nasıl kullanacağına göre ayarlayabilirsin. Şimdilik tam yol yazıyoruz.
         db_resim = models.EpisodeImage(
             episode_id=episode_id, 
-            image_url=dosya_yolu, # Örn: static/images/1/5/page_1.jpg
+            image_url=dosya_yolu, 
             page_order=sira
         )
         db.add(db_resim)
@@ -102,37 +92,54 @@ def resim_yukle(
     return {"mesaj": f"{len(dosyalar)} resim başarıyla yüklendi!", "dosyalar": yuklenenler}
 
 
-# 3. BÖLÜM OKUMA (Frontend Resimleri Buradan Çekecek)
+# 3. BÖLÜM OKUMA (Güncellendi: Sonraki/Önceki Bölüm Bilgisi Eklendi)
 @router.get("/{episode_id}/read")
 def bolum_oku(episode_id: int, db: Session = Depends(get_db)):
-    # Bölümü bul
+    # Mevcut bölümü bul
     bolum = db.query(models.Episode).filter(models.Episode.id == episode_id).first()
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
     
-    # --- YENİ EKLENEN KISIM: wiew_count Artır ---
-    # Eğer veritabanında değer boşsa (None) hata vermesin diye önce 0 yapıyoruz
-    if bolum.wiew_count is None:
-        bolum.wiew_count = 0
+    # İzlenme sayısını artır
+    if bolum.view_count is None: bolum.view_count = 0
+    bolum.view_count += 1   
+    
+    if bolum.webtoon and bolum.webtoon.view_count is None:
+         bolum.webtoon.view_count = 0
+    if bolum.webtoon:
+        bolum.webtoon.view_count += 1
 
-    bolum.wiew_count += 1  # Senin verdiğin isimle güncelledik
-    db.commit()            # Veritabanına kaydettik
-    # -------------------------------------------------------
+    db.commit()
 
-    # Bağlı olduğu webtoon'u bul (Başlık için)
-    webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == bolum.webtoon_id).first()
+    # --- ÖNCEKİ ve SONRAKİ Bölümü Bul ---
+    # Mantık: Aynı webtoon içinde, bölüm numarası bir büyük veya küçük olanı arıyoruz.
+    
+    # Sonraki Bölüm: Numarası bu bölümden BÜYÜK olan en küçük numara
+    sonraki_bolum = db.query(models.Episode).filter(
+        models.Episode.webtoon_id == bolum.webtoon_id,
+        models.Episode.episode_number > bolum.episode_number
+    ).order_by(models.Episode.episode_number.asc()).first()
 
-    # Resimleri sayfa sırasına göre (page_order) getir
+    # Önceki Bölüm: Numarası bu bölümden KÜÇÜK olan en büyük numara
+    onceki_bolum = db.query(models.Episode).filter(
+        models.Episode.webtoon_id == bolum.webtoon_id,
+        models.Episode.episode_number < bolum.episode_number
+    ).order_by(models.Episode.episode_number.desc()).first()
+
+    # Resimleri çek
     resimler = db.query(models.EpisodeImage)\
                   .filter(models.EpisodeImage.episode_id == episode_id)\
                   .order_by(models.EpisodeImage.page_order)\
                   .all()
 
-    # Basit bir sözlük (dictionary) döndürüyoruz
     return {
-        "webtoon_title": webtoon.title,
+        "webtoon_id": bolum.webtoon_id,
+        "webtoon_title": bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
         "episode_title": bolum.title,
         "episode_number": bolum.episode_number,
-        "views": bolum.wiew_count,  # Frontend'e gönderirken de güncel sayıyı gönderiyoruz
-        "images": resimler 
+        "views": bolum.view_count,
+        "images": resimler,
+        # Frontend'in kullanacağı yeni bilgiler:
+        "next_episode_id": sonraki_bolum.id if sonraki_bolum else None,
+        "prev_episode_id": onceki_bolum.id if onceki_bolum else None
     }

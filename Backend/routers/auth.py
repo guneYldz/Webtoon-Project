@@ -126,3 +126,14 @@ def giris_yap(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = De
     access_token = token_olustur(data={"sub": kullanici.email})
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+# --- 3. KULLANICI BILGILERINI GETIR (ME) ---
+# Bu endpoint'e istek atan kişinin kim olduğunu token'dan anlar ve geri döndürür.
+@router.get("/me")
+def beni_getir(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
+# --- 3. KULLANICI BİLGİLERİNİ GETİR (BENİ GETİR) ---
+@router.get("/me")
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    return current_user

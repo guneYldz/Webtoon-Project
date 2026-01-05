@@ -65,7 +65,7 @@ class Episode(Base):
     id = Column(Integer, primary_key=True, index=True)
     webtoon_id = Column(Integer, ForeignKey("webtoons.id"), nullable=False)
     title = Column(String(200), nullable=False)
-    episode_number = Column(String(200), nullable=False) 
+    episode_number = Column(Integer, nullable=False) 
     view_count = Column(Integer, default=0)
     likes_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

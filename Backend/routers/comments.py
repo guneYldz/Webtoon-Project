@@ -1,41 +1,77 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List
+from pydantic import BaseModel
+from datetime import datetime
+
 from database import get_db
-from routers.auth import get_current_user
 import models
-import schemas  # <--- 1. YENİ: schemas dosyasını içeri aldık
+# auth dosyanın nerede olduğuna göre değişebilir, senin kodunda 'routers.auth' idi:
+from routers.auth import get_current_user 
 
 router = APIRouter(
     prefix="/comments",
     tags=["Comments (Yorumlar)"]
 )
 
-# 1. YORUM YAP (Sadece Giris Yapanlar) 🔒
-@router.post("/yap")
-def yorum_yap(request: schemas.CommentCreate,  # <--- 2. DEĞİŞTİ: Tek tek parametre yerine 'request' geldi
-              su_an_giris_yapan_kullanici: models.User = Depends(get_current_user),
-              db: Session = Depends(get_db)):
+# --- Şemalar (Veri Kalıpları) ---
+# Frontend 'episode_id' ve 'content' gönderiyor, buna uyuyoruz:
+class CommentCreate(BaseModel):
+    episode_id: int
+    content: str
+
+# Frontend'e veriyi gönderirken kullanacağımız kalıp:
+class CommentResponse(BaseModel):
+    id: int
+    user_username: str  # Yazan kişinin adı (Önemli!)
+    content: str
+    created_at: datetime
     
-    # Bölüm var mı kontrol et
-    # 3. DEĞİŞTİ: Artık veriyi 'request.bolum_id' şeklinde alıyoruz
-    bolum = db.query(models.Episode).filter(models.Episode.id == request.bolum_id).first()
-    
-    if not bolum:
-        raise HTTPException(status_code=404, detail="Bölüm bulunamadı!")
+    class Config:
+        from_attributes = True
+
+# 1. YORUM YAP 🔒
+# Adres: POST /comments/ (Frontend buraya istek atıyor)
+@router.post("/", status_code=status.HTTP_201_CREATED)
+def yorum_yap(
+    comment: CommentCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Bölüm var mı?
+    episode = db.query(models.Episode).filter(models.Episode.id == comment.episode_id).first()
+    if not episode:
+        raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
 
     # Yorumu kaydet
-    yeni_yorum = models.Comment(
-        user_id=su_an_giris_yapan_kullanici.id,
-        episode_id=request.bolum_id,  # <--- 4. GÜNCELLENDİ
-        content=request.yorum         # <--- 5. GÜNCELLENDİ (request.yorum)
+    new_comment = models.Comment(
+        user_id=current_user.id,
+        episode_id=comment.episode_id,
+        content=comment.content
     )
-    
-    db.add(yeni_yorum)
+    db.add(new_comment)
     db.commit()
-    return {"mesaj": "Yorum basariyla eklendi!", "yazan": su_an_giris_yapan_kullanici.username}
+    db.refresh(new_comment)
+    return {"message": "Yorum başarıyla eklendi"}
 
-# 2. BÖLÜMÜN YORUMLARINI OKU (Burası Aynen Kalıyor)
-@router.get("/oku/{bolum_id}")
-def yorumlari_getir(bolum_id: int, db: Session = Depends(get_db)):
-    yorumlar = db.query(models.Comment).filter(models.Comment.episode_id == bolum_id).all()
-    return yorumlar
+# 2. BİR BÖLÜMÜN YORUMLARINI GETİR 📖
+# Adres: GET /comments/{episode_id}
+@router.get("/{episode_id}", response_model=List[CommentResponse])
+def yorumlari_getir(episode_id: int, db: Session = Depends(get_db)):
+    # Yorumları 'en yeniden eskiye' doğru sıralayıp çekiyoruz
+    comments = db.query(models.Comment)\
+                 .filter(models.Comment.episode_id == episode_id)\
+                 .order_by(models.Comment.created_at.desc())\
+                 .all()
+    
+    # Veriyi Frontend'in istediği formata (CommentResponse) çeviriyoruz
+    sonuc = []
+    for c in comments:
+        sonuc.append({
+            "id": c.id,
+            # Eğer kullanıcı silinmişse hata vermesin, 'Anonim' yazsın
+            "user_username": c.user.username if c.user else "Anonim",
+            "content": c.content,
+            "created_at": c.created_at
+        })
+    return sonuc
