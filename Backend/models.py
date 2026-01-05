@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
-from sqlalchemy.orm import relationship # <--- BU ÇOK ÖNEMLİ
+from sqlalchemy.orm import relationship
 from database import Base
 import datetime
 
@@ -14,9 +14,10 @@ class User(Base):
     role = Column(String(10), default="user")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    # İLİŞKİLER (Python buradan verilere zıplayabilsin diye)
+    # İLİŞKİLER
     comments = relationship("Comment", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
+    likes = relationship("Like", back_populates="user") # ✅ EKLENDİ (Beğenileri görsün)
 
 # 2. KATEGORİLER
 class Category(Base):
@@ -41,7 +42,7 @@ class Webtoon(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # İLİŞKİLER
-    episodes = relationship("Episode", back_populates="webtoon") # Webtoon'dan bölümlere git
+    episodes = relationship("Episode", back_populates="webtoon")
     category_links = relationship("WebtoonCategory", back_populates="webtoon")
     favorites = relationship("Favorite", back_populates="webtoon")
 
@@ -70,9 +71,10 @@ class Episode(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # İLİŞKİLER
-    webtoon = relationship("Webtoon", back_populates="episodes") # Bölümden Webtoon'a geri dön (Babası kim?)
-    images = relationship("EpisodeImage", back_populates="episode") # Bölümden Resimlere git
-    comments = relationship("Comment", back_populates="episode")    # Bölümden Yorumlara git
+    webtoon = relationship("Webtoon", back_populates="episodes")
+    images = relationship("EpisodeImage", back_populates="episode")
+    comments = relationship("Comment", back_populates="episode")
+    likes = relationship("Like", back_populates="episode") # ✅ EKLENDİ (Bölüme gelen beğeniler)
 
 # 6. BÖLÜM RESİMLERİ
 class EpisodeImage(Base):
@@ -84,34 +86,36 @@ class EpisodeImage(Base):
     page_order = Column(Integer, nullable=False)
 
     # İLİŞKİLER
-    episode = relationship("Episode", back_populates="images") # Resimden Bölüme geri dön
+    episode = relationship("Episode", back_populates="images")
 
 # 7. YORUMLAR
 class Comment(Base):
     __tablename__ = "comments"
 
     id = Column(Integer, primary_key=True, index=True)
-    # DİKKAT: users_id yerine standart olarak user_id yaptım.
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)       
     episode_id = Column(Integer, ForeignKey("episodes.id"), nullable=True)   
     content = Column(Text, nullable=False)                                  
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # İLİŞKİLER
-    user = relationship("User", back_populates="comments")      # Yorumu kim yazdı?
-    episode = relationship("Episode", back_populates="comments") # Hangi bölüme yazdı?
+    user = relationship("User", back_populates="comments")
+    episode = relationship("Episode", back_populates="comments")
 
 # 8. FAVORİLER
 class Favorite(Base):
     __tablename__ = "favorites"
     
-    # Burada Composite Primary Key (İkili Anahtar) kullanmak en doğrusudur.
-    # Yani bir kullanıcı aynı seriyi iki kere favorileyemesin diye.
+    # Composite PK (Bir kullanıcı bir seriyi sadece 1 kere favorileyebilir)
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     webtoon_id = Column(Integer, ForeignKey("webtoons.id"), primary_key=True)
     added_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-#9. BEĞENİLER 
+    # İLİŞKİLER
+    user = relationship("User", back_populates="favorites")
+    webtoon = relationship("Webtoon", back_populates="favorites")
+
+# 9. BEĞENİLER 
 class Like(Base):
     __tablename__ = "likes"
 
@@ -119,12 +123,6 @@ class Like(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     episode_id = Column(Integer, ForeignKey("episodes.id"))
 
-    
-    user = relationship("User", back_populates="likes")
-    episode = relationship("Episode", back_populates="likes")
-
-    # İLİŞKİLER
-    user = relationship("User", back_populates="favorites")
-    webtoon = relationship("Webtoon", back_populates="favorites")
+    # İLİŞKİLER (Düzeltildi: Tekrar eden satırlar silindi)
     user = relationship("User", back_populates="likes")
     episode = relationship("Episode", back_populates="likes")

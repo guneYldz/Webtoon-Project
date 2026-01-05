@@ -18,7 +18,7 @@ Bu proje, modern web teknolojileri kullanılarak geliştirilmiş, ölçeklenebil
 
 * `/Backend`: Python API kodları, router yapıları ve statik dosyalar.
 * `/Database`: Veritabanı şeması ve SQL scriptleri.
-* `/Frontend`: React tabanlı kullanıcı arayüzü.
+* `/Frontend`: next.js tabanlı kullanıcı arayüzü.
 
 ## 🛠️ Kurulum
 

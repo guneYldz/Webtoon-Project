@@ -1,13 +1,34 @@
-# Python Çöpleri
+# --- PYTHON & BACKEND ---
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Veritabanı ve Çevre Değişkenleri
-.env
+# Sanal Ortam 
 venv/
 env/
+.venv/
 
-# İşletim Sistemi Dosyaları
+# Çevre Değişkenleri 
+.env
+.env.local
+
+# Veritabanı Dosyaları 
+*.db
+*.sqlite3
+
+# --- REACT & FRONTEND ---
+# Node Modülleri 
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React Build Çıktıları
+build/
+dist/
+
+# --- GENEL & SİSTEM ---
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
