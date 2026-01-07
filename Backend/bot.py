@@ -7,7 +7,7 @@ import time
 # ⚙️ AYARLAR
 # ==========================================
 API_URL = "http://127.0.0.1:8000" 
-GOOGLE_API_KEY = "AIzaSyB5mA0tdQe7gQnAtHqsibZi0L6qtUO0Lqk" # Senin Anahtarın
+GOOGLE_API_KEY = "BURAYA_KEY_GELECEK" # Senin Anahtarın
 TEST_SOURCE_URL = "https://topnovelhub.com/shadow-slave-chapter-1/" 
 TARGET_SERIES_ID = 1  # Veritabanındaki Shadow Slave ID'si
 
