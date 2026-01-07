@@ -1,8 +1,14 @@
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+from enum import Enum
 
 # --- 1. Temel Parçalar ---
+
+# ✅ YENİ: Tür Tanımı (Bot ve Frontend bunu kullanacak)
+class ContentType(str, Enum):
+    MANGA = "MANGA"
+    NOVEL = "NOVEL"
 
 # Resim Şeması (Bölüm içindeki sayfalar için)
 class EpisodeImageSchema(BaseModel):
@@ -12,37 +18,49 @@ class EpisodeImageSchema(BaseModel):
     class Config:
         from_attributes = True
 
+class WebtoonBase(BaseModel):
+    title: str
+    summary: Optional[str] = None
+    cover_image: str
+    status: str = "ongoing"
+    
+    # ✅ YENİ: Webtoon mu Novel mı? Ve Kaynak Linki ne?
+    type: ContentType = ContentType.MANGA # Varsayılan Manga
+    source_url: Optional[str] = None      # Bot için kaynak link
+
 # Bölüm Listesi Şeması (Webtoon detayında görünecek özet satırlar)
 class EpisodeListSchema(BaseModel):
     id: int
     title: str
-    episode_number: int  # 👈 DÜZELTİLDİ: 'str' yerine 'int' yaptık!
+    episode_number: int  
     created_at: Optional[datetime]
-    # Not: Bölüm listesinde resimlere gerek yok, sadece başlık yeter.
+    # Not: Bölüm listesinde içeriğe gerek yok, sadece başlık yeter.
 
     class Config:
         from_attributes = True
 
 # --- 2. Webtoon Şemaları ---
 
-# Anasayfada görünecek 'Kart' (Küçük kutu)
+# Anasayfada görünecek 'Kart'
 class WebtoonCard(BaseModel):
     id: int
     title: str
     cover_image: str
-    status: str       # ongoing / completed
+    status: str      
     view_count: int
-    # Yazar adını şimdilik basit tutuyoruz, ileride User tablosundan çekeriz.
-
+    type: ContentType # ✅ YENİ: Kartın üzerinde Manga/Novel yazsın diye
+    
     class Config:
         from_attributes = True
 
-# Webtoon Detay Sayfası (Tıklayınca açılan büyük sayfa)
+# Webtoon Detay Sayfası
 class WebtoonDetail(WebtoonCard):
     summary: Optional[str] = None
     created_at: datetime
-    # Bu webtoon'a ait bölümlerin listesi:
     episodes: List[EpisodeListSchema] = [] 
+    
+    # ✅ YENİ: Detay sayfasında kaynak linkini görmek isteyebilirsin (Admin panelde)
+    source_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -59,7 +77,38 @@ class FavoriteCreate(BaseModel):
 class LikeCreate(BaseModel):
     episode_id: int
 
+# ✅ GÜNCELLENDİ: Bot veya Admin bölüm eklerken bunları kullanacak
 class EpisodeCreate(BaseModel):
     webtoon_id: int
     title: str
+    episode_number: int # float da olabilir, arabölümler için (10.5 gibi)
+    
+    # Eğer Novel ise metin dolu olacak, Manga ise boş
+    content_text: Optional[str] = None 
+
+# ✅ YENİ: BÖLÜM OKUMA ŞEMASI (Frontend 'Reader' Sayfası İçin)
+# Kullanıcı "Bölüm Oku" dediğinde API'den bu dönecek.
+
+# ✅ YENİ: BÖLÜM OKUMA ŞEMASI (Frontend 'Reader' Sayfası İçin)
+class EpisodeDetailSchema(BaseModel):
+    id: int
+    webtoon_id: int             # Seriye dönmek için lazım
+    webtoon_title: str          # Navbar'da "Seri Adı" görünmesi için
+    title: str                  # Bölüm Başlığı
+    episode_title: str          # Frontend bazen bu isimle arıyor
     episode_number: int
+    
+    created_at: Optional[datetime]
+    
+    # MANGA ise resimler dolar
+    images: List[EpisodeImageSchema] = []
+    
+    # NOVEL ise bu metin dolar (İşte sihirli alan burası!) 📖
+    content_text: Optional[str] = None
+    
+    # Navigasyon
+    next_episode_id: Optional[int] = None
+    prev_episode_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True

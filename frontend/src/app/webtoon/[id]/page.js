@@ -28,23 +28,29 @@ export default function WebtoonDetail() {
       });
   }, [id]);
 
-  if (loading) return <div className="text-center py-20 text-lg">Yükleniyor...</div>;
-  if (!webtoon) return <div className="text-center py-20 text-red-500">Webtoon Bulunamadı 😔</div>;
+  // Yükleniyor ve Hata ekranlarını da Dark Mode yaptık
+  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg">Yükleniyor...</div>;
+  if (!webtoon) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">Webtoon Bulunamadı 😔</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    // DÜZELTME 1: Arka planı koyu (#121212) yaptık
+    <div className="min-h-screen bg-[#121212] pb-20 font-sans">
       
       {/* 1. ÜST KISIM (KAPAK & BİLGİ) */}
-      <div className="relative bg-gray-900 text-white overflow-hidden shadow-lg">
+      <div className="relative bg-[#1a1a1a] text-white overflow-hidden shadow-2xl border-b border-gray-800">
         {/* Arkaplan Blur Efekti */}
         <div 
-          className="absolute inset-0 bg-cover bg-center opacity-40 blur-2xl transform scale-110"
+          className="absolute inset-0 bg-cover bg-center opacity-30 blur-3xl transform scale-110"
           style={{ backgroundImage: `url(http://127.0.0.1:8000/${webtoon.cover_image})` }}
         ></div>
+        
+        {/* İçeriği merkeze almak için gradient ekledik */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
 
-        <div className="relative container mx-auto px-4 py-12 flex flex-col md:flex-row gap-8 items-center md:items-start z-10">
+        {/* DÜZELTME 2: max-w-7xl ile hizalama */}
+        <div className="relative container mx-auto max-w-7xl px-4 py-16 flex flex-col md:flex-row gap-10 items-center md:items-start z-10">
           {/* Kapak Resmi */}
-          <div className="w-52 md:w-64 flex-shrink-0 rounded-lg overflow-hidden border-4 border-gray-700 shadow-2xl">
+          <div className="w-52 md:w-72 flex-shrink-0 rounded-xl overflow-hidden border border-gray-700 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
             <img 
               src={`http://127.0.0.1:8000/${webtoon.cover_image}`} 
               alt={webtoon.title} 
@@ -54,16 +60,19 @@ export default function WebtoonDetail() {
 
           {/* Yazılar */}
           <div className="flex-1 text-center md:text-left">
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-3 drop-shadow-lg">{webtoon.title}</h1>
+            <h1 className="text-4xl md:text-6xl font-black mb-4 drop-shadow-lg tracking-tight text-white">{webtoon.title}</h1>
             
-            <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-5">
-               <span className="bg-blue-600 px-3 py-1 rounded-full text-sm font-semibold">Webtoon</span>
-               <span className={`px-3 py-1 rounded-full text-sm font-semibold border ${webtoon.status === 'ongoing' ? 'border-green-400 text-green-400' : 'border-red-400 text-red-400'}`}>
+            <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-6">
+               <span className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1 rounded text-sm font-bold">Webtoon</span>
+               <span className={`px-3 py-1 rounded text-sm font-bold border ${webtoon.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
                  {webtoon.status === 'ongoing' ? 'Devam Ediyor' : 'Tamamlandı'}
+               </span>
+               <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-3 py-1 rounded text-sm flex items-center gap-2">
+                 👁️ {(webtoon.view_count || 0).toLocaleString()}
                </span>
             </div>
 
-            <p className="text-gray-200 text-lg leading-relaxed max-w-3xl mb-6 drop-shadow-md">
+            <p className="text-gray-300 text-lg leading-relaxed max-w-4xl mb-6 drop-shadow-md">
               {webtoon.summary}
             </p>
           </div>
@@ -71,44 +80,53 @@ export default function WebtoonDetail() {
       </div>
 
       {/* 2. BÖLÜMLER LİSTESİ */}
-      <div className="container mx-auto px-4 py-10 max-w-4xl">
-        <h3 className="text-2xl font-bold text-gray-800 mb-6 border-b-2 border-gray-200 pb-2 flex justify-between items-center">
-          <span>Bölümler</span>
-          <span className="text-sm font-normal text-gray-500">{webtoon.episodes?.length || 0} Bölüm</span>
+      {/* DÜZELTME 3: max-w-7xl ve Dark Tema renkleri */}
+      <div className="container mx-auto max-w-7xl px-4 py-12">
+        <h3 className="text-2xl font-bold text-white mb-6 border-b border-gray-800 pb-4 flex justify-between items-center">
+          <span className="flex items-center gap-2">
+            <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+            Bölümler
+          </span>
+          <span className="text-sm font-medium text-gray-400 bg-[#1e1e1e] px-3 py-1 rounded border border-gray-800">
+            {webtoon.episodes?.length || 0} Bölüm
+          </span>
         </h3>
         
         <div className="flex flex-col gap-3">
           {webtoon.episodes && webtoon.episodes.length > 0 ? (
-            // Veritabanındaki bölümleri listele (Yeniden eskiye sıralı gelmesi için reverse yapabilirsin)
+            // Veritabanındaki bölümleri listele
             [...webtoon.episodes].reverse().map((ep) => (
               <Link 
                 key={ep.id} 
-                // BURASI ÖNEMLİ: Okuma sayfasına gidecek link
                 href={`/webtoon/${id}/bolum/${ep.id}`} 
-                className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 hover:border-blue-500 hover:shadow-md transition flex items-center justify-between group"
+                // DÜZELTME 4: Kart renkleri koyu yapıldı (bg-[#1e1e1e])
+                className="bg-[#1e1e1e] p-4 rounded-xl border border-gray-800 hover:border-blue-500/50 hover:bg-[#252525] transition flex items-center justify-between group shadow-sm"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold group-hover:bg-blue-100 group-hover:text-blue-600 transition">
+                <div className="flex items-center gap-5">
+                  {/* Bölüm Numarası Kutusu */}
+                  <div className="w-14 h-14 bg-[#121212] rounded-lg border border-gray-800 flex items-center justify-center text-gray-400 font-bold text-lg group-hover:text-blue-500 group-hover:border-blue-500/30 transition">
                     #{ep.episode_number}
                   </div>
+                  
                   <div>
-                    <h4 className="font-bold text-gray-800 text-lg group-hover:text-blue-600 transition">
+                    <h4 className="font-bold text-gray-200 text-lg group-hover:text-blue-400 transition">
                       {ep.title}
                     </h4>
-                    <span className="text-xs text-gray-400">
-                      {new Date(ep.created_at).toLocaleDateString("tr-TR")}
+                    <span className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                      📅 {new Date(ep.created_at).toLocaleDateString("tr-TR")}
                     </span>
                   </div>
                 </div>
 
-                <div className="text-gray-400 group-hover:text-blue-600 font-medium text-sm flex items-center gap-1">
-                  Oku <span className="text-xl">→</span>
+                <div className="text-gray-500 group-hover:text-blue-500 font-medium text-sm flex items-center gap-2 transition px-4 py-2 rounded bg-[#121212] border border-gray-800 group-hover:border-blue-500/30">
+                  Oku <span className="text-lg leading-none">→</span>
                 </div>
               </Link>
             ))
           ) : (
-            <div className="text-center py-10 bg-white rounded-lg border border-dashed border-gray-300 text-gray-500">
-              Henüz hiç bölüm yüklenmemiş. 🕸️
+            <div className="text-center py-20 bg-[#1e1e1e] rounded-xl border border-dashed border-gray-800 text-gray-500">
+              <span className="text-4xl block mb-2">🕸️</span>
+              Henüz hiç bölüm yüklenmemiş.
             </div>
           )}
         </div>

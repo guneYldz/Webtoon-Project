@@ -6,7 +6,7 @@ import os
 
 from database import get_db
 import models
-import schemas # Şemaları buradan çekeceğiz
+import schemas 
 
 # Router Ayarları
 router = APIRouter(
@@ -14,7 +14,7 @@ router = APIRouter(
     tags=["Bölümler & Resim Yükleme"]
 )
 
-# 1. BÖLÜM EKLEME
+# 1. BÖLÜM EKLEME (Bot Burayı Kullanıyor)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def bolum_ekle(episode: schemas.EpisodeCreate, db: Session = Depends(get_db)):
     # Webtoon var mı kontrol et
@@ -36,7 +36,9 @@ def bolum_ekle(episode: schemas.EpisodeCreate, db: Session = Depends(get_db)):
         webtoon_id=episode.webtoon_id, 
         title=episode.title, 
         episode_number=episode.episode_number,
-        view_count=0  # Başlangıçta 0 olsun
+        view_count=0,
+        # ✅ YENİ: Eğer bu bir NOVEL ise metni de kaydet
+        content_text=episode.content_text 
     )
     db.add(yeni_bolum)
     db.commit()
@@ -92,8 +94,9 @@ def resim_yukle(
     return {"mesaj": f"{len(dosyalar)} resim başarıyla yüklendi!", "dosyalar": yuklenenler}
 
 
-# 3. BÖLÜM OKUMA (Güncellendi: Sonraki/Önceki Bölüm Bilgisi Eklendi)
-@router.get("/{episode_id}/read")
+# 3. BÖLÜM OKUMA (Frontend Burayı Kullanıyor)
+# ✅ YENİ: response_model ekledik, böylece Pydantic şemayı zorunlu kılıyoruz.
+@router.get("/{episode_id}/read", response_model=schemas.EpisodeDetailSchema)
 def bolum_oku(episode_id: int, db: Session = Depends(get_db)):
     # Mevcut bölümü bul
     bolum = db.query(models.Episode).filter(models.Episode.id == episode_id).first()
@@ -112,34 +115,37 @@ def bolum_oku(episode_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     # --- ÖNCEKİ ve SONRAKİ Bölümü Bul ---
-    # Mantık: Aynı webtoon içinde, bölüm numarası bir büyük veya küçük olanı arıyoruz.
-    
-    # Sonraki Bölüm: Numarası bu bölümden BÜYÜK olan en küçük numara
     sonraki_bolum = db.query(models.Episode).filter(
         models.Episode.webtoon_id == bolum.webtoon_id,
         models.Episode.episode_number > bolum.episode_number
     ).order_by(models.Episode.episode_number.asc()).first()
 
-    # Önceki Bölüm: Numarası bu bölümden KÜÇÜK olan en büyük numara
     onceki_bolum = db.query(models.Episode).filter(
         models.Episode.webtoon_id == bolum.webtoon_id,
         models.Episode.episode_number < bolum.episode_number
     ).order_by(models.Episode.episode_number.desc()).first()
 
-    # Resimleri çek
+    # Resimleri çek (Eğer varsa)
     resimler = db.query(models.EpisodeImage)\
                   .filter(models.EpisodeImage.episode_id == episode_id)\
                   .order_by(models.EpisodeImage.page_order)\
                   .all()
 
-    return {
-        "webtoon_id": bolum.webtoon_id,
-        "webtoon_title": bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
-        "episode_title": bolum.title,
-        "episode_number": bolum.episode_number,
-        "views": bolum.view_count,
-        "images": resimler,
-        # Frontend'in kullanacağı yeni bilgiler:
-        "next_episode_id": sonraki_bolum.id if sonraki_bolum else None,
-        "prev_episode_id": onceki_bolum.id if onceki_bolum else None
-    }
+    # ✅ YENİ: Veriyi Şemaya Uygun Paketle (Metin Dahil)
+    return schemas.EpisodeDetailSchema(
+        id=bolum.id,
+        webtoon_id=bolum.webtoon_id,
+        webtoon_title=bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
+        title=bolum.title,
+        episode_title=bolum.title,
+        episode_number=bolum.episode_number,
+        views=bolum.view_count,
+        created_at=bolum.created_at,
+        
+        # 📖 İşte sihirli dokunuş:
+        content_text=bolum.content_text, 
+        
+        images=resimler,
+        next_episode_id=sonraki_bolum.id if sonraki_bolum else None,
+        prev_episode_id=onceki_bolum.id if onceki_bolum else None
+    )
