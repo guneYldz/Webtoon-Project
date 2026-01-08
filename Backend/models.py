@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean 
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -20,6 +20,7 @@ class User(Base):
     password = Column(String(255), nullable=False)
     role = Column(String(10), default="user")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    is_active = Column(Boolean, default=True) # Ban kontrolü için (True=Açık, False=Banlı)
 
     # İLİŞKİLER
     comments = relationship("Comment", back_populates="user")
@@ -46,6 +47,8 @@ class Webtoon(Base):
     status = Column(String(30), default="ongoing")
     view_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    is_featured = Column(Boolean, default=False) # Vitrin için
+    banner_image = Column(String, nullable=True)
 
     # --- YENİ EKLENEN ALANLAR ---
     # 1. Tür: Bu bir Manga mı yoksa Novel mı?

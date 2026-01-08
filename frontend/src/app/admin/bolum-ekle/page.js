@@ -6,15 +6,21 @@ import { useRouter } from "next/navigation";
 export default function BolumEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [webtoons, setWebtoons] = useState([]); // Webtoon listesi (Seçmek için)
+  const [webtoons, setWebtoons] = useState([]); 
   
-  // Form Verileri
+  // Mod Seçimi: 'single' (Tek Bölüm) veya 'bulk' (Toplu Klasör)
+  const [mode, setMode] = useState("single"); 
+
+  // Form Verileri (Tekil Yükleme İçin)
   const [selectedWebtoon, setSelectedWebtoon] = useState("");
   const [title, setTitle] = useState("");
   const [episodeNumber, setEpisodeNumber] = useState("");
   const [files, setFiles] = useState(null);
 
-  // Sayfa açılınca Webtoonları çek (Dropdown için)
+  // Toplu Yükleme Verileri
+  const [bulkLogs, setBulkLogs] = useState([]); // İşlem kayıtları
+
+  // Webtoonları Çek
   useEffect(() => {
     fetch("http://127.0.0.1:8000/webtoons/")
       .then((res) => res.json())
@@ -22,165 +28,245 @@ export default function BolumEkle() {
       .catch((err) => console.error("Webtoonlar çekilemedi:", err));
   }, []);
 
-  const handleFileChange = (e) => {
-    setFiles(e.target.files); // Çoklu dosya seçimi
+  // --- TEKİL YÜKLEME FONKSİYONU ---
+  const handleSingleSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedWebtoon || !files) {
+        alert("Lütfen webtoon ve resim seçin."); 
+        return;
+    }
+    
+    setLoading(true);
+    try {
+        await uploadOneEpisode(selectedWebtoon, title, episodeNumber, files);
+        alert("✅ Bölüm Başarıyla Yüklendi!");
+    } catch (error) {
+        alert("❌ Hata: " + error.message);
+    } finally {
+        setLoading(false);
+    }
   };
 
-  const handleSubmit = async (e) => {
+  // --- TOPLU YÜKLEME FONKSİYONU ---
+  const handleBulkSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-
-    const token = localStorage.getItem("token");
-    if (!token) {
-      alert("Admin girişi yapmalısın!");
-      router.push("/login");
-      return;
-    }
-
     if (!selectedWebtoon || !files) {
-      alert("Lütfen bir webtoon ve resim dosyaları seçin.");
-      setLoading(false);
-      return;
+        alert("Lütfen webtoon ve bir ANA KLASÖR seçin.");
+        return;
     }
 
-    try {
-      // ADIM 1: Bölümü Oluştur (Başlık ve Numara)
-      // Backend: POST /episodes/
-      const createResponse = await fetch("http://127.0.0.1:8000/episodes/", {
+    setLoading(true);
+    setBulkLogs([]); // Logları temizle
+
+    // 1. Dosyaları Klasörlere Göre Grupla
+    const episodesMap = {};
+    
+    // files bir FileList objesidir, array'e çevirip dönelim
+    Array.from(files).forEach((file) => {
+        // webkitRelativePath örnek: "Solo Leveling/Chapter 1/page1.jpg"
+        const pathParts = file.webkitRelativePath.split("/");
+        
+        // En az 2 derinlik olmalı (Ana Klasör / Bölüm Klasörü / Resim)
+        if (pathParts.length < 2) return;
+
+        // Bölüm Klasörünün Adı (Örn: "Chapter 1" veya sadece "1")
+        // Sondan bir önceki parça klasör adıdır
+        const folderName = pathParts[pathParts.length - 2];
+
+        // Resim dosyası mı?
+        if (!file.type.startsWith("image/")) return;
+
+        if (!episodesMap[folderName]) {
+            episodesMap[folderName] = [];
+        }
+        episodesMap[folderName].push(file);
+    });
+
+    const folderNames = Object.keys(episodesMap);
+    let successCount = 0;
+
+    addLog(`📂 Toplam ${folderNames.length} bölüm klasörü bulundu. Yükleme başlıyor...`);
+
+    // 2. Her Klasörü Sırayla Yükle
+    for (const folderName of folderNames) {
+        // Klasör adından numarayı ayıklamaya çalış (Örn: "Chapter 55" -> 55)
+        const numberMatch = folderName.match(/(\d+(\.\d+)?)/);
+        const epNum = numberMatch ? numberMatch[0] : null;
+
+        if (!epNum) {
+            addLog(`⚠️ "${folderName}" klasöründen bölüm numarası okunamadı, atlanıyor.`);
+            continue;
+        }
+
+        addLog(`⏳ Bölüm ${epNum} (${folderName}) yükleniyor...`);
+
+        try {
+            const epFiles = episodesMap[folderName];
+            // API'ye Gönder
+            await uploadOneEpisode(selectedWebtoon, `Bölüm ${epNum}`, epNum, epFiles);
+            addLog(`✅ Bölüm ${epNum} başarıyla yüklendi!`);
+            successCount++;
+        } catch (error) {
+            addLog(`❌ Bölüm ${epNum} yüklenemedi: ${error.message}`);
+        }
+    }
+
+    setLoading(false);
+    alert(`İşlem Tamamlandı! ${successCount}/${folderNames.length} bölüm yüklendi.`);
+  };
+
+  // --- YARDIMCI: API İSTEĞİ ATAN FONKSİYON ---
+  async function uploadOneEpisode(webtoonId, epTitle, epNum, epFiles) {
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+    
+    formData.append("webtoon_id", webtoonId);
+    formData.append("title", epTitle);
+    formData.append("episode_number", epNum);
+    
+    // Resimleri ekle
+    for (let i = 0; i < epFiles.length; i++) {
+        formData.append("resimler", epFiles[i]);
+    }
+
+    const response = await fetch("http://127.0.0.1:8000/episodes/ekle", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+            "Authorization": `Bearer ${token}`,
+            // Content-Type'ı elle koyma, FormData otomatik boundary ekler
         },
-        body: JSON.stringify({
-          webtoon_id: selectedWebtoon,
-          title: title,
-          episode_number: episodeNumber,
-        }),
-      });
+        body: formData,
+    });
 
-      if (!createResponse.ok) {
-        const errorData = await createResponse.json();
-        throw new Error(errorData.detail || "Bölüm oluşturulamadı.");
-      }
-
-      const episodeData = await createResponse.json();
-      const newEpisodeId = episodeData.id; // Yeni oluşturulan bölümün ID'sini aldık
-      console.log("Bölüm oluşturuldu ID:", newEpisodeId);
-
-      // ADIM 2: Resimleri Yükle
-      // Backend: POST /episodes/{id}/upload-images
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append("dosyalar", files[i]); // Backend 'dosyalar' adında liste bekliyor
-      }
-
-      const uploadResponse = await fetch(
-        `http://127.0.0.1:8000/episodes/${newEpisodeId}/upload-images`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
-      );
-
-      if (!uploadResponse.ok) {
-        throw new Error("Resimler yüklenirken hata oluştu.");
-      }
-
-      alert("Bölüm ve Resimler Başarıyla Yüklendi! 🎉");
-      router.push(`/webtoon/${selectedWebtoon}`); // O webtoon'un sayfasına git
-
-    } catch (err) {
-      console.error(err);
-      alert("Hata: " + err.message);
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "API Hatası");
     }
-  };
+    return await response.json();
+  }
+
+  // Log ekleme yardımcısı
+  const addLog = (msg) => setBulkLogs(prev => [...prev, msg]);
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-10 px-4">
-      <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-lg">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">
-          Yeni Bölüm Ekle 🎬
+    <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center py-10 px-4">
+      <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-2xl border border-gray-700">
+        
+        <h1 className="text-3xl font-bold mb-6 text-green-400 border-b border-gray-700 pb-4 flex justify-between items-center">
+          <span>🎬 Bölüm Yükle</span>
+          
+          {/* Mod Değiştirme Butonları */}
+          <div className="text-sm flex gap-2">
+            <button 
+                onClick={() => setMode("single")}
+                className={`px-3 py-1 rounded transition ${mode === "single" ? "bg-green-600 text-white" : "bg-gray-700 text-gray-400"}`}
+            >
+                Tek Bölüm
+            </button>
+            <button 
+                onClick={() => setMode("bulk")}
+                className={`px-3 py-1 rounded transition ${mode === "bulk" ? "bg-green-600 text-white" : "bg-gray-700 text-gray-400"}`}
+            >
+                Toplu (Klasör)
+            </button>
+          </div>
         </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={mode === "single" ? handleSingleSubmit : handleBulkSubmit} className="space-y-6">
           
-          {/* Webtoon Seçimi */}
+          {/* Webtoon Seçimi (Ortak) */}
           <div>
-            <label className="block text-gray-700 font-medium mb-1">Hangi Webtoon?</label>
+            <label className="block text-gray-400 font-medium mb-1">Hangi Webtoon?</label>
             <select
               value={selectedWebtoon}
               onChange={(e) => setSelectedWebtoon(e.target.value)}
-              className="w-full border p-2 rounded bg-white"
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-green-500 outline-none"
               required
             >
               <option value="">Seçiniz...</option>
               {webtoons.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.title}
-                </option>
+                <option key={w.id} value={w.id}>{w.title}</option>
               ))}
             </select>
           </div>
 
-          {/* Bölüm Başlığı */}
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">Bölüm Başlığı</label>
-            <input
-              type="text"
-              placeholder="Örn: Bölüm 1: Başlangıç"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full border p-2 rounded"
-              required
-            />
-          </div>
+          {/* --- TEKİL MOD ALANLARI --- */}
+          {mode === "single" && (
+            <>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-gray-400 font-medium mb-1">Bölüm No</label>
+                        <input
+                        type="number"
+                        placeholder="1"
+                        value={episodeNumber}
+                        onChange={(e) => setEpisodeNumber(e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-green-500 outline-none"
+                        required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-400 font-medium mb-1">Bölüm Başlığı</label>
+                        <input
+                        type="text"
+                        placeholder="Örn: Başlangıç"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-green-500 outline-none"
+                        required
+                        />
+                    </div>
+                </div>
 
-          {/* Bölüm Numarası */}
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">Bölüm Numarası</label>
-            <input
-              type="number"
-              placeholder="1"
-              value={episodeNumber}
-              onChange={(e) => setEpisodeNumber(e.target.value)}
-              className="w-full border p-2 rounded"
-              required
-            />
-          </div>
+                {/* Tekil Resim Seçimi */}
+                <div>
+                    <label className="block text-gray-400 font-medium mb-1">Resimler (Çoklu Seç)</label>
+                    <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => setFiles(e.target.files)}
+                    className="w-full bg-gray-700 text-gray-300 p-2 rounded border border-gray-600 cursor-pointer"
+                    required
+                    />
+                </div>
+            </>
+          )}
 
-          {/* Resim Seçimi */}
-          <div>
-            <label className="block text-gray-700 font-medium mb-1">
-              Bölüm Resimleri (Çoklu Seçim)
-            </label>
-            <input
-              type="file"
-              multiple // Birden fazla dosya seçmeye izin verir
-              accept="image/*"
-              onChange={handleFileChange}
-              className="w-full text-gray-600 border p-2 rounded"
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              * Ctrl tuşuna basılı tutarak birden fazla resim seçebilirsiniz.
-            </p>
-          </div>
+          {/* --- TOPLU MOD ALANLARI --- */}
+          {mode === "bulk" && (
+            <div className="bg-gray-750 p-4 rounded-lg border border-dashed border-gray-600">
+                <label className="block text-green-400 font-bold mb-2">📂 Ana Klasörü Seç</label>
+                <p className="text-sm text-gray-400 mb-3">
+                    İçinde "Bölüm 1", "Bölüm 2" gibi klasörler olan ana klasörü seçin. Sistem klasör isimlerinden bölüm numarasını anlayacaktır.
+                </p>
+                <input
+                    type="file"
+                    // 👇 BU ÖZELLİK KLASÖR SEÇMEYİ SAĞLAR
+                    {...{ webkitdirectory: "", directory: "" }}
+                    onChange={(e) => setFiles(e.target.files)}
+                    className="w-full bg-gray-700 text-gray-300 p-2 rounded border border-gray-600 cursor-pointer"
+                    required
+                />
+                
+                {/* Log Ekranı */}
+                <div className="mt-4 bg-black p-3 rounded h-40 overflow-y-auto text-xs font-mono text-green-300 border border-gray-700">
+                    {bulkLogs.length === 0 ? "İşlem bekleniyor..." : bulkLogs.map((log, i) => (
+                        <div key={i}>{log}</div>
+                    ))}
+                </div>
+            </div>
+          )}
 
-          {/* Buton */}
+          {/* Gönder Butonu */}
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-3 rounded text-white font-bold transition ${
-              loading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+            className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${
+              loading ? "bg-gray-600 cursor-not-allowed" : "bg-green-600 hover:bg-green-500 hover:shadow-green-500/30"
             }`}
           >
-            {loading ? "Yükleniyor..." : "Bölümü Yayınla 🚀"}
+            {loading ? "İşleniyor..." : (mode === "single" ? "Bölümü Yayınla 🚀" : "Toplu Yüklemeyi Başlat 🚀")}
           </button>
 
         </form>

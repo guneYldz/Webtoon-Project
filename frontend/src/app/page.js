@@ -2,55 +2,51 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+// 👇 SENİN OLUŞTURDUĞUN BİLEŞENİ BURAYA ÇAĞIRIYORUZ
+import FeaturedCard from "@/components/FeaturedSlider";
 
 export default function Home() {
   const [webtoons, setWebtoons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [featuredWebtoon, setFeaturedWebtoon] = useState(null);
 
   useEffect(() => {
     fetch("http://127.0.0.1:8000/webtoons/")
       .then((res) => res.json())
       .then((data) => {
         setWebtoons(data);
+
+        // 👇 VİTRİN MANTIĞI:
+        // Eğer admin panelden 'is_featured' seçtiğin varsa onu al, yoksa listenin ilkini al.
+        const vitrin = data.find(w => w.is_featured) || data[0];
+        setFeaturedWebtoon(vitrin);
+
         setLoading(false);
       })
       .catch((err) => console.error(err));
   }, []);
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white">Yükleniyor...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+    </div>
+  );
 
-  const showcase = webtoons.slice(0, 3);
+  // Popüler Listesi (Sidebar için)
   const popularList = [...webtoons].sort((a, b) => b.view_count - a.view_count).slice(0, 10);
+  // Güncel Seriler (Ana akış için ters sıralı)
   const latestUpdates = [...webtoons].reverse();
 
   return (
-    // Arka plan rengini (bg-[#121212]) en dışa verdik ki tüm ekranı kaplasın.
     <div className="min-h-screen font-sans bg-[#121212] pb-20">
       
-      {/* --- ANA KAPSAYICI (DÜZELTME BURADA) --- */}
-      {/* "max-w-7xl": Navbar ile aynı genişliğe sabitler. */}
-      {/* "mx-auto": Sayfayı ortalar. */}
+      {/* --- ANA KAPSAYICI --- */}
       <div className="container mx-auto max-w-7xl px-4 py-8">
         
-        {/* --- 1. ÜST VİTRİN (3'lü Kart) --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {showcase.map((w) => (
-            <Link key={w.id} href={`/webtoon/${w.id}`} className="group relative h-64 rounded-xl overflow-hidden shadow-2xl border border-gray-800 hover:border-gray-500 transition duration-300">
-              <img 
-                src={`http://127.0.0.1:8000/${w.cover_image}`} 
-                alt={w.title} 
-                className="absolute inset-0 w-full h-full object-cover transition duration-500 group-hover:scale-110"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90 group-hover:opacity-100 transition"></div>
-              <div className="absolute bottom-0 left-0 p-5 w-full">
-                <span className="text-[10px] font-bold text-black bg-yellow-400 px-2 py-0.5 rounded mb-2 inline-block shadow-lg">
-                  ÖNERİLEN 🔥
-                </span>
-                <h3 className="text-xl font-extrabold text-white leading-tight drop-shadow-md">{w.title}</h3>
-                <p className="text-gray-300 text-xs mt-1 line-clamp-1 opacity-80">{w.summary}</p>
-              </div>
-            </Link>
-          ))}
+        {/* --- 1. YENİ HERO VİTRİN ALANI (Eski 3'lü yapının yerine) --- */}
+        <div className="mb-12">
+            {/* İşte futbolcu sahaya çıkıyor! 🏟️ */}
+            <FeaturedCard webtoon={featuredWebtoon} />
         </div>
 
         {/* --- 2. ANA İÇERİK ve SIDEBAR --- */}
@@ -62,7 +58,7 @@ export default function Home() {
               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                 <span className="w-2 h-8 bg-blue-600 rounded-full inline-block"></span> Güncel Seriler
               </h2>
-              <Link href="#" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
+              <Link href="/seriler" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-8">
@@ -74,7 +70,7 @@ export default function Home() {
                       <img 
                         src={`http://127.0.0.1:8000/${w.cover_image}`} 
                         alt={w.title} 
-                        className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                        className="w-full h-full object-cover transition duration-300 group-hover:scale-110"
                       />
                     </Link>
                     <div className="absolute top-2 left-2">
@@ -92,13 +88,10 @@ export default function Home() {
                       </h3>
                     </Link>
                     <div className="mt-2 space-y-1.5">
+                      {/* Sahte bölüm verisi (İleride Backend'den gerçek bölümü çekeceğiz) */}
                       <div className="flex justify-between items-center text-xs text-gray-400 bg-[#1e1e1e] border border-gray-800 p-1.5 rounded hover:bg-[#2a2a2a] hover:text-white hover:border-gray-600 cursor-pointer transition">
-                        <span>Bölüm {Math.floor(Math.random() * 50) + 10}</span>
-                        <span className="text-[10px] text-gray-600">2s</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs text-gray-400 bg-[#1e1e1e] border border-gray-800 p-1.5 rounded hover:bg-[#2a2a2a] hover:text-white hover:border-gray-600 cursor-pointer transition">
-                        <span>Bölüm {Math.floor(Math.random() * 10)}</span>
-                        <span className="text-[10px] text-gray-600">1g</span>
+                        <span>Son Bölüm</span>
+                        <span className="text-[10px] text-gray-600">Yeni</span>
                       </div>
                     </div>
                   </div>
@@ -107,7 +100,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* SAĞ: SIDEBAR */}
+          {/* SAĞ: SIDEBAR (POPÜLER) */}
           <div className="w-full lg:w-80 flex-shrink-0">
               <div className="bg-[#1a1a1a] rounded-xl border border-gray-800 p-5 sticky top-24 shadow-xl">
                 <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
@@ -128,9 +121,9 @@ export default function Home() {
                           {w.title}
                         </h4>
                         <div className="flex items-center gap-2 mt-1">
-                             <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 rounded">Manga</span>
+                             <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 rounded">{w.type || "Manga"}</span>
                              <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                👁️ {(w.view_count || 0).toLocaleString()}
+                               👁️ {(w.view_count || 0).toLocaleString()}
                              </span>
                         </div>
                       </div>

@@ -193,12 +193,12 @@ export default function ReadingPage() {
             // ==========================
             <>
                 {data.images && data.images.length > 0 ? (
-                    data.images.map((img) => (
+                    data.images.map((img, index) => (
                     <img
-                        key={img.id}
+                        key={img.id || index}
                         src={`http://127.0.0.1:8000/${img.image_url}`}
                         alt={`Sayfa ${img.page_order}`}
-                        className="w-full h-auto block" 
+                        className="w-full max-w-4xl mx-auto shadow-lg mb-0" // Biraz stil verelim
                         loading="lazy"
                     />
                     ))

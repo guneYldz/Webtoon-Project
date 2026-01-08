@@ -50,32 +50,52 @@ def webtoon_detay(webtoon_id: int, db: Session = Depends(get_db)):
 # 3. WEBTOON EKLE (Resim Yüklemeli & Admin Korumalı) - KİLİTLİ 🔒
 @router.post("/ekle", status_code=status.HTTP_201_CREATED)
 def webtoon_ekle(
-    baslik: str = Form(...),      # Form(...) veriyi form-data olarak alır
+    baslik: str = Form(...),
     ozet: str = Form(...),
-    resim: UploadFile = File(...), # Dosya yükleme alanı
+    # 👇 Kapak resmi (Zorunlu)
+    resim: UploadFile = File(...), 
+    # 👇 Banner resmi (İsteğe bağlı - None olabilir)
+    banner: UploadFile = File(None), 
+    
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin) # <-- Sadece Adminler!
+    current_admin: models.User = Depends(get_current_admin)
 ):
-    # 1. Klasör Kontrolü (Yoksa oluştur)
-    klasor_yolu = "static/covers"
-    if not os.path.exists(klasor_yolu):
-        os.makedirs(klasor_yolu)
+    # --- 1. Klasörleri Hazırla ---
+    # Kapaklar için:
+    kapak_klasoru = "static/covers"
+    if not os.path.exists(kapak_klasoru):
+        os.makedirs(kapak_klasoru)
+        
+    # Bannerlar için:
+    banner_klasoru = "static/banners"
+    if not os.path.exists(banner_klasoru):
+        os.makedirs(banner_klasoru)
 
-    # 2. Dosya Adını Güvenli Hale Getir (Çakışmayı önle)
-    # Örn: 'resim.jpg' -> 'a1b2-c3d4...jpg' olur
+    # --- 2. Kapak Resmini Kaydet ---
     dosya_uzantisi = resim.filename.split(".")[-1]
     yeni_dosya_adi = f"{uuid.uuid4()}.{dosya_uzantisi}"
-    kayit_yolu = f"{klasor_yolu}/{yeni_dosya_adi}"
+    kapak_yolu = f"{kapak_klasoru}/{yeni_dosya_adi}"
 
-    # 3. Dosyayı Diske Kaydet
-    with open(kayit_yolu, "wb") as buffer:
+    with open(kapak_yolu, "wb") as buffer:
         shutil.copyfileobj(resim.file, buffer)
 
-    # 4. Veritabanına Kaydet (Resmin yolunu kaydediyoruz)
+    # --- 3. Banner Resmini Kaydet (Eğer yüklendiyse) ---
+    banner_yolu = None # Varsayılan olarak boş
+    
+    if banner:
+        banner_uzantisi = banner.filename.split(".")[-1]
+        yeni_banner_adi = f"{uuid.uuid4()}.{banner_uzantisi}"
+        banner_yolu = f"{banner_klasoru}/{yeni_banner_adi}"
+        
+        with open(banner_yolu, "wb") as buffer:
+            shutil.copyfileobj(banner.file, buffer)
+
+    # --- 4. Veritabanına Kayıt ---
     yeni = models.Webtoon(
         title=baslik, 
         summary=ozet, 
-        cover_image=kayit_yolu, # DB'ye dosya yolu yazılır: static/covers/...
+        cover_image=kapak_yolu, 
+        banner_image=banner_yolu, # 👇 Yeni eklediğimiz alan
         status="ongoing"
     )
     
@@ -87,5 +107,6 @@ def webtoon_ekle(
         "mesaj": "Webtoon Başarıyla Eklendi", 
         "id": yeni.id, 
         "ad": yeni.title,
-        "kapak_resmi": kayit_yolu
+        "kapak": kapak_yolu,
+        "banner": banner_yolu
     }
