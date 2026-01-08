@@ -4,13 +4,12 @@ from database import Base
 import datetime
 import enum
 
-# --- YENİ EKLENEN: İÇERİK TÜRÜ ENUM ---
-# Veritabanında standart sağlamak için (Sadece 'MANGA' veya 'NOVEL' girilebilir)
+# --- İÇERİK TÜRÜ ENUM ---
 class ContentType(str, enum.Enum):
     MANGA = "MANGA"
     NOVEL = "NOVEL"
 
-# 1. KULLANICILAR (Değişiklik Yok)
+# 1. KULLANICILAR
 class User(Base):
     __tablename__ = "users"
 
@@ -20,49 +19,78 @@ class User(Base):
     password = Column(String(255), nullable=False)
     role = Column(String(10), default="user")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    is_active = Column(Boolean, default=True) # Ban kontrolü için (True=Açık, False=Banlı)
+    is_active = Column(Boolean, default=True)
 
-    # İLİŞKİLER
     comments = relationship("Comment", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
     likes = relationship("Like", back_populates="user")
 
-# 2. KATEGORİLER (Değişiklik Yok)
+# 2. KATEGORİLER
 class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), nullable=False)
     
-    webtoon_links = relationship("WebtoonCategory", back_populates="category")
+    webtoons = relationship(
+        "Webtoon", 
+        secondary="webtoon_categories", 
+        back_populates="categories", 
+        overlaps="webtoon_links,category_links" 
+    )
+    
+    webtoon_links = relationship(
+        "WebtoonCategory", 
+        back_populates="category", 
+        overlaps="webtoons,categories"
+    )
 
-# 3. WEBTOONLAR (ARTIK SERİLER) - GÜNCELLENDİ ✅
+    # 👇 BU KISMI EKLE (Panelde isimlerin düzgün görünmesi için)
+    def __str__(self):
+        return self.name
+    
+    webtoon_links = relationship(
+        "WebtoonCategory", 
+        back_populates="category", 
+        overlaps="webtoons,categories"
+    )
+
+# 3. WEBTOONLAR
 class Webtoon(Base):
     __tablename__ = "webtoons"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(150), nullable=False)
     summary = Column(Text, nullable=True)
-    cover_image = Column(String(500), nullable=False)
+    cover_image = Column(String(500), nullable=True)
     status = Column(String(30), default="ongoing")
     view_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    is_featured = Column(Boolean, default=False) # Vitrin için
+    is_featured = Column(Boolean, default=False)
     banner_image = Column(String, nullable=True)
 
-    # --- YENİ EKLENEN ALANLAR ---
-    # 1. Tür: Bu bir Manga mı yoksa Novel mı?
     type = Column(Enum(ContentType), default=ContentType.MANGA)
-    
-    # 2. Kaynak Link: Bot bu seriyi hangi siteden takip edecek? (Otomasyon için şart)
     source_url = Column(String(500), nullable=True)
 
-    # İLİŞKİLER
+    # 👇 BURASI GÜNCELLENDİ: Hem kendi linklerini hem karşı tarafın linklerini overlaps'e ekledik
+    categories = relationship(
+        "Category", 
+        secondary="webtoon_categories", 
+        back_populates="webtoons", 
+        overlaps="category_links,webtoon_links"
+    )
+
     episodes = relationship("Episode", back_populates="webtoon")
-    category_links = relationship("WebtoonCategory", back_populates="webtoon")
+    
+    category_links = relationship(
+        "WebtoonCategory", 
+        back_populates="webtoon", 
+        overlaps="categories,webtoons"
+    )
+    
     favorites = relationship("Favorite", back_populates="webtoon")
 
-# 4. WEBTOON-KATEGORİ (Değişiklik Yok)
+# 4. WEBTOON-KATEGORİ ARA TABLOSU
 class WebtoonCategory(Base):
     __tablename__ = "webtoon_categories"
 
@@ -70,10 +98,20 @@ class WebtoonCategory(Base):
     webtoon_id = Column(Integer, ForeignKey("webtoons.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
 
-    webtoon = relationship("Webtoon", back_populates="category_links")
-    category = relationship("Category", back_populates="webtoon_links")
+    # 👇 BURASI EKSİKTİ, EKLENDİ: Artık burası da üstteki ilişkileri tanıyor
+    webtoon = relationship(
+        "Webtoon", 
+        back_populates="category_links", 
+        overlaps="categories,webtoons"
+    )
+    
+    category = relationship(
+        "Category", 
+        back_populates="webtoon_links", 
+        overlaps="webtoons,categories"
+    )
 
-# 5. BÖLÜMLER - GÜNCELLENDİ ✅
+# 5. BÖLÜMLER
 class Episode(Base):
     __tablename__ = "episodes"
 
@@ -84,19 +122,14 @@ class Episode(Base):
     view_count = Column(Integer, default=0)
     likes_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-    # --- YENİ EKLENEN ALAN ---
-    # Eğer bu bir Novel bölümü ise, metin burada tutulacak.
-    # Manga ise burası NULL (boş) kalacak.
     content_text = Column(Text, nullable=True)
 
-    # İLİŞKİLER
     webtoon = relationship("Webtoon", back_populates="episodes")
     images = relationship("EpisodeImage", back_populates="episode")
     comments = relationship("Comment", back_populates="episode")
     likes = relationship("Like", back_populates="episode")
 
-# 6. BÖLÜM RESİMLERİ (Değişiklik Yok - Sadece Mangalar kullanacak)
+# 6. BÖLÜM RESİMLERİ
 class EpisodeImage(Base):
     __tablename__ = "episode_images"
 
@@ -107,7 +140,7 @@ class EpisodeImage(Base):
 
     episode = relationship("Episode", back_populates="images")
 
-# 7. YORUMLAR (Değişiklik Yok)
+# 7. YORUMLAR
 class Comment(Base):
     __tablename__ = "comments"
 
@@ -120,7 +153,7 @@ class Comment(Base):
     user = relationship("User", back_populates="comments")
     episode = relationship("Episode", back_populates="comments")
 
-# 8. FAVORİLER (Değişiklik Yok)
+# 8. FAVORİLER
 class Favorite(Base):
     __tablename__ = "favorites"
     
@@ -131,7 +164,7 @@ class Favorite(Base):
     user = relationship("User", back_populates="favorites")
     webtoon = relationship("Webtoon", back_populates="favorites")
 
-# 9. BEĞENİLER (Değişiklik Yok)
+# 9. BEĞENİLER
 class Like(Base):
     __tablename__ = "likes"
 
@@ -141,3 +174,32 @@ class Like(Base):
 
     user = relationship("User", back_populates="likes")
     episode = relationship("Episode", back_populates="likes")
+
+# 10. ROMANLAR
+class Novel(Base):
+    __tablename__ = "novels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), index=True)      
+    slug = Column(String(255), unique=True, index=True) 
+    summary = Column(String)                
+    cover_image = Column(String, nullable=True) 
+    author = Column(String, nullable=True)  
+    status = Column(String, default="ongoing") 
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    chapters = relationship("NovelChapter", back_populates="novel")
+
+class NovelChapter(Base):
+    __tablename__ = "novel_chapters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    chapter_number = Column(Integer)        
+    title = Column(String)                  
+    content = Column(Text)                  
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    novel_id = Column(Integer, ForeignKey("novels.id"))
+    novel = relationship("Novel", back_populates="chapters")

@@ -5,21 +5,33 @@ import Link from "next/link";
 
 export default function YenilerPage() {
   const [webtoons, setWebtoons] = useState([]);
+  const [novels, setNovels] = useState([]); // 📖 Romanlar için yeni state
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/webtoons/")
-      .then((res) => res.json())
-      .then((data) => {
-        // ID'si büyük olan (son eklenen) en üstte görünsün diye ters çeviriyoruz
-        const sorted = [...data].reverse();
-        setWebtoons(sorted);
+    // İki veriyi de aynı anda çekiyoruz
+    const fetchData = async () => {
+      try {
+        const [webtoonRes, novelRes] = await Promise.all([
+          fetch("http://127.0.0.1:8000/webtoons/"),
+          fetch("http://127.0.0.1:8000/novels/")
+        ]);
+
+        const webtoonData = await webtoonRes.json();
+        const novelData = await novelRes.json();
+
+        // Son eklenenler en üstte görünsün diye ters çeviriyoruz
+        setWebtoons([...webtoonData].reverse());
+        setNovels([...novelData].reverse());
+        
         setLoading(false);
-      })
-      .catch((err) => {
-        console.error(err);
+      } catch (err) {
+        console.error("Veri çekme hatası:", err);
         setLoading(false);
-      });
+      }
+    };
+
+    fetchData();
   }, []);
 
   if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg animate-pulse">Yükleniyor...</div>;
@@ -38,56 +50,76 @@ export default function YenilerPage() {
         </div>
       </div>
 
-      {/* LİSTE */}
-      <div className="container mx-auto max-w-7xl px-4 py-8">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-8">
-          {webtoons.map((w, index) => (
-            <div key={w.id} className="group flex flex-col gap-2">
-              
-              {/* Kart Resmi */}
-              <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:shadow-red-900/20 group-hover:border-red-500/50 transition duration-300">
-                <Link href={`/webtoon/${w.id}`}>
-                    <img 
-                        src={`http://127.0.0.1:8000/${w.cover_image}`} 
-                        alt={w.title} 
-                        className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
-                        loading="lazy"
-                    />
-                </Link>
-                
-                {/* YENİ Etiketi (Sadece ilk 5 tanesine koyuyoruz) */}
-                {index < 5 && (
-                    <div className="absolute top-2 right-2">
-                        <span className="text-[10px] font-bold px-2 py-1 rounded bg-red-600 text-white shadow-md animate-pulse">
-                        NEW
-                        </span>
-                    </div>
-                )}
+      <div className="container mx-auto max-w-7xl px-4 py-8 space-y-16">
+        
+        {/* --- 🎬 YENİ WEBTOONLAR BÖLÜMÜ --- */}
+        <section>
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+             <span className="w-1.5 h-6 bg-red-600 rounded-full"></span>
+             Yeni Eklenen Webtoonlar
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-8">
+            {webtoons.map((w, index) => (
+              <div key={`webtoon-${w.id}`} className="group flex flex-col gap-2">
+                <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-red-500/50 transition duration-300">
+                  <Link href={`/webtoon/${w.id}`}>
+                      <img 
+                          src={`http://127.0.0.1:8000/${w.cover_image}`} 
+                          alt={w.title} 
+                          className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
+                      />
+                  </Link>
+                  {index < 5 && (
+                      <div className="absolute top-2 right-2">
+                          <span className="text-[10px] font-bold px-2 py-1 rounded bg-red-600 text-white shadow-md animate-pulse">NEW</span>
+                      </div>
+                  )}
+                </div>
+                <div>
+                  <Link href={`/webtoon/${w.id}`}>
+                      <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-red-400 transition">{w.title}</h3>
+                  </Link>
+                  <p className="text-[10px] text-gray-500 mt-1">Webtoon • {new Date().toLocaleDateString('tr-TR')}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
-                {/* Durum Etiketi */}
-                <div className="absolute top-2 left-2">
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded text-white shadow-sm border border-black/10 ${w.status === 'ongoing' ? 'bg-blue-600' : 'bg-gray-600'}`}>
-                      {w.status === 'ongoing' ? 'GÜNCEL' : 'TAMAMLANDI'}
-                    </span>
+        {/* --- 📖 YENİ ROMANLAR BÖLÜMÜ --- */}
+        <section>
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+             <span className="w-1.5 h-6 bg-purple-600 rounded-full"></span>
+             Yeni Eklenen Romanlar
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-8">
+            {novels.map((n, index) => (
+              <div key={`novel-${n.id}`} className="group flex flex-col gap-2">
+                <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-purple-500/50 transition duration-300">
+                  <Link href={`/novel/${n.slug}`}>
+                      <img 
+                          src={`http://127.0.0.1:8000/${n.cover_image}`} 
+                          alt={n.title} 
+                          className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
+                      />
+                  </Link>
+                  {index < 5 && (
+                      <div className="absolute top-2 right-2">
+                          <span className="text-[10px] font-bold px-2 py-1 rounded bg-purple-600 text-white shadow-md animate-pulse">NEW</span>
+                      </div>
+                  )}
+                </div>
+                <div>
+                  <Link href={`/novel/${n.slug}`}>
+                      <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-purple-400 transition">{n.title}</h3>
+                  </Link>
+                  <p className="text-[10px] text-gray-500 mt-1">Roman • {n.author || 'Belirtilmedi'}</p>
                 </div>
               </div>
-              
-              {/* Bilgiler */}
-              <div>
-                <Link href={`/webtoon/${w.id}`}>
-                    <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-red-400 transition">
-                        {w.title}
-                    </h3>
-                </Link>
-                <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-gray-400">
-                        {new Date().toLocaleDateString('tr-TR')} {/* Backend'de tarih varsa onu kullan */}
-                    </span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </section>
+
       </div>
     </div>
   );

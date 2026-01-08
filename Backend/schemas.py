@@ -151,3 +151,42 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+# --- MEVCUT KODLARIN YUKARIDA ---
+
+# 👇 NOVEL İÇİN ŞEMALAR (EN ALTA EKLE)
+
+# 1. Roman Listesinde görünecek kart bilgisi
+class NovelCard(BaseModel):
+    id: int
+    title: str
+    slug: str
+    cover_image: str | None = None
+    status: str
+
+    class Config:
+        from_attributes = True
+
+# 2. Bölüm Bilgisi (İçerik Dahil)
+class NovelChapterBase(BaseModel):
+    id: int
+    chapter_number: int
+    title: str
+    content: str # Metin içeriği
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# 3. Roman Detay Sayfası (Bölümlerle birlikte)
+class NovelDetail(BaseModel):
+    id: int
+    title: str
+    slug: str
+    summary: str
+    cover_image: str | None = None
+    author: str | None = None
+    chapters: List[NovelChapterBase] = [] # Bölüm listesi
+
+    class Config:
+        from_attributes = True
