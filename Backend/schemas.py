@@ -15,6 +15,7 @@ class EpisodeImageSchema(BaseModel):
     id: int
     image_url: str
     page_order: int
+    profile_image: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -163,6 +164,8 @@ class NovelCard(BaseModel):
     slug: str
     cover_image: str | None = None
     status: str
+    
+    source_url: str | None = None 
 
     class Config:
         from_attributes = True
@@ -183,9 +186,13 @@ class NovelDetail(BaseModel):
     id: int
     title: str
     slug: str
-    summary: str
+    summary: str | None = None # Bazen boş olabilir diye | None ekledim
     cover_image: str | None = None
     author: str | None = None
+    
+    # 👇 BURASI EKLENDİ (Bot detaya bakarken linki görsün diye)
+    source_url: str | None = None 
+
     chapters: List[NovelChapterBase] = [] # Bölüm listesi
 
     class Config:

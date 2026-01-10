@@ -163,30 +163,34 @@ class CommentAdmin(ModelView, model=models.Comment):
     column_list = [models.Comment.user, models.Comment.content]
 
 # 📖 ROMAN (NOVEL) YÖNETİMİ
+# 📖 ROMAN (NOVEL) YÖNETİMİ
 class NovelAdmin(ModelView, model=models.Novel):
     name = "Roman"
     name_plural = "Romanlar"
     icon = "fa-solid fa-book-open"
     
-    # Listeleme ekranında editörün işini kolaylaştıralım
+    # Listeleme ekranında görünecek sütunlar
     column_list = [
         models.Novel.id, 
         models.Novel.cover_image, 
         models.Novel.title, 
         models.Novel.author, 
         models.Novel.status,
+        models.Novel.source_url  # 👈 YENİ: Listede kaynak linki de görünsün
     ]
 
-    # Formda nelerin görüneceğini belirleyelim
+    # Ekleme/Düzenleme ekranında görünecek kutucuklar
     form_columns = [
         "title",
         "slug",
         "author",
         "summary",
         "status",
-        "cover_image" # Webtoon ile aynı sade mantık: dosya yolu yazılacak
+        "cover_image",
+        "source_url"  # 👈 KRİTİK OLAN BU: Kutucuk buraya eklenince gelecek!
     ]
 
+    # Resim ve Durum Gösterimi (Tek sefer tanımlandı)
     column_formatters = {
         models.Novel.cover_image: lambda m, a: Markup(
             f'<img src="{("/" + m.cover_image) if m.cover_image and not m.cover_image.startswith("/") else m.cover_image}" width="50" height="75" style="border-radius:4px; object-fit:cover; border:1px solid #ccc;">'
@@ -194,18 +198,12 @@ class NovelAdmin(ModelView, model=models.Novel):
         
         models.Novel.status: lambda m, a: Markup(
             f'<span style="color:white; background-color:{"#27ae60" if m.status == "ongoing" else "#e67e22"}; padding:2px 8px; border-radius:4px; font-size:12px;">{m.status.upper()}</span>'
-        )
-    }
-
-    # Resim Önizleme (Webtoon ile aynı güvenli mantık)
-    column_formatters = {
-        models.Novel.cover_image: lambda m, a: Markup(
-            f'<img src="{("/" + m.cover_image) if m.cover_image and not m.cover_image.startswith("/") else m.cover_image}" width="50" height="75" style="border-radius:4px; object-fit:cover; border:1px solid #ccc;">'
-        ) if m.cover_image else "Yok",
+        ),
         
-        models.Novel.status: lambda m, a: Markup(
-            f'<span style="color:white; background-color:{"#27ae60" if m.status == "ongoing" else "#e67e22"}; padding:2px 8px; border-radius:4px; font-size:12px;">{m.status.upper()}</span>'
-        )
+        # Source URL uzunsa kısaltıp gösterelim ki tablo taşmasın
+        models.Novel.source_url: lambda m, a: Markup(
+            f'<a href="{m.source_url}" target="_blank" style="color:#3498db; text-decoration:none;">Link</a>'
+        ) if m.source_url else "-"
     }
 
 class NovelChapterAdmin(ModelView, model=models.NovelChapter):

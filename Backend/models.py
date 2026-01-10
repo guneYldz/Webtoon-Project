@@ -20,6 +20,8 @@ class User(Base):
     role = Column(String(10), default="user")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    profile_image = Column(String, nullable=True)
+    
 
     comments = relationship("Comment", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
@@ -145,14 +147,19 @@ class Comment(Base):
     __tablename__ = "comments"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)       
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # 👇 Hem Webtoon hem Novel desteği için ikisi de nullable (boş olabilir)
     episode_id = Column(Integer, ForeignKey("episodes.id"), nullable=True)   
+    novel_chapter_id = Column(Integer, ForeignKey("novel_chapters.id"), nullable=True) 
+    
     content = Column(Text, nullable=False)                                  
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+   
 
     user = relationship("User", back_populates="comments")
     episode = relationship("Episode", back_populates="comments")
-
+    novel_chapter = relationship("NovelChapter", back_populates="comments")
 # 8. FAVORİLER
 class Favorite(Base):
     __tablename__ = "favorites"
@@ -187,10 +194,13 @@ class Novel(Base):
     author = Column(String, nullable=True)  
     status = Column(String, default="ongoing") 
     
+    # 👇 BURASI EKLENDİ!
+    # Botun romanı hangi siteden takip edeceğini buraya yazacağız.
+    source_url = Column(String(500), nullable=True) 
+    
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     chapters = relationship("NovelChapter", back_populates="novel")
-
 class NovelChapter(Base):
     __tablename__ = "novel_chapters"
 
@@ -203,3 +213,5 @@ class NovelChapter(Base):
     
     novel_id = Column(Integer, ForeignKey("novels.id"))
     novel = relationship("Novel", back_populates="chapters")
+
+    comments = relationship("Comment", back_populates="novel_chapter")

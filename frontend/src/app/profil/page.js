@@ -2,145 +2,168 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
-export default function ProfilPage() {
-  const [user, setUser] = useState(null); // Kullanıcı verisi
-  const [loading, setLoading] = useState(true); // Yükleniyor mu?
+const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+export default function ProfilePage() {
   const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  
+  // Modal State'leri
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showPassModal, setShowPassModal] = useState(false);
+  
+  // Form State'leri
+  const [editForm, setEditForm] = useState({ username: "", email: "" });
+  const [passForm, setPassForm] = useState({ old_password: "", new_password: "" });
 
   useEffect(() => {
-    // 1. Token var mı diye bak
     const token = localStorage.getItem("token");
+    if (!token) { router.push("/login"); return; }
+    fetchProfile(token);
+  }, []);
 
-    if (!token) {
-      router.push("/login"); // Token yoksa direkt Login'e at
-      return;
-    }
-
-    // 2. Token varsa Backend'e sor: "Bu token kimin?"
-    fetch("http://127.0.0.1:8000/auth/me", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`, // Anahtarı (Token) gösteriyoruz
-      },
-    })
-      .then((res) => {
-        if (!res.ok) {
-            throw new Error("Oturum geçersiz");
-        }
-        return res.json();
-      })
-      .then((data) => {
-        setUser(data); // Gelen veriyi kaydet
-        setLoading(false); // Yüklemeyi bitir
-      })
-      .catch(() => {
-        // Token bozuksa veya süre dolmuşsa çıkış yap
+  const fetchProfile = async (token) => {
+    try {
+      const res = await fetch(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        setEditForm({ username: data.username, email: data.email });
+      } else {
         localStorage.removeItem("token");
         router.push("/login");
-      });
-  }, [router]);
+      }
+    } catch (err) { console.error(err); } finally { setLoading(false); }
+  };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#121212]">
-        <div className="text-xl font-semibold text-blue-500 animate-pulse">
-          Yükleniyor...
-        </div>
-      </div>
-    );
-  }
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(`${API}/auth/update-profile-image`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (res.ok) fetchProfile(token);
+      else alert("Resim yüklenirken hata oluştu!");
+    } catch (err) { console.error(err); } finally { setUploading(false); }
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem("token");
+    try {
+        const res = await fetch(`${API}/auth/update-profile`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify(editForm)
+        });
+        if (res.ok) {
+            alert("Bilgiler güncellendi!");
+            setShowEditModal(false);
+            fetchProfile(token);
+        } else {
+            const err = await res.json();
+            alert(err.detail);
+        }
+    } catch (error) { console.error(error); }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem("token");
+    try {
+        const res = await fetch(`${API}/auth/change-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify(passForm)
+        });
+        if (res.ok) {
+            alert("Şifre değiştirildi!");
+            setShowPassModal(false);
+            setPassForm({ old_password: "", new_password: "" });
+        } else {
+            const err = await res.json();
+            alert(err.detail);
+        }
+    } catch (error) { console.error(error); }
+  };
+
+  const handleLogout = () => { localStorage.removeItem("token"); router.push("/login"); };
+
+  if (loading) return <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center text-purple-500 font-bold italic">Profil Yükleniyor...</div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] py-20 px-4">
-      {/* DÜZELTME: max-w-4xl ile ortaladık ve koyu tema uyguladık */}
-      <div className="max-w-4xl mx-auto bg-[#1e1e1e] rounded-2xl shadow-2xl border border-gray-800 overflow-hidden">
+    <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center text-gray-200">
+      <div className="w-full max-w-md bg-[#121212] p-8 rounded-[40px] border border-purple-500/20 shadow-2xl relative overflow-hidden">
         
-        {/* Üst Başlık Kısmı (Banner) */}
-        <div className="relative bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 p-8 sm:p-12 text-white flex flex-col sm:flex-row items-center sm:items-end gap-6">
-          {/* Dekoratif Arkaplan Deseni */}
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-          
-          <div className="relative z-10 w-28 h-28 bg-[#121212] p-1 rounded-full shadow-xl -mb-16 sm:mb-0">
-             <div className="w-full h-full bg-gradient-to-tr from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-5xl font-bold text-white shadow-inner">
-                {user.username.charAt(0).toUpperCase()}
-             </div>
-          </div>
-          
-          <div className="relative z-10 text-center sm:text-left mt-10 sm:mt-0 flex-1">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight">{user.username}</h1>
-            <p className="opacity-80 text-blue-200 font-medium">{user.email}</p>
-          </div>
-
-           {/* Rol Rozeti */}
-           <div className="relative z-10 mb-2 sm:mb-4">
-                <span className="bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-1.5 rounded-full text-sm font-bold tracking-wide uppercase shadow-sm">
-                  {user.role === 'admin' ? '🛡️ Yönetici' : '👤 Kullanıcı'}
-                </span>
-           </div>
+        {/* Profil Resmi */}
+        <div className="relative w-32 h-32 mx-auto mb-6 group">
+            <div className="w-full h-full rounded-full border-4 border-[#121212] outline outline-2 outline-purple-600 overflow-hidden bg-[#1a1a1a]">
+                {user?.profile_image ? (
+                    <img src={`${API}/${user.profile_image}`} alt="Profil" className="w-full h-full object-cover"/>
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center text-4xl font-black text-purple-500 bg-purple-500/10">
+                        {user?.username?.charAt(0).toUpperCase()}
+                    </div>
+                )}
+            </div>
+            <label className="absolute bottom-0 right-0 bg-purple-600 hover:bg-white hover:text-purple-600 text-white p-2 rounded-full cursor-pointer transition-all border-2 border-[#121212]">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={uploading} />
+            </label>
         </div>
 
-        {/* Detaylar Kısmı */}
-        <div className="p-8 sm:p-12 pt-16 sm:pt-12">
-          <div className="flex justify-between items-center mb-6">
-             <h2 className="text-xl font-bold text-white flex items-center gap-2">
-               <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span> Hesap Bilgileri
-             </h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            <div className="p-5 bg-[#121212] rounded-xl border border-gray-800 hover:border-gray-700 transition group">
-              <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Kullanıcı Rolü</span>
-              <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${user.role === 'admin' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
-                  <span className="text-lg font-medium text-gray-200 capitalize group-hover:text-white transition">
-                    {user.role}
-                  </span>
-              </div>
-            </div>
+        <h1 className="text-2xl font-black text-white text-center mb-1">{user?.username}</h1>
+        <p className="text-gray-500 text-xs text-center mb-6">{user?.email}</p>
 
-            <div className="p-5 bg-[#121212] rounded-xl border border-gray-800 hover:border-gray-700 transition group">
-              <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Kullanıcı ID</span>
-              <span className="text-lg font-mono font-medium text-gray-200 group-hover:text-white transition">#{user.id}</span>
-            </div>
-
-            <div className="p-5 bg-[#121212] rounded-xl border border-gray-800 hover:border-gray-700 transition group">
-              <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Hesap Durumu</span>
-              <span className="text-lg font-medium text-green-400 flex items-center gap-2">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                 Aktif
-              </span>
-            </div>
-
-            <div className="p-5 bg-[#121212] rounded-xl border border-gray-800 hover:border-gray-700 transition group">
-              <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Kayıt Tarihi</span>
-              <span className="text-lg font-medium text-gray-200 group-hover:text-white transition">20 Ocak 2024</span>
-            </div>
-
-          </div>
-
-          {/* Aksiyon Butonları */}
-          <div className="mt-10 flex flex-col sm:flex-row gap-4 pt-8 border-t border-gray-800">
-            <button className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3 rounded-xl transition shadow-lg shadow-blue-900/20">
-              Şifre Değiştir
-            </button>
-            <button className="flex-1 bg-[#252525] hover:bg-[#333] text-gray-200 font-bold px-6 py-3 rounded-xl border border-gray-700 hover:border-gray-500 transition">
-              Profili Düzenle
-            </button>
-            <button 
-                onClick={() => {
-                    localStorage.removeItem("token");
-                    router.push("/login");
-                }}
-                className="bg-red-900/20 hover:bg-red-900/40 text-red-400 font-bold px-6 py-3 rounded-xl border border-red-900/50 hover:border-red-500/50 transition"
-            >
-              Çıkış Yap
-            </button>
-          </div>
-
+        {/* Butonlar */}
+        <div className="space-y-3 mb-6">
+            <button onClick={() => setShowEditModal(true)} className="w-full py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-sm font-bold hover:bg-[#222] transition">✏️ Bilgileri Düzenle</button>
+            <button onClick={() => setShowPassModal(true)} className="w-full py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-sm font-bold hover:bg-[#222] transition">🔒 Şifre Değiştir</button>
         </div>
+
+        <button onClick={handleLogout} className="w-full py-4 rounded-xl bg-red-500/10 text-red-500 font-bold text-xs hover:bg-red-500 hover:text-white transition uppercase tracking-widest">Çıkış Yap</button>
       </div>
+
+      {/* --- EDİT MODAL --- */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1a1a1a] p-6 rounded-2xl w-full max-w-sm border border-gray-700">
+                <h3 className="text-xl font-bold mb-4">Profili Düzenle</h3>
+                <input type="text" value={editForm.username} onChange={e => setEditForm({...editForm, username: e.target.value})} className="w-full p-3 bg-[#121212] rounded-lg mb-3 text-white border border-gray-700" placeholder="Kullanıcı Adı" />
+                <input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full p-3 bg-[#121212] rounded-lg mb-4 text-white border border-gray-700" placeholder="E-posta" />
+                <div className="flex gap-2">
+                    <button onClick={() => setShowEditModal(false)} className="flex-1 p-3 rounded-lg bg-gray-700 text-white font-bold">İptal</button>
+                    <button onClick={handleUpdateProfile} className="flex-1 p-3 rounded-lg bg-purple-600 text-white font-bold">Kaydet</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* --- ŞİFRE MODAL --- */}
+      {showPassModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#1a1a1a] p-6 rounded-2xl w-full max-w-sm border border-gray-700">
+                <h3 className="text-xl font-bold mb-4">Şifre Değiştir</h3>
+                <input type="password" value={passForm.old_password} onChange={e => setPassForm({...passForm, old_password: e.target.value})} className="w-full p-3 bg-[#121212] rounded-lg mb-3 text-white border border-gray-700" placeholder="Eski Şifre" />
+                <input type="password" value={passForm.new_password} onChange={e => setPassForm({...passForm, new_password: e.target.value})} className="w-full p-3 bg-[#121212] rounded-lg mb-4 text-white border border-gray-700" placeholder="Yeni Şifre" />
+                <div className="flex gap-2">
+                    <button onClick={() => setShowPassModal(false)} className="flex-1 p-3 rounded-lg bg-gray-700 text-white font-bold">İptal</button>
+                    <button onClick={handleChangePassword} className="flex-1 p-3 rounded-lg bg-purple-600 text-white font-bold">Değiştir</button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 }

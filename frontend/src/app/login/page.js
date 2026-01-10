@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 export default function LoginPage() {
   const router = useRouter(); 
   const [formData, setFormData] = useState({
@@ -27,7 +29,7 @@ export default function LoginPage() {
     dataToSend.append('password', formData.password);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/auth/giris-yap', {
+      const response = await fetch(`${API}/auth/giris-yap`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -46,10 +48,10 @@ export default function LoginPage() {
       
       // 1. Bilgileri Hafızaya At
       localStorage.setItem('token', result.access_token);
-      localStorage.setItem('role', result.role);         // <-- YENİ: Rolü kaydet
-      localStorage.setItem('username', result.username); // <-- YENİ: Kullanıcı adını kaydet
+      localStorage.setItem('role', result.role);
+      localStorage.setItem('username', result.username);
       
-      // 2. Navbar'a "Hey, biri giriş yaptı!" diye bağır (Event tetikle)
+      // 2. Navbar'a "Hey, biri giriş yaptı!" diye bağır
       window.dispatchEvent(new Event("auth-change"));
 
       // 3. Anasayfaya gönder
@@ -109,7 +111,10 @@ export default function LoginPage() {
           <div>
             <div className="flex justify-between items-center mb-2 ml-1">
                  <label className="block text-gray-300 text-xs font-bold uppercase tracking-wider">Şifre</label>
-                 <a href="#" className="text-xs text-blue-400 hover:text-blue-300 transition">Unuttum?</a>
+                 {/* 👇 BURASI GÜNCELLENDİ: Sifremi Unuttum Linki */}
+                 <Link href="/sifremi-unuttum" className="text-xs text-blue-400 hover:text-blue-300 transition">
+                    Şifremi unuttum?
+                 </Link>
             </div>
             <div className="relative">
                 <input 
@@ -122,6 +127,7 @@ export default function LoginPage() {
                 />
             </div>
           </div>
+          
 
           {/* Buton */}
           <button 

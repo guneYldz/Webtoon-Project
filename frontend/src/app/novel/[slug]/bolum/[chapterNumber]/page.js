@@ -1,8 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+// Google Fontları
+import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
+
+// 1. Roman Metni Fontu
+const crimson = Crimson_Pro({ 
+  subsets: ["latin"], 
+  weight: ["400", "600"],
+  display: "swap"
+});
+
+// 2. Epik Başlık Fontu
+const cinzel = Cinzel({ 
+  subsets: ["latin"], 
+  weight: ["700", "900"],
+  display: "swap"
+});
+
+// 3. Arayüz Fontu
+const lato = Lato({ 
+  subsets: ["latin"], 
+  weight: ["400", "700"],
+  display: "swap"
+});
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -10,49 +33,64 @@ export default function NovelReadingPage() {
   const { slug, chapterNumber } = useParams();
   const router = useRouter();
 
-  // State Tanımları
   const [chapter, setChapter] = useState(null);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Başlangıç Kontrolleri
+  // --- AKILLI BAR İÇİN STATE'LER (Webtoon Kodundan) ---
+  const [showNavbar, setShowNavbar] = useState(true); 
+  const lastScrollY = useRef(0);
+  
+  // Otomatik kaydırma referansı
+  const contentRef = useRef(null);
+
   useEffect(() => {
-    // Tarayıcıda mıyız kontrolü
     if (typeof window !== "undefined") {
         setIsAuthenticated(!!localStorage.getItem("token"));
     }
     loadChapter();
   }, [slug, chapterNumber]);
 
-  // Veri Çekme Fonksiyonu
+  // --- ⚡ AKILLI BAR MANTIĞI (Webtoon Kodundan Birebir) ---
+  useEffect(() => {
+    const handleScroll = () => {
+      // Tarayıcının ne kadar kaydırıldığını al
+      const currentScrollY = window.scrollY;
+      
+      // Eğer aşağı kaydırıyorsak ve 50px'den fazla indiysek -> GİZLE
+      if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
+        setShowNavbar(false);
+      } else {
+        // Eğer yukarı çıkıyorsak -> GÖSTER
+        setShowNavbar(true);
+      }
+      
+      // Son konumu güncelle
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   const loadChapter = async () => {
     try {
       setLoading(true);
       const chapterRes = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`);
-      
       if (!chapterRes.ok) throw new Error("Bölüm yüklenemedi");
-      
       const chapterData = await chapterRes.json();
       setChapter(chapterData);
-
-      // Eğer bölüm geldiyse yorumları da çek
-      if (chapterData.id) {
-          loadComments(chapterData.id);
-      }
-      
+      if (chapterData.id) loadComments(chapterData.id);
       window.scrollTo(0, 0);
     } catch (err) {
       console.error("Hata:", err);
-      // Hata olursa seri sayfasına atmasın, ekranda hata göstersin ki anlayalım
-      // router.push(`/novel/${slug}`); 
     } finally {
       setLoading(false);
     }
   };
 
-  // Yorumları Çekme
   const loadComments = async (chapterId) => {
     try {
       const res = await fetch(`${API}/comments/novel/${chapterId}`);
@@ -63,157 +101,132 @@ export default function NovelReadingPage() {
     }
   };
 
-  // Yorum Gönderme
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
     const token = localStorage.getItem("token");
-
     try {
       const res = await fetch(`${API}/comments/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          novel_chapter_id: chapter.id,
-          content: newComment
-        })
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ novel_chapter_id: chapter.id, content: newComment })
       });
-
       if (res.ok) {
         setNewComment("");
         loadComments(chapter.id);
       } else {
-        alert("Yorum gönderilemedi. Giriş yaptığınızdan emin olun.");
+        alert("Giriş yapmalısınız.");
       }
-    } catch (err) {
-      console.error("Yorum gönderilemedi", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  // Yükleniyor Ekranı
-  if (loading) return (
-    <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center text-purple-500 font-bold italic animate-pulse">
-        SAYFALAR ÇEVRİLİYOR...
-    </div>
-  );
+  // --- PARAGRAF DÜZENLEYİCİ ---
+  const formatContent = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((para, index) => {
+        if (!para.trim()) return <br key={index} className="mb-4"/>;
+        return (
+            <p key={index} className="mb-8 indent-8 text-justify leading-loose">
+                {para}
+            </p>
+        );
+    });
+  };
 
-  // Veri Yoksa Hata Ekranı
-  if (!chapter) return (
-    <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center text-gray-400">
-        <p>Bölüm bulunamadı.</p>
-        <Link href={`/novel/${slug}`} className="mt-4 text-purple-500 hover:underline">Seriye Dön</Link>
-    </div>
-  );
+  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-purple-500 font-bold animate-pulse text-xl">SAYFALAR YÜKLENİYOR...</div>;
+  if (!chapter) return <div className="min-h-screen bg-[#121212] text-white flex justify-center items-center">Bölüm Bulunamadı</div>;
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center overflow-x-hidden text-gray-200">
+    <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40`}>
       
-      <main className="w-full max-w-3xl bg-[#0d0d0d] px-6 md:px-16 pt-16 pb-20 relative">
-        
-        {/* --- BAŞLIK ALANI --- */}
-        <div className="text-center mb-16">
-            <h1 className="text-4xl md:text-5xl font-black text-white mb-6 tracking-tighter uppercase italic drop-shadow-md">
-                {chapter.novel_title || "Roman"}
-            </h1>
-            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-purple-600 to-transparent opacity-50"></div>
-        </div>
-
-        {/* --- METİN İÇERİĞİ --- */}
-        <article
-          className="novel-content text-gray-300 text-lg md:text-xl leading-[2.4] font-serif tracking-wide text-justify mb-32"
-          dangerouslySetInnerHTML={{ __html: chapter.content }}
-        />
-
-        {/* --- NAV BUTONLARI (ZARİF & SİMETRİK) --- */}
-        <div className="grid grid-cols-2 gap-4 mt-10">
-          <button
-            disabled={!chapter.prev_chapter}
-            onClick={() => router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)}
-            className="py-3 px-4 rounded-xl bg-[#151a21] border border-white/5 flex flex-col items-center justify-center transition-all hover:border-purple-500/50 disabled:opacity-5 group"
-          >
-            <span className="text-[9px] font-black text-purple-500 opacity-60 group-hover:opacity-100 uppercase tracking-widest">← ÖNCEKİ</span>
-            <span className="text-white font-bold text-[10px] italic mt-1">
-                {chapter.prev_chapter ? `Bölüm ${chapter.prev_chapter}` : "Başlangıç"}
-            </span>
-          </button>
-
-          <button
-            disabled={!chapter.next_chapter}
-            onClick={() => router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)}
-            className="py-3 px-4 rounded-xl bg-purple-600 border border-purple-400/30 flex flex-col items-center justify-center transition-all hover:bg-purple-500 shadow-lg disabled:opacity-5 group"
-          >
-            <span className="text-[9px] font-black text-white opacity-80 group-hover:opacity-100 uppercase tracking-widest">SONRAKİ →</span>
-            <span className="text-white font-bold text-[10px] italic mt-1">
-                {chapter.next_chapter ? `Bölüm ${chapter.next_chapter}` : "Son Bölüm"}
-            </span>
-          </button>
-        </div>
-
-        {/* --- SERİ SAYFASINA DÖN (BUTONLARIN ALTINDA) --- */}
-        <div className="mt-8 flex justify-center">
-            <Link href={`/novel/${slug}`} className="px-12 py-3 rounded-full border border-purple-600/40 text-purple-500 font-black text-[9px] tracking-[0.25em] hover:bg-purple-600 hover:text-white transition-all uppercase shadow-lg shadow-purple-900/10">
-                SERİ SAYFASINA DÖN
-            </Link>
-        </div>
-
-        {/* --- YORUMLAR --- */}
-        <section className="mt-24">
-          <div className="flex items-center gap-4 mb-10">
-              <div className="w-1.5 h-6 bg-purple-600 rounded-full"></div>
-              <h3 className="text-2xl font-black text-white italic tracking-tight">Yorumlar</h3>
-          </div>
-
-          {!isAuthenticated ? (
-            <div className="p-8 rounded-[35px] border-2 border-purple-600/20 bg-purple-600/5 text-center mb-10 hover:border-purple-600/40 transition-all">
-              <p className="text-gray-400 mb-6 text-xs font-medium">Yorum yapmak için giriş yapmalısın.</p>
-              <Link href="/login" className="bg-white text-black px-10 py-3 rounded-full font-black text-[10px] hover:scale-105 transition-transform inline-block shadow-xl">
-                GİRİŞ YAP
-              </Link>
-            </div>
-          ) : (
-            <form onSubmit={handleCommentSubmit} className="mb-10 bg-[#1a1a1a] p-6 rounded-[25px] border border-white/5 shadow-inner">
-                <textarea 
-                  className="w-full bg-transparent text-white outline-none resize-none placeholder-gray-600 text-sm"
-                  rows="3"
-                  placeholder="Düşüncelerini buraya yaz..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  required
-                />
-                <div className="flex justify-end mt-2">
-                    <button type="submit" className="bg-purple-600 text-white px-6 py-2 rounded-full font-black text-[9px] hover:bg-purple-500 transition shadow-lg tracking-wide">
-                        GÖNDER
-                    </button>
+      {/* 1. ÜST KAPAK ALANI (Sabit) */}
+      <div className="relative bg-[#1a1a1a] text-white shadow-2xl border-b border-gray-800 mb-12">
+        <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110" style={{ backgroundImage: chapter.novel_cover ? `url(${API}/${chapter.novel_cover})` : 'none', backgroundColor: '#2d1b4e' }}></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/60 to-transparent"></div>
+        <div className="relative container mx-auto max-w-6xl px-6 py-16 flex flex-col items-center gap-8 z-10 text-center">
+            {chapter.novel_cover && (
+                <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl transform hover:scale-105 transition-transform duration-500">
+                    <img src={`${API}/${chapter.novel_cover}`} alt={chapter.novel_title} className="w-full h-auto object-cover"/>
                 </div>
-            </form>
-          )}
-
-          <div className="space-y-4">
-            {comments && comments.length > 0 ? (
-              comments.map(c => (
-                <div key={c.id} className="bg-[#121212] p-5 rounded-2xl border border-white/5 hover:border-purple-500/20 transition-all">
-                  <div className="flex justify-between items-center mb-2">
-                      <p className="text-purple-500 font-bold text-xs">{c.user_username}</p>
-                      <p className="text-[9px] text-gray-700 font-mono">{new Date(c.created_at).toLocaleDateString()}</p>
-                  </div>
-                  <p className="text-gray-400 text-xs leading-relaxed">{c.content}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-center text-gray-600 italic py-6 text-sm">Henüz hiç yorum yapılmamış.</p>
             )}
-          </div>
-        </section>
+            <div className="flex-1 pb-2">
+                <Link href={`/novel/${slug}`} className="inline-block mb-4 px-4 py-1.5 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-bold tracking-widest uppercase hover:bg-purple-600 hover:text-white transition">
+                     {chapter.novel_title || "Roman Serisi"}
+                </Link>
+                <h1 className={`${cinzel.className} text-3xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-2xl leading-tight mb-4`}>
+                    {chapter.title}
+                </h1>
+                <div className="flex items-center justify-center gap-4 text-gray-400 text-sm font-medium">
+                     <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">Bölüm #{chapter.chapter_number}</span>
+                     <span>{new Date(chapter.created_at).toLocaleDateString('tr-TR')}</span>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      {/* 2. OKUMA ALANI */}
+      <main ref={contentRef} className="container mx-auto max-w-4xl px-4 md:px-8">
+        <div className="flex justify-center mb-10 opacity-40 text-purple-500 text-2xl">❖</div>
+        <article className={`${crimson.className} text-[#e5e5e5] text-xl md:text-2xl`}>
+             {formatContent(chapter.content)}
+        </article>
       </main>
 
-      <style jsx global>{`
-        .novel-content p { margin-bottom: 2.2rem; text-align: justify; text-indent: 1.5rem; }
-        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #6b21a8; border-radius: 10px; }
-      `}</style>
+      {/* 3. YORUMLAR (Normal Navigasyon Kaldırıldı, Akıllı Bar Var) */}
+      <section className={`mt-32 max-w-3xl mx-auto ${lato.className} border-t border-gray-800 pt-12`}>
+          <h3 className="text-2xl font-bold text-white mb-8">Yorumlar ({comments.length})</h3>
+          {!isAuthenticated ? (
+            <div className="bg-[#1a1a1a] p-8 rounded-xl text-center border border-gray-800"><p className="text-gray-400 mb-4">Giriş yapın.</p><Link href="/login" className="text-purple-400 font-bold">Giriş Yap</Link></div>
+          ) : (
+            <form onSubmit={handleCommentSubmit} className="mb-12 relative"><textarea className="w-full bg-[#1a1a1a] text-gray-200 p-4 rounded-xl border border-gray-800 outline-none focus:border-purple-500" rows="3" placeholder="Yorum..." value={newComment} onChange={(e) => setNewComment(e.target.value)} required /><button type="submit" className="mt-2 bg-purple-600 text-white px-6 py-2 rounded-full text-sm font-bold">GÖNDER</button></form>
+          )}
+          <div className="space-y-6">{comments.map(c => (<div key={c.id} className="bg-[#1a1a1a] p-4 rounded-xl border border-gray-800"><p className="text-purple-400 font-bold text-sm mb-1">{c.user_username}</p><p className="text-gray-300">{c.content}</p></div>))}</div>
+      </section>
+
+      {/* --- 4. AKILLI BAR (FIXED NAVBAR) --- */}
+      <div 
+        className={`fixed bottom-0 left-0 w-full z-[999] transition-transform duration-300 ease-in-out ${
+          showNavbar ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div className="flex justify-center w-full">
+            <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-16 px-6">
+                
+                {/* Sol: Geri Dön */}
+                <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group">
+                  <span className="text-xl group-hover:-translate-x-1 transition">←</span> 
+                  <span className={`hidden sm:inline ${lato.className} text-xs font-bold tracking-widest uppercase`}>Seri</span>
+                </Link>
+                
+                {/* Orta: Başlık */}
+                <div className="flex flex-col items-center justify-center px-4">
+                    <h2 className={`text-xs font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>
+                      {chapter.title}
+                    </h2>
+                    <span className="text-[10px] text-purple-500 font-black tracking-widest">#{chapter.chapter_number}</span>
+                </div>
+
+                {/* Sağ: Butonlar */}
+                <div className={`flex gap-3 ${lato.className}`}>
+                    <button 
+                      onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)}
+                      disabled={!chapter.prev_chapter}
+                      className="px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-purple-400 transition"
+                    >
+                      Önceki
+                    </button>
+                    <button 
+                      onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)}
+                      disabled={!chapter.next_chapter}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600 border border-purple-500 text-xs font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-purple-500 transition shadow-lg"
+                    >
+                      Sonraki
+                    </button>
+                </div>
+            </div>
+        </div>
+      </div>
+
     </div>
   );
 }

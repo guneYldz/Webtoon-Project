@@ -117,3 +117,41 @@ def novel_bolum_ekle(
     db.commit()
     db.refresh(yeni_bolum)
     return {"durum": "Başarılı", "mesaj": "Bölüm eklendi"}
+
+# 5. OKUMA SAYFASI (EKSİK OLAN KISIM BURASIYDI!)
+@router.get("/{slug}/chapters/{chapter_number}")
+def novel_bolum_oku(slug: str, chapter_number: int, db: Session = Depends(get_db)):
+    # Önce romanı bul
+    novel = db.query(models.Novel).filter(models.Novel.slug == slug).first()
+    if not novel:
+        raise HTTPException(status_code=404, detail="Roman bulunamadı")
+
+    # İstenen bölümü bul
+    current_chapter = db.query(models.NovelChapter).filter(
+        models.NovelChapter.novel_id == novel.id,
+        models.NovelChapter.chapter_number == chapter_number
+    ).first()
+
+    if not current_chapter:
+        raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
+
+    # Önceki ve Sonraki bölüm numaralarını belirle
+    prev_ch = db.query(models.NovelChapter).filter(
+        models.NovelChapter.novel_id == novel.id,
+        models.NovelChapter.chapter_number < chapter_number
+    ).order_by(desc(models.NovelChapter.chapter_number)).first()
+
+    next_ch = db.query(models.NovelChapter).filter(
+        models.NovelChapter.novel_id == novel.id,
+        models.NovelChapter.chapter_number > chapter_number
+    ).order_by(asc(models.NovelChapter.chapter_number)).first()
+
+    return {
+        "id": current_chapter.id, # Yorumlar için ID gerekli
+        "title": current_chapter.title,
+        "content": current_chapter.content,
+        "chapter_number": current_chapter.chapter_number,
+        "novel_title": novel.title,
+        "prev_chapter": prev_ch.chapter_number if prev_ch else None,
+        "next_chapter": next_ch.chapter_number if next_ch else None
+    }
