@@ -19,17 +19,16 @@ export default function NovelReadingPage() {
   const [chapter, setChapter] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // --- AKILLI BAR STATE'LERİ ---
+  // --- NAVBAR SAKLAMA AYARI ---
   const [showNavbar, setShowNavbar] = useState(true); 
   const lastScrollY = useRef(0);
-  const contentRef = useRef(null);
 
   // --- 1. VERİLERİ ÇEK ---
   useEffect(() => {
     loadChapter();
   }, [slug, chapterNumber]);
 
-  // --- 2. AKILLI BAR MANTIĞI (Scroll) ---
+  // --- 2. NAVBAR SCROLL MANTIĞI ---
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
@@ -47,22 +46,20 @@ export default function NovelReadingPage() {
   const loadChapter = async () => {
     try {
       setLoading(true);
-      // 1. İçeriği Çek (Mevcut Novel endpointinden)
-      const res = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`);
+      
+      // 🔥 TEK VE GÜÇLÜ İSTEK
+      // credentials: "include" sayesinde Backend hem veriyi verir hem de sayacı artırır.
+      // cache: "no-store" sayesinde her zaman güncel görüntülenme sayısını görürsün.
+      const res = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`, {
+          cache: "no-store",
+          credentials: "include" 
+      });
+
       if (!res.ok) throw new Error("Bölüm yüklenemedi");
       
       const data = await res.json();
       setChapter(data);
       window.scrollTo(0, 0);
-
-      // 2. 👇 İZLENME SAYISINI ARTIR (SESSİZ SİNYAL)
-      // Novel endpoint'i izlenmeyi artırmıyorsa, 'episodes' endpointine kimlikli (cookies) istek atıyoruz.
-      if (data.id) {
-        fetch(`${API}/episodes/${data.id}`, { 
-            method: "GET",
-            credentials: "include" // 🔥 KRİTİK: Cookie gönder/al ayarı (F5 spam'i engeller)
-        }).catch(err => console.log("Sayaç güncellenemedi:", err));
-      }
 
     } catch (err) {
       console.error("Hata:", err);
@@ -84,48 +81,93 @@ export default function NovelReadingPage() {
     });
   };
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-purple-500 font-bold animate-pulse text-xl">SAYFALAR YÜKLENİYOR...</div>;
+  // --- TARİH FORMATLAYICI (GÜVENLİ) ---
+  const formatDate = (dateString) => {
+      if (!dateString) return "Tarih Yok";
+      try {
+          return new Date(dateString).toLocaleDateString('tr-TR', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric'
+          });
+      } catch (e) {
+          return "Tarih Hatalı";
+      }
+  };
+
+  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-purple-500 font-bold animate-pulse text-xl tracking-widest">YÜKLENİYOR...</div>;
   if (!chapter) return <div className="min-h-screen bg-[#121212] text-white flex justify-center items-center">Bölüm Bulunamadı</div>;
 
   return (
-    <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40`}>
+    // overflow-x-hidden: Sağa sola kaymayı engeller
+    <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40 overflow-x-hidden`}>
       
-      {/* 1. ÜST KAPAK ALANI */}
+      {/* 1. ÜST KAPAK ALANI (ÖZEL MOR TASARIM) */}
       <div className="relative bg-[#1a1a1a] text-white shadow-2xl border-b border-gray-800 mb-12">
-        <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110" style={{ backgroundImage: chapter.novel_cover ? `url(${API}/${chapter.novel_cover})` : 'none', backgroundColor: '#2d1b4e' }}></div>
+        {/* Arka Plan Resmi ve Blur Efekti */}
+        <div 
+            className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110" 
+            style={{ 
+                backgroundImage: chapter.novel_cover ? `url(${API}/${chapter.novel_cover})` : 'none', 
+                backgroundColor: '#2d1b4e' // Resim yoksa Mor arka plan
+            }}
+        ></div>
+        
+        {/* Karartma Katmanı */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/60 to-transparent"></div>
+        
+        {/* İçerik */}
         <div className="relative container mx-auto max-w-6xl px-6 py-16 flex flex-col items-center gap-8 z-10 text-center">
+            {/* Kapak Resmi (Varsa) */}
             {chapter.novel_cover && (
                 <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl transform hover:scale-105 transition-transform duration-500">
-                    <img src={`${API}/${chapter.novel_cover}`} alt={chapter.novel_title} className="w-full h-auto object-cover"/>
+                    <img 
+                        src={`${API}/${chapter.novel_cover}`} 
+                        alt={chapter.novel_title} 
+                        className="w-full h-auto object-cover"
+                    />
                 </div>
             )}
+            
             <div className="flex-1 pb-2">
+                {/* Seri Adı Butonu */}
                 <Link href={`/novel/${slug}`} className="inline-block mb-4 px-4 py-1.5 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-bold tracking-widest uppercase hover:bg-purple-600 hover:text-white transition">
                       {chapter.novel_title || "Roman Serisi"}
                 </Link>
+                
+                {/* Bölüm Başlığı */}
                 <h1 className={`${cinzel.className} text-3xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-2xl leading-tight mb-4`}>
                     {chapter.title}
                 </h1>
-                <div className="flex items-center justify-center gap-4 text-gray-400 text-sm font-medium">
-                      <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">Bölüm #{chapter.chapter_number}</span>
-                      <span>{new Date(chapter.created_at).toLocaleDateString('tr-TR')}</span>
+                
+                {/* --- BİLGİ SATIRI --- */}
+                <div className="flex flex-wrap items-center justify-center gap-4 text-gray-400 text-sm font-medium">
+                      {/* Bölüm Numarası */}
+                      <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">
+                          Bölüm #{chapter.chapter_number}
+                      </span>
                       
-                      {/* Göz Sayacı (İsteğe bağlı ekrana basmak istersen) */}
-                      {chapter.view_count !== undefined && (
-                         <span className="flex items-center gap-1">👁️ {chapter.view_count}</span>
-                      )}
+                      {/* Tarih */}
+                      <span className="flex items-center gap-1">
+                          📅 {formatDate(chapter.created_at)}
+                      </span>
+                      
+                      {/* İzlenme Sayısı */}
+                      <span className="flex items-center gap-1 text-purple-400 bg-purple-900/20 px-2 py-1 rounded">
+                         👁️ {chapter.view_count || 0}
+                      </span>
                 </div>
             </div>
         </div>
       </div>
 
       {/* 2. OKUMA ALANI */}
-      <main ref={contentRef} className="container mx-auto max-w-4xl px-4 md:px-8">
+      <main className="container mx-auto max-w-4xl px-4 md:px-8 relative z-10">
         <div className="flex justify-center mb-10 opacity-40 text-purple-500 text-2xl">❖</div>
         <article className={`${crimson.className} text-[#e5e5e5] text-xl md:text-2xl`}>
              {formatContent(chapter.content)}
         </article>
+        <div className="flex justify-center mt-12 opacity-40 text-purple-500 text-2xl">❖</div>
       </main>
 
       {/* 3. YORUM ALANI */}
@@ -137,7 +179,7 @@ export default function NovelReadingPage() {
           />
       </div>
 
-      {/* 4. AKILLI BAR (FIXED NAVBAR) */}
+      {/* 4. SABİT ALT BAR */}
       <div 
         className={`fixed bottom-0 left-0 w-full z-[999] transition-transform duration-300 ease-in-out ${
           showNavbar ? "translate-y-0" : "translate-y-full"

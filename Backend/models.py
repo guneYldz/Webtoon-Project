@@ -202,12 +202,16 @@ class NovelChapter(Base):
     __tablename__ = "novel_chapters"
 
     id = Column(Integer, primary_key=True, index=True)
-    chapter_number = Column(Integer)        
+    chapter_number = Column(Float) # Float yaptım ki 1.5 gibi ara bölümler olabilsin
     title = Column(String)                  
     content = Column(Text)                  
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
+    # 👇 İŞTE EKSİK OLAN SÜTUN BUYDU!
+    view_count = Column(Integer, default=0) 
+
     novel_id = Column(Integer, ForeignKey("novels.id"))
     novel = relationship("Novel", back_populates="chapters")
-
+    
+    # Novel ile ilişkili yorumları bağladık (Eğer Comment modelin varsa)
     comments = relationship("Comment", back_populates="novel_chapter")

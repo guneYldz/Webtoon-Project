@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status, Request, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
-from typing import List, Union
+from typing import List
 import shutil
 import os
 import uuid
@@ -30,21 +30,17 @@ def check_editor_permission(user: models.User):
 def novelleri_getir(db: Session = Depends(get_db), limit: int = 100, skip: int = 0):
     return db.query(models.Novel).order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
 
-# 2. TEK ROMAN GETİR (HEM ID HEM SLUG DESTEKLİ 🚀)
+# 2. TEK ROMAN GETİR
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
 def novel_detay(slug_or_id: str, db: Session = Depends(get_db)):
-    
-    # Sayı ise ID ile ara
     if slug_or_id.isdigit():
         novel = db.query(models.Novel).filter(models.Novel.id == int(slug_or_id)).first()
-    # Yazı ise Slug ile ara
     else:
         novel = db.query(models.Novel).filter(models.Novel.slug == slug_or_id).first()
 
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
     
-    # Bölümleri sırala
     chapters = db.query(models.NovelChapter).filter(
         models.NovelChapter.novel_id == novel.id
     ).order_by(asc(models.NovelChapter.chapter_number)).all()
@@ -52,14 +48,14 @@ def novel_detay(slug_or_id: str, db: Session = Depends(get_db)):
     novel.chapters = chapters
     return novel
 
-# 3. YENİ ROMAN EKLE (Admin/Editör)
+# 3. YENİ ROMAN EKLE
 @router.post("/ekle", status_code=status.HTTP_201_CREATED)
 def novel_ekle(
     title: str = Form(...),
     slug: str = Form(...),
     summary: str = Form(...),
     author: str = Form(None),
-    source_url: str = Form(None), # Bot için kaynak linki
+    source_url: str = Form(None),
     cover: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -72,11 +68,9 @@ def novel_ekle(
         ext = cover.filename.split(".")[-1]
         filename = f"{uuid.uuid4()}.{ext}"
         cover_path = f"static/novel_covers/{filename}"
-        
         with open(cover_path, "wb") as buffer:
             shutil.copyfileobj(cover.file, buffer)
 
-    # Slug kontrolü
     if db.query(models.Novel).filter(models.Novel.slug == slug).first():
         raise HTTPException(status_code=400, detail="Bu slug zaten kullanılıyor.")
 
@@ -95,11 +89,11 @@ def novel_ekle(
     db.refresh(yeni_novel)
     return {"durum": "Başarılı", "slug": yeni_novel.slug, "mesaj": "Roman oluşturuldu"}
 
-# 4. BÖLÜM EKLEME (Bot ve Panel İçin)
+# 4. BÖLÜM EKLEME
 @router.post("/bolum-ekle", status_code=status.HTTP_201_CREATED)
 def novel_bolum_ekle(
     novel_id: int = Form(...),
-    chapter_number: int = Form(...),
+    chapter_number: float = Form(...),
     title: str = Form(...),
     content: str = Form(...),
     db: Session = Depends(get_db),
@@ -122,7 +116,8 @@ def novel_bolum_ekle(
         novel_id=novel_id,
         chapter_number=chapter_number,
         title=title,
-        content=content
+        content=content,
+        view_count=0
     )
 
     db.add(yeni_bolum)
@@ -130,22 +125,39 @@ def novel_bolum_ekle(
     db.refresh(yeni_bolum)
     return {"durum": "Başarılı", "mesaj": "Bölüm eklendi"}
 
-# 5. OKUMA SAYFASI
+# 5. OKUMA SAYFASI (🔥 FİNAL VERSİYON: KORUMALI 🔥)
 @router.get("/{slug}/chapters/{chapter_number}")
-def novel_bolum_oku(slug: str, chapter_number: int, db: Session = Depends(get_db)):
+def novel_bolum_oku(slug: str, chapter_number: float, request: Request, response: Response, db: Session = Depends(get_db)):
     
+    # Romanı bul
     novel = db.query(models.Novel).filter(models.Novel.slug == slug).first()
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
 
-    current_chapter = db.query(models.NovelChapter).filter(
+    # Bölümü bul
+    chapter = db.query(models.NovelChapter).filter(
         models.NovelChapter.novel_id == novel.id,
         models.NovelChapter.chapter_number == chapter_number
     ).first()
 
-    if not current_chapter:
+    if not chapter:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
 
+    # --- AKILLI SAYAÇ (SPAM KORUMALI) ---
+    cookie_name = f"viewed_novel_{chapter.id}"
+    zaten_okudu = request.cookies.get(cookie_name)
+
+    if not zaten_okudu:
+        if chapter.view_count is None:
+            chapter.view_count = 0
+        chapter.view_count += 1
+        db.commit()
+        
+        # 1 Saat (3600 Saniye) boyunca tekrar artırma
+        response.set_cookie(key=cookie_name, value="true", max_age=3600)
+    # ------------------------------------
+
+    # Navigasyon
     prev_ch = db.query(models.NovelChapter).filter(
         models.NovelChapter.novel_id == novel.id,
         models.NovelChapter.chapter_number < chapter_number
@@ -157,11 +169,15 @@ def novel_bolum_oku(slug: str, chapter_number: int, db: Session = Depends(get_db
     ).order_by(asc(models.NovelChapter.chapter_number)).first()
 
     return {
-        "id": current_chapter.id,
-        "title": current_chapter.title,
-        "content": current_chapter.content,
-        "chapter_number": current_chapter.chapter_number,
+        "id": chapter.id,
+        "title": chapter.title,
+        "content": chapter.content,
+        "chapter_number": chapter.chapter_number,
         "novel_title": novel.title,
+        "novel_cover": novel.cover_image,
+        "view_count": chapter.view_count, 
+        "created_at": chapter.created_at, 
+        "novel_id": novel.id, 
         "prev_chapter": prev_ch.chapter_number if prev_ch else None,
         "next_chapter": next_ch.chapter_number if next_ch else None
     }

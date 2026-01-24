@@ -21,19 +21,45 @@ export default function WebtoonReadingPage() {
   const [showNavbar, setShowNavbar] = useState(true); 
   const lastScrollY = useRef(0);
 
+  // --- 1. KLAVYE İLE GEÇİŞ (EKSTRA ÖZELLİK) ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+        if (!episode) return;
+        if (e.key === 'ArrowLeft' && episode.prev_episode_id) {
+            router.push(`/webtoon/${params.id}/bolum/${episode.prev_episode_id}`);
+        } else if (e.key === 'ArrowRight' && episode.next_episode_id) {
+            router.push(`/webtoon/${params.id}/bolum/${episode.next_episode_id}`);
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [episode, router, params.id]);
+
+  // --- 2. VERİ ÇEKME (AKILLI SAYAÇLI) ---
   useEffect(() => {
     if (!params.episodeId) return;
 
     const fetchEpisode = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${API}/episodes/${params.episodeId}`);
+        setError(null);
+        
+        // API Adresi Güvenliği
+        const apiUrl = API || "http://127.0.0.1:8000";
+
+        // 🔥 KRİTİK NOKTA: credentials: "include" eklendi.
+        const res = await fetch(`${apiUrl}/episodes/${params.episodeId}`, {
+            cache: "no-store",      // Eski veriyi tutma
+            credentials: "include"  // Backend'e kimlik gönder (F5 koruması için)
+        });
+
         if (!res.ok) throw new Error("Bölüm yüklenemedi.");
         const data = await res.json();
         setEpisode(data);
+
       } catch (err) {
-        console.error(err);
-        setError("Bölüm bulunamadı.");
+        console.error("Hata:", err);
+        setError("Bölüm bulunamadı veya yüklenirken hata oluştu.");
       } finally {
         setLoading(false);
       }
@@ -42,6 +68,7 @@ export default function WebtoonReadingPage() {
     fetchEpisode();
   }, [params.episodeId]);
 
+  // --- 3. SCROLL BAR MANTIĞI ---
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
@@ -65,14 +92,15 @@ export default function WebtoonReadingPage() {
   if (error) return (
     <div className="min-h-screen bg-[#121212] flex flex-col items-center justify-center text-gray-400 gap-4">
         <p>{error}</p>
-        <button onClick={() => router.back()} className="text-white bg-gray-800 px-4 py-2 rounded hover:bg-gray-700">
-            Geri Dön
+        <button onClick={() => window.location.reload()} className="text-white bg-gray-800 px-4 py-2 rounded hover:bg-gray-700">
+            Tekrar Dene
         </button>
     </div>
   );
 
   if (!episode) return null;
 
+  // --- GÖRÜNÜM KISMI (ESKİ KODUN AYNISI) ---
   return (
     <div className={`min-h-screen bg-[#121212] text-gray-200 pb-40 ${lato.className}`}>
       
@@ -86,13 +114,13 @@ export default function WebtoonReadingPage() {
         type="webtoon"
       />
 
-      {/* --- RESİM ALANI (GÜNCELLENDİ) --- */}
+      {/* --- RESİM ALANI --- */}
       <div className="max-w-4xl mx-auto bg-[#121212] shadow-2xl flex flex-col">
         {episode.images && episode.images.length > 0 ? (
             episode.images.map((imgUrl, index) => (
                 <img 
-                    key={index} // Liste olduğu için index kullanıyoruz
-                    src={imgUrl} // Backend tam URL gönderdiği için direkt kullanıyoruz
+                    key={index} 
+                    src={imgUrl} 
                     alt={`Sayfa ${index + 1}`}
                     className="w-full h-auto object-contain block" 
                     loading="lazy"
@@ -110,7 +138,7 @@ export default function WebtoonReadingPage() {
           <CommentSection 
               type="webtoon" 
               itemId={episode.webtoon_id} 
-              episodeId={episode.id}      
+              episodeId={episode.id}       
           />
       </div>
 
