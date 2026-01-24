@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqladmin import Admin, ModelView
@@ -7,21 +7,17 @@ from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
-from routers import novel
 from passlib.context import CryptContext
-from database import engine
+from database import engine, get_db
+import random
 import models
 import os
-import shutil
-import uuid
-from wtforms import FileField
-from wtforms.validators import Optional
-from sqlalchemy import Column, Integer, String, Text # <-- Buraya Text ekledik
+from wtforms import TextAreaField 
 
 # --- ROUTERLARI ÇAĞIR ---
-from routers import auth, webtoon, episode, comments, favorites, likes
+from routers import auth, webtoon, episode, comments, favorites, likes, novel
 
-# 1. Tabloları oluştur
+# 1. Tabloları oluştur 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -92,7 +88,6 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
     column_list = [
         models.Webtoon.id, 
         models.Webtoon.cover_image, 
-        models.Webtoon.banner_image,
         models.Webtoon.title, 
         models.Webtoon.categories, 
         models.Webtoon.is_featured, 
@@ -100,9 +95,7 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
         models.Webtoon.status
     ]
 
-    # Teknik alanları gizle, resim yolları yazı olarak girilecek
     form_excluded_columns = [
-        models.Webtoon.id,
         models.Webtoon.created_at,  
         models.Webtoon.view_count,  
         models.Webtoon.episodes,    
@@ -115,10 +108,6 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
             f'<img src="{("/" + m.cover_image) if m.cover_image and not m.cover_image.startswith("/") else m.cover_image}" width="50" height="75" style="border-radius:4px; object-fit:cover; border:1px solid #ccc;">'
         ) if m.cover_image else "Yok",
         
-        models.Webtoon.banner_image: lambda m, a: Markup(
-            f'<img src="{("/" + m.banner_image) if m.banner_image and not m.banner_image.startswith("/") else m.banner_image}" width="100" height="40" style="border-radius:4px; object-fit:cover; border:1px solid #ccc;">'
-        ) if m.banner_image else "-",
-
         models.Webtoon.is_featured: lambda m, a: Markup(
             '<span style="color:#f1c40f; font-weight:bold;">★</span>' 
             if m.is_featured else '-'
@@ -127,12 +116,24 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
         models.Webtoon.categories: lambda m, a: ", ".join([c.name for c in m.categories]) if m.categories else "-"
     }
 
-class EpisodeAdmin(ModelView, model=models.Episode):
-    name = "Bölüm"
-    name_plural = "Bölümler"
-    icon = "fa-solid fa-file-lines"
-    column_list = [models.Episode.id, models.Episode.webtoon, models.Episode.episode_number, models.Episode.title]
+class EpisodeAdmin(ModelView, model=models.WebtoonEpisode):
+    name = "Webtoon Bölümü"
+    name_plural = "Webtoon Bölümleri"
+    icon = "fa-solid fa-file-video"
+    
+    column_list = [
+        models.WebtoonEpisode.id, 
+        models.WebtoonEpisode.webtoon, 
+        models.WebtoonEpisode.episode_number, 
+        models.WebtoonEpisode.title
+    ]
     list_per_page = 20
+
+class EpisodeImageAdmin(ModelView, model=models.EpisodeImage):
+    name = "Bölüm Resmi"
+    name_plural = "Bölüm Resimleri"
+    icon = "fa-solid fa-images"
+    column_list = [models.EpisodeImage.id, models.EpisodeImage.episode, models.EpisodeImage.page_order]
 
 class UserAdmin(ModelView, model=models.User):
     name = "Kullanıcı"
@@ -160,37 +161,35 @@ class CommentAdmin(ModelView, model=models.Comment):
     name = "Yorum"
     name_plural = "Yorumlar"
     icon = "fa-solid fa-comments"
-    column_list = [models.Comment.user, models.Comment.content]
+    column_list = [models.Comment.id, models.Comment.user, models.Comment.content, models.Comment.created_at]
 
-# 📖 ROMAN (NOVEL) YÖNETİMİ
 # 📖 ROMAN (NOVEL) YÖNETİMİ
 class NovelAdmin(ModelView, model=models.Novel):
     name = "Roman"
     name_plural = "Romanlar"
     icon = "fa-solid fa-book-open"
     
-    # Listeleme ekranında görünecek sütunlar
     column_list = [
         models.Novel.id, 
         models.Novel.cover_image, 
         models.Novel.title, 
         models.Novel.author, 
         models.Novel.status,
-        models.Novel.source_url  # 👈 YENİ: Listede kaynak linki de görünsün
+        models.Novel.source_url,
+        models.Novel.is_featured # Vitrin durumu listede görünsün
     ]
 
-    # Ekleme/Düzenleme ekranında görünecek kutucuklar
     form_columns = [
         "title",
         "slug",
         "author",
         "summary",
         "status",
+        "is_featured", # Vitrine ekleme kutucuğu
         "cover_image",
-        "source_url"  # 👈 KRİTİK OLAN BU: Kutucuk buraya eklenince gelecek!
+        "source_url"
     ]
 
-    # Resim ve Durum Gösterimi (Tek sefer tanımlandı)
     column_formatters = {
         models.Novel.cover_image: lambda m, a: Markup(
             f'<img src="{("/" + m.cover_image) if m.cover_image and not m.cover_image.startswith("/") else m.cover_image}" width="50" height="75" style="border-radius:4px; object-fit:cover; border:1px solid #ccc;">'
@@ -199,8 +198,12 @@ class NovelAdmin(ModelView, model=models.Novel):
         models.Novel.status: lambda m, a: Markup(
             f'<span style="color:white; background-color:{"#27ae60" if m.status == "ongoing" else "#e67e22"}; padding:2px 8px; border-radius:4px; font-size:12px;">{m.status.upper()}</span>'
         ),
+
+        models.Novel.is_featured: lambda m, a: Markup(
+            '<span style="color:#f1c40f; font-weight:bold;">★</span>' 
+            if m.is_featured else '-'
+        ),
         
-        # Source URL uzunsa kısaltıp gösterelim ki tablo taşmasın
         models.Novel.source_url: lambda m, a: Markup(
             f'<a href="{m.source_url}" target="_blank" style="color:#3498db; text-decoration:none;">Link</a>'
         ) if m.source_url else "-"
@@ -217,12 +220,10 @@ class NovelChapterAdmin(ModelView, model=models.NovelChapter):
         models.NovelChapter.title
     ]
 
-    # 👇 KRİTİK: Editörün uzun metinleri rahat girmesi için 'TextArea' kullanıyoruz
     form_overrides = {
-        "content": Text  # SQLAdmin otomatik olarak geniş bir yazı alanı sağlar
+        "content": TextAreaField
     }
 
-    # Bölüm eklerken hangi alanlar dolsun?
     form_columns = [
         "novel",
         "chapter_number",
@@ -230,8 +231,8 @@ class NovelChapterAdmin(ModelView, model=models.NovelChapter):
         "content"
     ]
 
-    # Editörlerin arama yapabilmesi için
     column_searchable_list = [models.NovelChapter.title]
+
 # ==========================================
 # 🚀 BAŞLATMA
 # ==========================================
@@ -247,11 +248,13 @@ admin = Admin(app, engine, authentication_backend=authentication_backend)
 # Admin Görünümlerini Ekle
 admin.add_view(UserAdmin)
 admin.add_view(WebtoonAdmin)
-admin.add_view(EpisodeAdmin)
+admin.add_view(EpisodeAdmin)      
+admin.add_view(EpisodeImageAdmin) 
 admin.add_view(CategoryAdmin)
 admin.add_view(CommentAdmin)
-admin.add_view(NovelAdmin)       # <-- Artık burada hata vermez
-admin.add_view(NovelChapterAdmin) # <-- Artık burada hata vermez
+admin.add_view(NovelAdmin)       
+admin.add_view(NovelChapterAdmin) 
+
 
 # Routerları Dahil Et
 app.include_router(webtoon.router)
@@ -264,4 +267,67 @@ app.include_router(novel.router)
 
 @app.get("/")
 def ana_sayfa():
-    return {"durum": "Sistem Hazır", "mesaj": "Webtoon API Hazır! 🚀"}
+    return {"durum": "Sistem Hazır", "mesaj": "Webtoon & Novel API Hazır! 🚀"}
+
+# 👇 VİTRİN KODU (BURADA @app.get KULLANDIK)
+@app.get("/vitrin")
+def get_vitrin(db: Session = Depends(get_db)):
+    # 1. Vitrindeki Webtoon'ları Çek
+    try:
+        featured_webtoons = db.query(models.Webtoon)\
+            .filter(models.Webtoon.is_featured == True)\
+            .all()
+    except Exception:
+        featured_webtoons = []
+    
+    # 2. Vitrindeki Romanları Çek
+    try:
+        featured_novels = db.query(models.Novel)\
+            .filter(models.Novel.is_featured == True)\
+            .all()
+    except Exception:
+        featured_novels = []
+
+    # 3. Listeleri Ortak Bir Formata Çevirip Birleştir
+    vitrin_listesi = []
+
+    # Webtoonları ekle
+    for w in featured_webtoons:
+        vitrin_listesi.append({
+            "id": w.id,
+            "title": w.title,
+            "slug": w.slug,
+            "banner_image": w.banner_image, 
+            "cover_image": w.cover_image,
+            "summary": w.summary,
+            "view_count": w.view_count,
+            "status": w.status,
+            "type": "webtoon",      
+            "typeLabel": "WEBTOON", 
+            "bg_color": "blue"      
+        })
+
+    # Romanları ekle
+    for n in featured_novels:
+        vitrin_listesi.append({
+            "id": n.id,
+            "title": n.title,
+            "slug": n.slug,
+            
+            # 👇 DÜZELTME BURADA YAPILDI 👇
+            # 'novel_cover' yerine 'cover_image' yazmalıyız.
+            "banner_image": n.cover_image, 
+            "cover_image": n.cover_image,
+            
+            "summary": n.summary,
+            "view_count": 0, 
+            "status": n.status if hasattr(n, "status") else "ongoing",
+            "type": "novel",        
+            "typeLabel": "NOVEL",   
+            "bg_color": "purple"    
+        })
+
+    # 4. Rastgele Karıştır
+    random.shuffle(vitrin_listesi)
+
+    return vitrin_listesi

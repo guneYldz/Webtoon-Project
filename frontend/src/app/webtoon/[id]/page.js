@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import FavoriteButton from "@/components/FavoriteButton"; // ✅ Button import edildi
 
 export default function WebtoonDetail() {
   const params = useParams();
@@ -28,12 +29,16 @@ export default function WebtoonDetail() {
       });
   }, [id]);
 
-  // Yükleniyor ve Hata ekranlarını da Dark Mode yaptık
   if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg">Yükleniyor...</div>;
   if (!webtoon) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">Webtoon Bulunamadı 😔</div>;
 
+  // 👇 İLK BÖLÜMÜ BULMA MANTIĞI
+  // Bölümleri küçükten büyüğe sırala ve ilkini al (Bölüm 1, Bölüm 0 vs.)
+  const firstEpisode = webtoon.episodes && webtoon.episodes.length > 0 
+    ? [...webtoon.episodes].sort((a, b) => a.episode_number - b.episode_number)[0] 
+    : null;
+
   return (
-    // DÜZELTME 1: Arka planı koyu (#121212) yaptık
     <div className="min-h-screen bg-[#121212] pb-20 font-sans">
       
       {/* 1. ÜST KISIM (KAPAK & BİLGİ) */}
@@ -47,7 +52,6 @@ export default function WebtoonDetail() {
         {/* İçeriği merkeze almak için gradient ekledik */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
 
-        {/* DÜZELTME 2: max-w-7xl ile hizalama */}
         <div className="relative container mx-auto max-w-7xl px-4 py-16 flex flex-col md:flex-row gap-10 items-center md:items-start z-10">
           {/* Kapak Resmi */}
           <div className="w-52 md:w-72 flex-shrink-0 rounded-xl overflow-hidden border border-gray-700 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
@@ -72,6 +76,26 @@ export default function WebtoonDetail() {
                </span>
             </div>
 
+            {/* 👇 BUTONLAR ALANI (EKLENDİ) */}
+            <div className="flex flex-wrap justify-center md:justify-start gap-4 mb-8">
+                {/* 1. OKU BUTONU (Mavi) */}
+                {firstEpisode && (
+                    <Link 
+                        href={`/webtoon/${id}/bolum/${firstEpisode.id}`}
+                        className="px-8 py-3 rounded-full bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all flex items-center gap-2"
+                    >
+                        📖 Hemen Oku
+                    </Link>
+                )}
+                
+                {/* 2. FAVORİ BUTONU (Kırmızı) */}
+                <FavoriteButton 
+                    type="webtoon" 
+                    id={webtoon.id} 
+                    className="px-8 py-3 rounded-full bg-red-600 text-white border border-red-600 font-bold hover:bg-red-700 hover:border-red-700 shadow-[0_0_15px_rgba(220,38,38,0.4)] transition-all flex items-center gap-2 group"
+                />
+            </div>
+
             <p className="text-gray-300 text-lg leading-relaxed max-w-4xl mb-6 drop-shadow-md">
               {webtoon.summary}
             </p>
@@ -80,7 +104,6 @@ export default function WebtoonDetail() {
       </div>
 
       {/* 2. BÖLÜMLER LİSTESİ */}
-      {/* DÜZELTME 3: max-w-7xl ve Dark Tema renkleri */}
       <div className="container mx-auto max-w-7xl px-4 py-12">
         <h3 className="text-2xl font-bold text-white mb-6 border-b border-gray-800 pb-4 flex justify-between items-center">
           <span className="flex items-center gap-2">
@@ -94,16 +117,14 @@ export default function WebtoonDetail() {
         
         <div className="flex flex-col gap-3">
           {webtoon.episodes && webtoon.episodes.length > 0 ? (
-            // Veritabanındaki bölümleri listele
+            // Veritabanındaki bölümleri listele (Ters sıralı: En yeni en üstte)
             [...webtoon.episodes].reverse().map((ep) => (
               <Link 
                 key={ep.id} 
                 href={`/webtoon/${id}/bolum/${ep.id}`} 
-                // DÜZELTME 4: Kart renkleri koyu yapıldı (bg-[#1e1e1e])
                 className="bg-[#1e1e1e] p-4 rounded-xl border border-gray-800 hover:border-blue-500/50 hover:bg-[#252525] transition flex items-center justify-between group shadow-sm"
               >
                 <div className="flex items-center gap-5">
-                  {/* Bölüm Numarası Kutusu */}
                   <div className="w-14 h-14 bg-[#121212] rounded-lg border border-gray-800 flex items-center justify-center text-gray-400 font-bold text-lg group-hover:text-blue-500 group-hover:border-blue-500/30 transition">
                     #{ep.episode_number}
                   </div>

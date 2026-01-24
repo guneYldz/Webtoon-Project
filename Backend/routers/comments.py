@@ -1,77 +1,87 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import desc
 from pydantic import BaseModel
-from datetime import datetime
-
+from typing import List, Optional
 from database import get_db
+from routers.auth import get_current_user
 import models
-# auth dosyanın nerede olduğuna göre değişebilir, senin kodunda 'routers.auth' idi:
-from routers.auth import get_current_user 
 
 router = APIRouter(
     prefix="/comments",
-    tags=["Comments (Yorumlar)"]
+    tags=["Comments"]
 )
 
-# --- Şemalar (Veri Kalıpları) ---
-# Frontend 'episode_id' ve 'content' gönderiyor, buna uyuyoruz:
+# --- ŞEMALAR (Veri Doğrulama) ---
+# Yorum gelirken bu formatta gelmeli:
 class CommentCreate(BaseModel):
-    episode_id: int
     content: str
+    novel_chapter_id: Optional[int] = None
+    webtoon_episode_id: Optional[int] = None
 
-# Frontend'e veriyi gönderirken kullanacağımız kalıp:
+# Yorum gönderirken bu formatta gitmeli:
 class CommentResponse(BaseModel):
     id: int
-    user_username: str  # Yazan kişinin adı (Önemli!)
     content: str
-    created_at: datetime
+    user_username: str
+    created_at: str 
     
     class Config:
         from_attributes = True
 
-# 1. YORUM YAP 🔒
-# Adres: POST /comments/ (Frontend buraya istek atıyor)
+# 1. YORUM EKLE (POST /comments/)
+# Frontend buraya istek atıyor, "/ekle" değil!
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def yorum_yap(
+def create_comment(
     comment: CommentCreate, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    # Bölüm var mı?
-    episode = db.query(models.Episode).filter(models.Episode.id == comment.episode_id).first()
-    if not episode:
-        raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
-
-    # Yorumu kaydet
     new_comment = models.Comment(
+        content=comment.content,
         user_id=current_user.id,
-        episode_id=comment.episode_id,
-        content=comment.content
+        novel_chapter_id=comment.novel_chapter_id,
+        webtoon_episode_id=comment.webtoon_episode_id
     )
+    
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
-    return {"message": "Yorum başarıyla eklendi"}
-
-# 2. BİR BÖLÜMÜN YORUMLARINI GETİR 📖
-# Adres: GET /comments/{episode_id}
-@router.get("/{episode_id}", response_model=List[CommentResponse])
-def yorumlari_getir(episode_id: int, db: Session = Depends(get_db)):
-    # Yorumları 'en yeniden eskiye' doğru sıralayıp çekiyoruz
-    comments = db.query(models.Comment)\
-                 .filter(models.Comment.episode_id == episode_id)\
-                 .order_by(models.Comment.created_at.desc())\
-                 .all()
     
-    # Veriyi Frontend'in istediği formata (CommentResponse) çeviriyoruz
-    sonuc = []
-    for c in comments:
-        sonuc.append({
+    return {"message": "Yorum başarıyla eklendi", "id": new_comment.id}
+
+# 2. WEBTOON YORUMLARI GETİR
+@router.get("/webtoon/{episode_id}", response_model=List[CommentResponse])
+def get_webtoon_comments(episode_id: int, db: Session = Depends(get_db)):
+    comments = db.query(models.Comment)\
+        .filter(models.Comment.webtoon_episode_id == episode_id)\
+        .order_by(desc(models.Comment.created_at))\
+        .all()
+    
+    return [
+        {
             "id": c.id,
-            # Eğer kullanıcı silinmişse hata vermesin, 'Anonim' yazsın
-            "user_username": c.user.username if c.user else "Anonim",
             "content": c.content,
-            "created_at": c.created_at
-        })
-    return sonuc
+            "user_username": c.user.username if c.user else "Silinmiş Kullanıcı",
+            "created_at": str(c.created_at)
+        } 
+        for c in comments
+    ]
+
+# 3. ROMAN YORUMLARI GETİR
+@router.get("/novel/{chapter_id}", response_model=List[CommentResponse])
+def get_novel_comments(chapter_id: int, db: Session = Depends(get_db)):
+    comments = db.query(models.Comment)\
+        .filter(models.Comment.novel_chapter_id == chapter_id)\
+        .order_by(desc(models.Comment.created_at))\
+        .all()
+        
+    return [
+        {
+            "id": c.id,
+            "content": c.content,
+            "user_username": c.user.username if c.user else "Silinmiş Kullanıcı",
+            "created_at": str(c.created_at)
+        } 
+        for c in comments
+    ]

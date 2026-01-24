@@ -2,72 +2,45 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
+import CommentSection from "@/components/CommentSection"; // 🔥 Yorum Bileşeni
 import Link from "next/link";
-// Google Fontları
 import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
+import { API } from "@/api";
 
-// 1. Roman Metni Fontu
-const crimson = Crimson_Pro({ 
-  subsets: ["latin"], 
-  weight: ["400", "600"],
-  display: "swap"
-});
-
-// 2. Epik Başlık Fontu
-const cinzel = Cinzel({ 
-  subsets: ["latin"], 
-  weight: ["700", "900"],
-  display: "swap"
-});
-
-// 3. Arayüz Fontu
-const lato = Lato({ 
-  subsets: ["latin"], 
-  weight: ["400", "700"],
-  display: "swap"
-});
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+// --- FONTLAR ---
+const crimson = Crimson_Pro({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
+const cinzel = Cinzel({ subsets: ["latin"], weight: ["700", "900"], display: "swap" });
+const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
 
 export default function NovelReadingPage() {
   const { slug, chapterNumber } = useParams();
   const router = useRouter();
 
   const [chapter, setChapter] = useState(null);
-  const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState("");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // --- AKILLI BAR İÇİN STATE'LER (Webtoon Kodundan) ---
+  // --- AKILLI BAR STATE'LERİ ---
   const [showNavbar, setShowNavbar] = useState(true); 
   const lastScrollY = useRef(0);
-  
-  // Otomatik kaydırma referansı
   const contentRef = useRef(null);
 
+  // --- 1. VERİLERİ ÇEK ---
   useEffect(() => {
-    if (typeof window !== "undefined") {
-        setIsAuthenticated(!!localStorage.getItem("token"));
-    }
     loadChapter();
   }, [slug, chapterNumber]);
 
-  // --- ⚡ AKILLI BAR MANTIĞI (Webtoon Kodundan Birebir) ---
+  // --- 2. AKILLI BAR MANTIĞI (Scroll) ---
   useEffect(() => {
     const handleScroll = () => {
-      // Tarayıcının ne kadar kaydırıldığını al
       const currentScrollY = window.scrollY;
       
-      // Eğer aşağı kaydırıyorsak ve 50px'den fazla indiysek -> GİZLE
+      // Aşağı kaydırıyorsak ve 50px geçtiysek GİZLE
       if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
         setShowNavbar(false);
       } else {
-        // Eğer yukarı çıkıyorsak -> GÖSTER
+        // Yukarı çıkıyorsak GÖSTER
         setShowNavbar(true);
       }
-      
-      // Son konumu güncelle
       lastScrollY.current = currentScrollY;
     };
 
@@ -78,46 +51,17 @@ export default function NovelReadingPage() {
   const loadChapter = async () => {
     try {
       setLoading(true);
-      const chapterRes = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`);
-      if (!chapterRes.ok) throw new Error("Bölüm yüklenemedi");
-      const chapterData = await chapterRes.json();
-      setChapter(chapterData);
-      if (chapterData.id) loadComments(chapterData.id);
+      const res = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`);
+      if (!res.ok) throw new Error("Bölüm yüklenemedi");
+      
+      const data = await res.json();
+      setChapter(data);
       window.scrollTo(0, 0);
     } catch (err) {
       console.error("Hata:", err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const loadComments = async (chapterId) => {
-    try {
-      const res = await fetch(`${API}/comments/novel/${chapterId}`);
-      const data = await res.json();
-      setComments(Array.isArray(data) ? data : []);
-    } catch {
-      setComments([]);
-    }
-  };
-
-  const handleCommentSubmit = async (e) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-    const token = localStorage.getItem("token");
-    try {
-      const res = await fetch(`${API}/comments/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ novel_chapter_id: chapter.id, content: newComment })
-      });
-      if (res.ok) {
-        setNewComment("");
-        loadComments(chapter.id);
-      } else {
-        alert("Giriş yapmalısınız.");
-      }
-    } catch (err) { console.error(err); }
   };
 
   // --- PARAGRAF DÜZENLEYİCİ ---
@@ -139,7 +83,7 @@ export default function NovelReadingPage() {
   return (
     <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40`}>
       
-      {/* 1. ÜST KAPAK ALANI (Sabit) */}
+      {/* 1. ÜST KAPAK ALANI */}
       <div className="relative bg-[#1a1a1a] text-white shadow-2xl border-b border-gray-800 mb-12">
         <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110" style={{ backgroundImage: chapter.novel_cover ? `url(${API}/${chapter.novel_cover})` : 'none', backgroundColor: '#2d1b4e' }}></div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/60 to-transparent"></div>
@@ -151,14 +95,14 @@ export default function NovelReadingPage() {
             )}
             <div className="flex-1 pb-2">
                 <Link href={`/novel/${slug}`} className="inline-block mb-4 px-4 py-1.5 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-bold tracking-widest uppercase hover:bg-purple-600 hover:text-white transition">
-                     {chapter.novel_title || "Roman Serisi"}
+                      {chapter.novel_title || "Roman Serisi"}
                 </Link>
                 <h1 className={`${cinzel.className} text-3xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-2xl leading-tight mb-4`}>
                     {chapter.title}
                 </h1>
                 <div className="flex items-center justify-center gap-4 text-gray-400 text-sm font-medium">
-                     <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">Bölüm #{chapter.chapter_number}</span>
-                     <span>{new Date(chapter.created_at).toLocaleDateString('tr-TR')}</span>
+                      <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">Bölüm #{chapter.chapter_number}</span>
+                      <span>{new Date(chapter.created_at).toLocaleDateString('tr-TR')}</span>
                 </div>
             </div>
         </div>
@@ -172,18 +116,19 @@ export default function NovelReadingPage() {
         </article>
       </main>
 
-      {/* 3. YORUMLAR (Normal Navigasyon Kaldırıldı, Akıllı Bar Var) */}
-      <section className={`mt-32 max-w-3xl mx-auto ${lato.className} border-t border-gray-800 pt-12`}>
-          <h3 className="text-2xl font-bold text-white mb-8">Yorumlar ({comments.length})</h3>
-          {!isAuthenticated ? (
-            <div className="bg-[#1a1a1a] p-8 rounded-xl text-center border border-gray-800"><p className="text-gray-400 mb-4">Giriş yapın.</p><Link href="/login" className="text-purple-400 font-bold">Giriş Yap</Link></div>
-          ) : (
-            <form onSubmit={handleCommentSubmit} className="mb-12 relative"><textarea className="w-full bg-[#1a1a1a] text-gray-200 p-4 rounded-xl border border-gray-800 outline-none focus:border-purple-500" rows="3" placeholder="Yorum..." value={newComment} onChange={(e) => setNewComment(e.target.value)} required /><button type="submit" className="mt-2 bg-purple-600 text-white px-6 py-2 rounded-full text-sm font-bold">GÖNDER</button></form>
-          )}
-          <div className="space-y-6">{comments.map(c => (<div key={c.id} className="bg-[#1a1a1a] p-4 rounded-xl border border-gray-800"><p className="text-purple-400 font-bold text-sm mb-1">{c.user_username}</p><p className="text-gray-300">{c.content}</p></div>))}</div>
-      </section>
+      {/* 3. YORUM ALANI (GÜNCELLENDİ) 🔥 */}
+      <div className={`mt-32 max-w-3xl mx-auto ${lato.className} border-t border-gray-800 pt-12 px-4`}>
+          {/* Eski kodun 60 satırını sildik, yerine sadece bu 5 satırı koyduk. 
+              Tüm işlemler CommentSection.js içinde yapılıyor.
+          */}
+          <CommentSection 
+             type="novel" 
+             itemId={chapter.novel_id} 
+             chapterId={chapter.id} 
+          />
+      </div>
 
-      {/* --- 4. AKILLI BAR (FIXED NAVBAR) --- */}
+      {/* 4. AKILLI BAR (FIXED NAVBAR) */}
       <div 
         className={`fixed bottom-0 left-0 w-full z-[999] transition-transform duration-300 ease-in-out ${
           showNavbar ? "translate-y-0" : "translate-y-full"

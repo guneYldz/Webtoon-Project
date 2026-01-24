@@ -5,11 +5,12 @@ from typing import List
 import shutil
 import os
 import uuid # Resim isimleri çakışmasın diye rastgele isim üretici
+import re   # Slug üretimi için regex
 
 # Proje dosyalarından gerekli parçaları çağırıyoruz
 from database import get_db
 import models 
-from schemas import WebtoonCard, WebtoonDetail
+import schemas
 # Admin kontrolünü içeri aktarıyoruz
 from routers.auth import get_current_admin
 
@@ -19,11 +20,20 @@ router = APIRouter(
     tags=["Webtoons"]      # Dokümantasyonda başlık
 )
 
+# --- YARDIMCI FONKSİYON: SLUG OLUŞTURUCU ---
+def slug_olustur(text: str):
+    text = text.lower() # Küçük harfe çevir
+    # Türkçe karakterleri İngilizce karşılıklarına çevir
+    text = text.replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
+    text = re.sub(r'[^a-z0-9\s-]', '', text) # Harf, sayı ve tire dışındakileri sil
+    text = re.sub(r'[\s-]+', '-', text)      # Boşlukları tire yap
+    return text.strip('-')
+
 # 1. ANASAYFA LİSTELEME (Sadece Kart Bilgileri) - HERKESE AÇIK
-@router.get("/", response_model=List[WebtoonCard]) 
+@router.get("/", response_model=List[schemas.WebtoonCard]) 
 def webtoonlari_getir(
     db: Session = Depends(get_db),
-    limit: int = 10,       
+    limit: int = 20,       
     skip: int = 0,         
     sort_by: str = "newest" 
 ):
@@ -33,17 +43,30 @@ def webtoonlari_getir(
         query = query.order_by(desc(models.Webtoon.created_at))
     elif sort_by == "alphabetical":
         query = query.order_by(models.Webtoon.title.asc())
+    elif sort_by == "popular":
+        query = query.order_by(desc(models.Webtoon.view_count))
 
     webtoons = query.offset(skip).limit(limit).all()
     return webtoons
 
 # 2. DETAY GÖSTERME (Bölümlerle Birlikte) - HERKESE AÇIK
-@router.get("/{webtoon_id}", response_model=WebtoonDetail)
-def webtoon_detay(webtoon_id: int, db: Session = Depends(get_db)):
-    webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == webtoon_id).first()
+# 2. DETAY GÖSTERME (Hem ID hem Slug destekler) - HERKESE AÇIK
+@router.get("/{id_or_slug}", response_model=schemas.WebtoonDetail)
+def webtoon_detay(id_or_slug: str, db: Session = Depends(get_db)):
+    # Gelen veri sayı mı? (Örn: "1", "5")
+    if id_or_slug.isdigit():
+        webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == int(id_or_slug)).first()
+    
+    # Yoksa yazı mı? (Örn: "shadow-slave")
+    else:
+        webtoon = db.query(models.Webtoon).filter(models.Webtoon.slug == id_or_slug).first()
     
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
+    
+    # Görüntülenme sayısını artır
+    webtoon.view_count += 1
+    db.commit()
     
     return webtoon
 
@@ -58,20 +81,29 @@ def webtoon_ekle(
     banner: UploadFile = File(None), 
     
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    # Eğer admin sistemini henüz kurmadıysan burayı geçici olarak get_db yapabilirsin:
+    # current_user: models.User = Depends(get_current_admin) 
 ):
-    # --- 1. Klasörleri Hazırla ---
-    # Kapaklar için:
-    kapak_klasoru = "static/covers"
-    if not os.path.exists(kapak_klasoru):
-        os.makedirs(kapak_klasoru)
-        
-    # Bannerlar için:
-    banner_klasoru = "static/banners"
-    if not os.path.exists(banner_klasoru):
-        os.makedirs(banner_klasoru)
+    # --- 1. Slug Oluştur (URL için gerekli) ---
+    yeni_slug = slug_olustur(baslik)
+    
+    # Slug çakışması kontrolü (Aynı isimde webtoon var mı?)
+    # SQL Server hatasını önlemek için slug uzunluğu kontrol altında
+    if len(yeni_slug) > 250:
+        yeni_slug = yeni_slug[:250]
 
-    # --- 2. Kapak Resmini Kaydet ---
+    if db.query(models.Webtoon).filter(models.Webtoon.slug == yeni_slug).first():
+        yeni_slug = f"{yeni_slug}-{uuid.uuid4().hex[:4]}" # Sonuna rastgele kod ekle
+
+    # --- 2. Klasörleri Hazırla ---
+    # static klasörü backend'in ana dizininde olmalı
+    kapak_klasoru = "static/covers"
+    banner_klasoru = "static/banners"
+
+    os.makedirs(kapak_klasoru, exist_ok=True)
+    os.makedirs(banner_klasoru, exist_ok=True)
+
+    # --- 3. Kapak Resmini Kaydet ---
     dosya_uzantisi = resim.filename.split(".")[-1]
     yeni_dosya_adi = f"{uuid.uuid4()}.{dosya_uzantisi}"
     kapak_yolu = f"{kapak_klasoru}/{yeni_dosya_adi}"
@@ -79,8 +111,8 @@ def webtoon_ekle(
     with open(kapak_yolu, "wb") as buffer:
         shutil.copyfileobj(resim.file, buffer)
 
-    # --- 3. Banner Resmini Kaydet (Eğer yüklendiyse) ---
-    banner_yolu = None # Varsayılan olarak boş
+    # --- 4. Banner Resmini Kaydet (Eğer yüklendiyse) ---
+    banner_yolu = None 
     
     if banner:
         banner_uzantisi = banner.filename.split(".")[-1]
@@ -90,13 +122,15 @@ def webtoon_ekle(
         with open(banner_yolu, "wb") as buffer:
             shutil.copyfileobj(banner.file, buffer)
 
-    # --- 4. Veritabanına Kayıt ---
+    # --- 5. Veritabanına Kayıt ---
     yeni = models.Webtoon(
         title=baslik, 
+        slug=yeni_slug,     # 👈 SLUG EKLENDİ (String 255 ile uyumlu)
         summary=ozet, 
         cover_image=kapak_yolu, 
-        banner_image=banner_yolu, # 👇 Yeni eklediğimiz alan
-        status="ongoing"
+        banner_image=banner_yolu, 
+        status="ongoing",
+        type=models.ContentType.MANGA # Enum Kullanımı
     )
     
     db.add(yeni)
@@ -106,7 +140,7 @@ def webtoon_ekle(
     return {
         "mesaj": "Webtoon Başarıyla Eklendi", 
         "id": yeni.id, 
+        "slug": yeni.slug,
         "ad": yeni.title,
-        "kapak": kapak_yolu,
-        "banner": banner_yolu
+        "kapak": kapak_yolu
     }

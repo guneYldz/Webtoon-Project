@@ -3,59 +3,77 @@ from typing import List, Optional
 from datetime import datetime
 from enum import Enum
 
-# --- 1. Temel Parçalar ---
+# ==========================================
+# 1. TEMEL PARÇALAR VE ENUM
+# ==========================================
 
-# Tür Tanımı (Bot ve Frontend kullanacak)
 class ContentType(str, Enum):
     MANGA = "MANGA"
     NOVEL = "NOVEL"
 
-# Resim Şeması
+# ==========================================
+# 2. YARDIMCI KÜÇÜK ŞEMALAR (ÖNCE BUNLAR TANIMLANMALI)
+# ==========================================
+
+# Webtoon Bölüm Resim Şeması
 class EpisodeImageSchema(BaseModel):
     id: int
     image_url: str
     page_order: int
-    profile_image: Optional[str] = None
-
+    
     class Config:
         from_attributes = True
 
-class WebtoonBase(BaseModel):
-    title: str
-    summary: Optional[str] = None
-    cover_image: str
-    status: str = "ongoing"
-    
-    # Tür ve Kaynak
-    type: ContentType = ContentType.MANGA 
-    source_url: Optional[str] = None
-    
-    # 👇 YENİ: Vitrin Özelliği (Admin panelden işaretlenir)
-    is_featured: bool = False 
-
-# Bölüm Listesi (Özet)
+# Webtoon Bölüm Listesi (Özet - Anasayfa için)
 class EpisodeListSchema(BaseModel):
     id: int
     title: str
-    episode_number: float # 10.5 gibi bölümler için float daha güvenli
-    created_at: Optional[datetime]
+    episode_number: float 
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
 
-# --- 2. Webtoon Şemaları ---
+# 👇 EKSİK OLAN KISIM BURASIYDI, EKLENDİ:
+# Novel Bölüm Listesi (Özet - Anasayfa için)
+class NovelChapterListSchema(BaseModel):
+    id: int
+    chapter_number: int
+    title: str
+    created_at: Optional[datetime] = None
 
-# Anasayfa Kartı
+    class Config:
+        from_attributes = True
+
+# ==========================================
+# 3. WEBTOON (MANGA) ŞEMALARI
+# ==========================================
+
+# Webtoon Ekleme Şeması (Admin/Bot)
+class WebtoonBase(BaseModel):
+    title: str
+    summary: Optional[str] = None
+    cover_image: Optional[str] = None
+    status: str = "ongoing"
+    type: ContentType = ContentType.MANGA 
+    source_url: Optional[str] = None
+    is_featured: bool = False 
+
+# Webtoon Kartı (Anasayfa Listeleme)
 class WebtoonCard(BaseModel):
     id: int
     title: str
-    cover_image: str
+    slug: Optional[str] = None
+    cover_image: Optional[str] = None
     status: str      
-    view_count: int
+    view_count: int = 0
     type: ContentType
-    
-    # 👇 YENİ: Frontend bunu görüp "Vitrindekiler" listesine alacak
     is_featured: bool 
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    # Anasayfada son bölümleri göstermek için
+    episodes: List[EpisodeListSchema] = [] 
     
     class Config:
         from_attributes = True
@@ -63,69 +81,136 @@ class WebtoonCard(BaseModel):
 # Webtoon Detay Sayfası
 class WebtoonDetail(WebtoonCard):
     summary: Optional[str] = None
-    created_at: datetime
     source_url: Optional[str] = None
-    episodes: List[EpisodeListSchema] = [] 
+    # episodes zaten WebtoonCard'dan miras geliyor
 
     class Config:
         from_attributes = True
 
-# --- 3. Bölüm İşlem ve Okuma Şemaları ---
+# ==========================================
+# 4. NOVEL (ROMAN) ŞEMALARI
+# ==========================================
 
-# Bot veya Admin bölüm eklerken
+# Roman Listesi Kartı (Anasayfa)
+class NovelCard(BaseModel):
+    id: int
+    title: str
+    slug: Optional[str] = None
+    cover_image: Optional[str] = None
+    status: str
+    source_url: Optional[str] = None 
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    # Anasayfada son bölümleri göstermek için
+    chapters: List[NovelChapterListSchema] = []
+
+    class Config:
+        from_attributes = True
+
+# Roman Bölümü (Okuma Sayfası İçin)
+class NovelChapterBase(BaseModel):
+    id: int
+    novel_id: int
+    chapter_number: int
+    title: str
+    content: str 
+    created_at: Optional[datetime] = None
+    
+    # Yorum sistemi ve Header için gerekli
+    novel_title: Optional[str] = None
+    novel_cover: Optional[str] = None
+
+    # Navigasyon
+    prev_chapter: Optional[int] = None
+    next_chapter: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+# Roman Detay Sayfası
+class NovelDetail(BaseModel):
+    id: int
+    title: str
+    slug: str
+    status: str = "ongoing"
+    summary: Optional[str] = None 
+    cover_image: Optional[str] = None
+    author: Optional[str] = None
+    source_url: Optional[str] = None 
+    
+    chapters: List[NovelChapterBase] = [] 
+
+    class Config:
+        from_attributes = True
+
+# ==========================================
+# 5. BÖLÜM EKLEME VE OKUMA (GENEL)
+# ==========================================
+
+# Bölüm Ekleme (Bot/Admin)
 class EpisodeCreate(BaseModel):
     webtoon_id: int
     title: str
     episode_number: float 
-    content_text: Optional[str] = None # Novel ise dolu, Manga ise boş
+    content_text: Optional[str] = None
 
-# Frontend 'Reader' Sayfası İçin (OKUMA MODU)
+# Okuma Sayfası Detayı (Webtoon Reader)
 class EpisodeDetailSchema(BaseModel):
     id: int
     webtoon_id: int             
     webtoon_title: str          
     title: str                  
-    episode_title: str          # Frontend bazen bu isimle arıyor (Opsiyonel)
     episode_number: float
-    
-    created_at: Optional[datetime]
-    
-    # MANGA ise resimler
+    created_at: Optional[datetime] = None
+    webtoon_cover: Optional[str] = None
+    # İçerik
     images: List[EpisodeImageSchema] = []
-    
-    # NOVEL ise metin 📖
     content_text: Optional[str] = None
     
-    # Navigasyon (Önceki/Sonraki Bölüm)
+    # Navigasyon
     next_episode_id: Optional[int] = None
     prev_episode_id: Optional[int] = None
 
     class Config:
         from_attributes = True
 
-# --- 4. Kullanıcı Etkileşim Şemaları ---
+# ==========================================
+# 6. KULLANICI ETKİLEŞİM (YORUM, FAVORİ, LİKE)
+# ==========================================
 
+# Yorum Ekleme
 class CommentCreate(BaseModel):
-    bolum_id: int
-    yorum: str
-
-class CommentResponse(BaseModel):
-    id: int
-    user_username: str # Kullanıcı adını göstermek için
     content: str
+    chapter_id: int 
+    novel_id: Optional[int] = None
+    webtoon_id: Optional[int] = None
+
+# Yorum Görüntüleme
+class CommentOut(BaseModel):
+    id: int
+    content: str
+    username: str
     created_at: datetime
     
     class Config:
         from_attributes = True
 
-class FavoriteCreate(BaseModel):
-    webtoon_id: int
+class CommentResponse(CommentOut):
+    pass
 
+# Favori Ekleme
+class FavoriteCreate(BaseModel):
+    webtoon_id: Optional[int] = None
+    novel_id: Optional[int] = None
+
+# Beğeni Ekleme
 class LikeCreate(BaseModel):
     episode_id: int
 
-# --- 5. Kullanıcı (Auth) Şemaları --- 
-# (EKSİKTİ, EKLENDİ)
+# ==========================================
+# 7. KULLANICI (AUTH) ŞEMALARI
+# ==========================================
 
 class UserBase(BaseModel):
     username: str
@@ -142,8 +227,6 @@ class UserResponse(UserBase):
     id: int
     role: str
     created_at: datetime
-    
-    # 👇 YENİ: Banlı mı değil mi? Frontend bilsin.
     is_active: bool 
 
     class Config:
@@ -152,48 +235,3 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
-
-# --- MEVCUT KODLARIN YUKARIDA ---
-
-# 👇 NOVEL İÇİN ŞEMALAR (EN ALTA EKLE)
-
-# 1. Roman Listesinde görünecek kart bilgisi
-class NovelCard(BaseModel):
-    id: int
-    title: str
-    slug: str
-    cover_image: str | None = None
-    status: str
-    
-    source_url: str | None = None 
-
-    class Config:
-        from_attributes = True
-
-# 2. Bölüm Bilgisi (İçerik Dahil)
-class NovelChapterBase(BaseModel):
-    id: int
-    chapter_number: int
-    title: str
-    content: str # Metin içeriği
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# 3. Roman Detay Sayfası (Bölümlerle birlikte)
-class NovelDetail(BaseModel):
-    id: int
-    title: str
-    slug: str
-    summary: str | None = None # Bazen boş olabilir diye | None ekledim
-    cover_image: str | None = None
-    author: str | None = None
-    
-    # 👇 BURASI EKLENDİ (Bot detaya bakarken linki görsün diye)
-    source_url: str | None = None 
-
-    chapters: List[NovelChapterBase] = [] # Bölüm listesi
-
-    class Config:
-        from_attributes = True

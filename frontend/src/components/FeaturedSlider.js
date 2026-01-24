@@ -1,90 +1,108 @@
+"use client";
 import Link from "next/link";
+import { API } from "@/api"; 
+import FavoriteButton from "./FavoriteButton"; 
 
 const FeaturedSlider = ({ webtoon }) => {
-  // Eğer veri henüz gelmediyse boş dön (Hata almamak için)
   if (!webtoon) return null;
 
-  // --- RESİM MANTIĞI ---
-  const BASE_URL = "http://127.0.0.1:8000"; // Backend adresin
+  // --- 1. TÜR VE ROTA BELİRLEME ---
+  // Backend'den gelen veriye göre Roman mı Webtoon mu karar verelim.
+  // Hem 'type' parametresine hem de 'typeLabel'a bakıyoruz, garanti olsun.
+  const isNovel = webtoon.type === 'novel' || (webtoon.typeLabel && webtoon.typeLabel.toUpperCase() === 'NOVEL');
   
-  // Banner var mı kontrol et
-  const hasBanner = Boolean(webtoon.banner_image);
+  const routeType = isNovel ? 'novel' : 'webtoon';
+  const labelText = isNovel ? 'NOVEL' : 'WEBTOON';
+
+  // --- 2. RENK AYARLARI ---
+  // Roman için Mor, Webtoon için Mavi tema
+  const badgeClass = isNovel 
+    ? "bg-purple-600 shadow-purple-900/50" 
+    : "bg-blue-600 shadow-blue-900/50";
+
+  // --- 3. RESİM MANTIĞI (GÜÇLENDİRİLMİŞ) ---
+  // Banner null ise, boş string ise veya uzantısı yoksa Cover kullan
+  const validBanner = webtoon.banner_image && webtoon.banner_image.length > 5 && webtoon.banner_image.includes(".");
   
-  // Arka plan için doğru resmi seç
-  const bgImage = hasBanner 
-    ? `${BASE_URL}/${webtoon.banner_image}` 
-    : `${BASE_URL}/${webtoon.cover_image}`;
+  const bgImage = validBanner 
+    ? `${API}/${webtoon.banner_image}` 
+    : `${API}/${webtoon.cover_image}`;
 
   return (
-    <div className="relative w-full h-[450px] md:h-[550px] rounded-2xl overflow-hidden group shadow-2xl border border-gray-800">
+    <div className="relative w-full h-[450px] md:h-[550px] rounded-2xl overflow-hidden group shadow-2xl border border-gray-800 bg-[#121212]">
       
-      {/* 1. ARKA PLAN KATMANI */}
-      <div className="absolute inset-0 w-full h-full">
-        {/* Resim */}
+      {/* 1. ARKA PLAN */}
+      <div className="absolute inset-0 w-full h-full overflow-hidden">
         <div 
-          className={`w-full h-full bg-cover bg-center transition-transform duration-700 group-hover:scale-105 ${!hasBanner ? "blur-md scale-110 opacity-50" : ""}`}
+          className={`w-full h-full bg-cover bg-center transition-transform duration-700 group-hover:scale-105 
+            ${!validBanner ? "blur-xl scale-110 opacity-40" : "opacity-80"}
+          `}
           style={{ backgroundImage: `url('${bgImage}')` }}
         />
-        {/* Eğer banner yoksa arkaya siyah perde çek ki çok parlak olmasın */}
-        {!hasBanner && <div className="absolute inset-0 bg-black/60"></div>}
+        {/* Arka planı biraz karart ki yazılar okunsun */}
+        <div className="absolute inset-0 bg-black/40"></div>
       </div>
 
-      {/* 2. GÖLGE KATMANI (Gradient) - Yazıların okunması için */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/40 to-transparent"></div>
-      <div className="absolute inset-0 bg-gradient-to-r from-[#121212] via-transparent to-transparent"></div>
+      {/* 2. GÖLGELER (Okunabilirlik İçin) */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/60 to-transparent"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-[#121212] via-[#121212]/30 to-transparent"></div>
 
-      {/* 3. İÇERİK KATMANI */}
+      {/* 3. İÇERİK */}
       <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 flex items-end gap-8 z-10">
         
-        {/* SOL: Eğer Banner YOKSA, dikey kapağı burada poster gibi göster */}
-        {!hasBanner && (
+        {/* SOL POSTER (Sadece Banner YOKSA gösterelim, boşluk dolusu) */}
+        {!validBanner && (
             <div className="hidden md:block flex-shrink-0 shadow-2xl shadow-black/50 rounded-lg overflow-hidden border border-gray-700 transform group-hover:-translate-y-2 transition duration-500">
                 <img 
-                    src={`${BASE_URL}/${webtoon.cover_image}`} 
+                    src={`${API}/${webtoon.cover_image}`} 
                     alt={webtoon.title} 
                     className="w-40 h-60 object-cover"
                 />
             </div>
         )}
 
-        {/* SAĞ: Yazılar ve Butonlar */}
         <div className="flex flex-col gap-4 max-w-3xl">
-            {/* Kategori Etiketi */}
-            <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded w-fit uppercase tracking-wider shadow-lg shadow-blue-900/50">
-                {webtoon.status === 'ongoing' ? 'Yeni Bölüm' : 'Tamamlandı'}
+            {/* ETİKET (Dinamik Renk) */}
+            <span className={`text-white text-xs font-bold px-3 py-1 rounded w-fit uppercase tracking-wider shadow-lg ${badgeClass}`}>
+                {labelText}
             </span>
 
-            {/* Başlık */}
-            <h2 className="text-4xl md:text-6xl font-black text-white leading-tight drop-shadow-lg tracking-tight">
+            {/* BAŞLIK */}
+            <h2 className="text-4xl md:text-6xl font-black text-white leading-tight drop-shadow-lg tracking-tight line-clamp-2">
                 {webtoon.title}
             </h2>
             
-            {/* Açıklama (Mobil için kısa, masaüstü için uzun) */}
-            <p className="text-gray-300 line-clamp-3 md:text-lg text-sm drop-shadow-md font-medium max-w-xl">
-                {webtoon.summary || "Bu serinin açıklaması henüz girilmemiş. Yine de okumaya değer bir macera seni bekliyor!"}
+            {/* AÇIKLAMA */}
+            <p className="text-gray-300 line-clamp-2 md:line-clamp-3 md:text-lg text-sm drop-shadow-md font-medium max-w-xl">
+                {webtoon.summary || "Bu serinin açıklaması henüz girilmemiş."}
             </p>
 
-            {/* İstatistikler */}
+            {/* İSTATİSTİKLER */}
             <div className="flex items-center gap-4 text-gray-400 text-sm font-medium">
                 <span className="flex items-center gap-1">👁️ {webtoon.view_count || 0} Okunma</span>
                 <span className="w-1 h-1 bg-gray-500 rounded-full"></span>
-                <span>🔥 Popüler</span>
+                <span className="text-orange-400 flex items-center gap-1">🔥 Popüler</span>
+                <span className="w-1 h-1 bg-gray-500 rounded-full"></span>
+                <span className="text-gray-300 capitalize">{webtoon.status === 'ongoing' ? 'Güncel' : 'Tamamlandı'}</span>
             </div>
 
-            {/* Butonlar */}
-            <div className="flex flex-wrap gap-4 mt-2">
+            {/* BUTONLAR ALANI */}
+            <div className="flex flex-wrap gap-4 mt-2 items-center">
+                {/* OKUMA BUTONU (Dinamik Link) */}
                 <Link 
-                    href={`/webtoon/${webtoon.id}`} 
-                    className="bg-white text-black hover:bg-gray-200 px-8 py-3.5 rounded-full font-bold transition flex items-center gap-2"
+                    href={`/${routeType}/${webtoon.slug || webtoon.id}`} 
+                    className="bg-white text-black hover:bg-gray-200 px-8 py-3.5 rounded-full font-bold transition flex items-center gap-2 shadow-lg z-20 hover:scale-105 active:scale-95 duration-200"
                 >
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
                     Hemen Oku
                 </Link>
                 
-                <button className="bg-white/10 hover:bg-white/20 backdrop-blur text-white border border-white/30 px-6 py-3.5 rounded-full font-bold transition flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-                    Listeme Ekle
-                </button>
+                {/* FAVORİ BUTONU */}
+                <FavoriteButton 
+                    type={routeType} // 'novel' veya 'webtoon' gönderiyoruz
+                    id={webtoon.id} 
+                    className="bg-white/10 hover:bg-white/20 text-white border border-white/30 hover:border-white backdrop-blur-md px-4 py-3.5 rounded-full transition z-20"
+                />
             </div>
         </div>
       </div>

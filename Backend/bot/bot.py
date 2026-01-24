@@ -14,7 +14,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 API_URL = "http://127.0.0.1:8000"
 
 BOT_USERNAME = os.getenv("BOT_USERNAME", "bot123@gmail.com") 
-BOT_PASSWORD = os.getenv("BOT_PASSWORD", "622662") 
+BOT_PASSWORD = os.getenv("BOT_PASSWORD", "62dersim62") 
 BEKLEME_SURESI = 10 
 
 if not GOOGLE_API_KEY:
@@ -22,14 +22,12 @@ if not GOOGLE_API_KEY:
     exit()
 
 genai.configure(api_key=GOOGLE_API_KEY)
-# Senin hesabındaki en iyi model
+# En hızlı ve zeki model
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 # ==========================================
 # 📚 ROMANLARA ÖZEL SÖZLÜKLER (CONFIG)
 # ==========================================
-# Buraya yeni seri ekledikçe kurallarını yazabilirsin.
-# "default": Tanımlanmamış romanlar için genel kurallar.
 NOVEL_CONFIGS = {
     "Shadow Slave": """
         1. "Nightmare Spell" -> "Kabus Büyüsü"
@@ -37,18 +35,16 @@ NOVEL_CONFIGS = {
         3. "Aspirant" -> "Aday"
         4. "Awakened" -> "Uyanmış"
         5. "Sleeper" -> "Uyuyan"
-        6. "Sunny" -> "Sunny", "Nephis" -> "Nephis" (Özel isimler değişmez)
+        6. "Sunny" -> "Sunny", "Nephis" -> "Nephis"
         7. "Legacy" -> "Miras"
         8. "Aspect" -> "Veçhe"
         9. "Memory" -> "Anı"
         10. "Echo" -> "Yankı"
     """,
-    
-
     "default": """
         1. Özel isimleri (Karakter adları, şehir adları) ASLA çevirme.
         2. Büyü isimlerini mümkünse Türkçe karşılığıyla, parantez içinde İngilizcesi olacak şekilde çevir.
-        3. Ton: Edebi, akıcı ve romanın türüne uygun (Fantastik ise epik, Romantik ise duygusal).
+        3. Ton: Edebi, akıcı ve romanın türüne uygun.
     """
 }
 
@@ -63,8 +59,7 @@ def get_auth_token():
         )
         if response.status_code == 200:
             return response.json().get("access_token")
-        
-        print(f"❌ Giriş Başarısız! Kod: {response.status_code} - {response.text}")
+        print(f"❌ Giriş Başarısız! Kod: {response.status_code}")
         return None
     except Exception as e:
         print(f"❌ Login Hatası: {e}")
@@ -76,7 +71,7 @@ def get_auth_token():
 def get_last_chapter_number(token, novel_id, novel_slug):
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        # ID ile kontrol
+        # Önce ID ile dene
         response = requests.get(f"{API_URL}/novels/{novel_id}", headers=headers)
         if response.status_code == 200:
             data = response.json()
@@ -84,7 +79,7 @@ def get_last_chapter_number(token, novel_id, novel_slug):
             if chapters:
                 return max([ch["chapter_number"] for ch in chapters])
         
-        # Slug ile kontrol (Yedek)
+        # Olmazsa Slug ile dene
         response = requests.get(f"{API_URL}/novels/{novel_slug}", headers=headers)
         if response.status_code == 200:
             data = response.json()
@@ -105,23 +100,27 @@ def get_all_novels(token):
         response = requests.get(f"{API_URL}/novels/", headers=headers) 
         if response.status_code == 200:
             return response.json() 
-        print(f"⚠️ Roman listesi çekilemedi. Kod: {response.status_code}")
         return []
     except Exception as e:
         print(f"❌ Liste Hatası: {e}")
         return []
 
 # ==========================================
-# 🕷️ SCRAPER
+# 🕷️ SCRAPER (HER SİTEYE UYUMLU MOD)
 # ==========================================
 def scrape_chapter(url):
     print(f"   🌍 Kaynak taranıyor: {url}")
     scraper = cloudscraper.create_scraper() 
     try:
         response = scraper.get(url)
+        
+        # 404 Yönetimi (Sonunda / olup olmamasına göre)
         if response.status_code == 404:
-            if url.endswith("/"):
+            if not url.endswith("/"):
+                response = scraper.get(url + "/")
+            elif url.endswith("/"):
                 response = scraper.get(url[:-1])
+            
             if response.status_code == 404:
                 print("   info: Bu bölüm gerçekten yok (404).")
                 return None, None
@@ -131,63 +130,67 @@ def scrape_chapter(url):
             return None, None
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        title_tag = soup.find('h1') or soup.find('h2')
+        
+        # Başlık Bulma (H1, H2, H3 veya .title class'ı)
+        title_tag = soup.find('h1') or soup.find('h2') or soup.find('h3', class_='title')
         title_text = title_tag.get_text(strip=True) if title_tag else f"Bölüm"
 
+        # 🔥 EVRENSEL İÇERİK BULUCU (Bilinen tüm yapıları dener)
         content = soup.find('div', class_='entry-content') or \
                   soup.find('div', class_='cha-content') or \
                   soup.find('div', class_='reading-content') or \
                   soup.find('div', class_='chapter-content') or \
                   soup.find('div', id='chapter-content') or \
-                  soup.find('div', class_='text-left')
+                  soup.find('div', id='chr-content') or \
+                  soup.find('div', class_='text-left') or \
+                  soup.find('article')
 
         if content:
-            for bad in content.find_all(['script', 'style', 'div', 'a', 'iframe', 'p.display-hide']):
+            # Reklamları ve gereksizleri temizle
+            for bad in content.find_all(['script', 'style', 'div', 'a', 'iframe', 'p.display-hide', 'button']):
                 bad.decompose()
+            
             text_content = content.get_text(separator="\n\n").strip()
+            
             if len(text_content) < 50:
-                print("   ⚠️ İçerik çok kısa.")
+                print("   ⚠️ İçerik çok kısa veya korumalı.")
                 return None, None
+                
             print(f"   ✅ Veri çekildi! ({len(text_content)} karakter)")
             return title_text, text_content
         
-        print("   ❌ İçerik bulunamadı.")
+        print("   ❌ İçerik bulunamadı (HTML yapısı çok farklı).")
         return None, None
     except Exception as e:
         print(f"   ❌ Scraping Hatası: {e}")
         return None, None
 
 # ==========================================
-# 🤖 ÇEVİRİ VE YÜKLEME (AKILLI SÖZLÜK SİSTEMİ)
+# 🤖 ÇEVİRİ VE YÜKLEME
 # ==========================================
 def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
     print(f"   🤖 AI Çeviriyor: {eng_title}...")
 
-    # 1. Romanın ismine göre doğru sözlüğü seç
+    # Config Seçimi
     novel_title = novel.get('title', 'default')
-    
-    # Eğer listede varsa onu kullan, yoksa 'default' kullan
-    # (Büyük/küçük harf duyarsız yapmak için basit bir kontrol)
     selected_glossary = NOVEL_CONFIGS.get("default")
     
     for key in NOVEL_CONFIGS:
         if key.lower() in novel_title.lower():
             selected_glossary = NOVEL_CONFIGS[key]
-            print(f"   📖 '{key}' için özel sözlük yüklendi.")
+            print(f"   📖 '{key}' sözlüğü aktif.")
             break
             
     system_instruction = f"""
-    Sen, dünyaca ünlü web romanlarını Türkçeye kazandıran profesyonel bir edebiyat çevirmenisin.
+    Sen, profesyonel bir fantastik roman çevirmenisin.
     
     GÖREVİN:
     Aşağıdaki İngilizce roman bölümünü, Türk okuyucusu için akıcı, epik ve edebi bir dille Türkçeye çevirmek.
     
     ÇEVİRİ KURALLARI:
     1. **Ton:** Romanın türüne uygun (Karanlık, Epik, Eğlenceli vb.) bir ton kullan.
-    2. **Sistem Mesajları:** Köşeli parantez `[...]` içindeki metinler "Oyun Sistemi" mesajlarıdır. Bunları resmi, soğuk ve ilahi bir tonda çevir.
-    3. **Format:** Orijinal metindeki satır boşluklarını ve paragraf yapısını koru.
-    4. **ÖZEL TERİMLER (BU ROMAN İÇİN):** Aşağıdaki kurallara KESİNLİKLE uy:
-    {selected_glossary}
+    2. **Format:** Orijinal metindeki satır boşluklarını koru.
+    3. **ÖZEL TERİMLER:** {selected_glossary}
     
     METİN:
     {eng_text}
@@ -210,7 +213,7 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
         print("   📤 Bölüm yükleniyor...")
         res = requests.post(f"{API_URL}/novels/bolum-ekle", data=payload, headers=headers)
         
-        if res.status_code == 422: # Yedek
+        if res.status_code == 422: # Yedek JSON
              res = requests.post(f"{API_URL}/novels/bolum-ekle", json=payload, headers=headers)
         
         if res.status_code == 404: # Yedek Rota

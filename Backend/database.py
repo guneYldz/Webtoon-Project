@@ -1,30 +1,44 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import os
+from dotenv import load_dotenv # 👈 EKLENDİ: .env okumak için
 
-# 1. AYARLAR
-# Burayı kendi sunucunla değiştir! (Örn: DESKTOP-XYZ veya . )
-SUNUCU_ADI = "."  
-VERITABANI_ADI = "WebtoonDB"
+# ==========================================
+# 1. AYARLAR (.env Dosyasından Yükle)
+# ==========================================
 
-DATABASE_URL = f"mssql+pyodbc://{SUNUCU_ADI}/{VERITABANI_ADI}?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes"
+# .env dosyasını yükle
+load_dotenv()
 
-# 2. MOTOR (Engine) - Arabanın Motoru
+# Bağlantı adresini .env dosyasındaki DB_CONNECTION değişkeninden al
+DATABASE_URL = os.getenv("DB_CONNECTION")
+
+# Güvenlik Kontrolü: Eğer .env okunamazsa terminalde uyarı ver
+if not DATABASE_URL:
+    print("❌ KRİTİK HATA: DB_CONNECTION bulunamadı! '.env' dosyası Backend klasöründe mi?")
+
+# ==========================================
+# 2. MOTOR (Engine)
+# ==========================================
 try:
     engine = create_engine(DATABASE_URL)
 except Exception as e:
     print(f"Motor Hatası: {e}")
 
-# 3. OTURUM AÇICI (SessionLocal) - İşte hatanın sebebi buydu, bu eksikti!
-# Veritabanı ile her konuşmamızda yeni bir oturum açar.
+# ==========================================
+# 3. OTURUM AÇICI (SessionLocal)
+# ==========================================
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# ==========================================
 # 4. TABLO TEMELİ (Base)
-# Tabloları oluştururken kullanacağımız zemin.
+# ==========================================
 Base = declarative_base()
 
-# 5. TEST FONKSİYONU (baglantiyi_test_et)
-# main.py içindeki /db-test sayfası bunu kullanıyor.
+# ==========================================
+# 5. TEST FONKSİYONU
+# ==========================================
 def baglantiyi_test_et():
     try:
         with engine.connect() as connection:
@@ -34,8 +48,10 @@ def baglantiyi_test_et():
     except Exception as e:
         print(f"BAŞARISIZ: Bağlantı yok.\nHata: {e}")
         return False
-    
-# --- 6. YENİ EKLENEN KISIM: Dependency (Bağımlılık) ---
+
+# ==========================================
+# 6. BAĞIMLILIK (Dependency)
+# ==========================================
 def get_db():
     db = SessionLocal()
     try:

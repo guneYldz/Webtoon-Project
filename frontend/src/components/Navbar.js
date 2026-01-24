@@ -162,9 +162,18 @@ export default function Navbar() {
                         </>
                     )}
 
-                    <Link href="/profil" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition">
+                    <Link href="/profil" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2">
                       👤 Profilim
                     </Link>
+                    
+                    <Link
+                      href="/favoriler"
+                      className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      ❤️ Favorilerim
+                    </Link>
+
                     <Link href="/ayarlar" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition">
                         ⚙️ Ayarlar
                     </Link>
