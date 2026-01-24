@@ -2,29 +2,30 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
-from dotenv import load_dotenv # 👈 EKLENDİ: .env okumak için
+from dotenv import load_dotenv
 
 # ==========================================
 # 1. AYARLAR (.env Dosyasından Yükle)
 # ==========================================
+load_dotenv() # .env dosyasını yükle
 
-# .env dosyasını yükle
-load_dotenv()
-
-# Bağlantı adresini .env dosyasındaki DB_CONNECTION değişkeninden al
 DATABASE_URL = os.getenv("DB_CONNECTION")
 
-# Güvenlik Kontrolü: Eğer .env okunamazsa terminalde uyarı ver
+# 🚨 GÜVENLİK VE HATA KONTROLÜ
+# Eğer bağlantı adresi yoksa programı burada durdur (Raise Error).
+# Yoksa aşağıda "engine tanımlı değil" hatası alırsın.
 if not DATABASE_URL:
-    print("❌ KRİTİK HATA: DB_CONNECTION bulunamadı! '.env' dosyası Backend klasöründe mi?")
+    raise ValueError("❌ KRİTİK HATA: 'DB_CONNECTION' bulunamadı! Lütfen Backend/.env dosyasını kontrol edin.")
 
 # ==========================================
 # 2. MOTOR (Engine)
 # ==========================================
+# try-except KULLANMIYORUZ. Hata varsa direkt patlasın ki sebebini görelim.
 try:
     engine = create_engine(DATABASE_URL)
 except Exception as e:
-    print(f"Motor Hatası: {e}")
+    # Eğer bağlantı dizesi hatalıysa (örn: mssql+pyodbc yerine yanlış bir şey yazıldıysa)
+    raise ValueError(f"❌ Veritabanı Motoru Başlatılamadı: {e}")
 
 # ==========================================
 # 3. OTURUM AÇICI (SessionLocal)
@@ -43,10 +44,10 @@ def baglantiyi_test_et():
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-            print("BAŞARILI: Veritabanı bağlantısı süper! 🚀")
+            print("✅ BAŞARILI: Veritabanı bağlantısı süper! 🚀")
             return True
     except Exception as e:
-        print(f"BAŞARISIZ: Bağlantı yok.\nHata: {e}")
+        print(f"❌ BAŞARISIZ: Bağlantı hatası.\nDetay: {e}")
         return False
 
 # ==========================================

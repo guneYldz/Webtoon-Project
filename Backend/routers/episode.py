@@ -5,7 +5,7 @@ import shutil
 import os
 import uuid
 import datetime
-
+from fastapi import Response
 import models
 import schemas
 from database import get_db
@@ -104,7 +104,7 @@ def create_episode(
 # 📖 2. BÖLÜM OKUMA (HİBRİT SİSTEM: BOT + DB)
 # ==========================================
 @router.get("/{episode_id}")
-def bolum_oku(episode_id: int, request: Request, db: Session = Depends(get_db)):
+def bolum_oku(episode_id: int, request: Request, response: Response, db: Session = Depends(get_db)):
     
     # 1. Bölümü Bul
     bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == episode_id).first()
@@ -112,22 +112,28 @@ def bolum_oku(episode_id: int, request: Request, db: Session = Depends(get_db)):
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
     
-    # --- GÜNCELLENEN KISIM: NULL (Boş) Değer Kontrolü ---
-    # İzlenme sayısı NULL ise 0 yap, değilse 1 artır
-    if bolum.view_count is None:
-        bolum.view_count = 0
-    bolum.view_count += 1 
-    
-    # Seri (Webtoon) izlenmesini de artır
-    if bolum.webtoon:
-        if bolum.webtoon.view_count is None:
-            bolum.webtoon.view_count = 0
-        bolum.webtoon.view_count += 1
+    # --- AKILLI SAYAÇ SİSTEMİ (Cookie Kontrolü) ---
+    # Kullanıcının tarayıcısında "viewed_7" (7 nolu bölüm okundu mu?) diye bir iz var mı?
+    cookie_name = f"viewed_episode_{episode_id}"
+    zaten_okudu = request.cookies.get(cookie_name)
+
+    if not zaten_okudu:
+        # Daha önce okumamış, sayacı artır!
+        if bolum.view_count is None: bolum.view_count = 0
+        bolum.view_count += 1 
         
-    db.commit()
+        if bolum.webtoon:
+            if bolum.webtoon.view_count is None: bolum.webtoon.view_count = 0
+            bolum.webtoon.view_count += 1
+            
+        db.commit()
+        
+        # Kullanıcıya "Okudu" damgası (Cookie) yapıştır (Süre: 3600 saniye = 1 Saat)
+        # Yani 1 saat boyunca F5 atsa da sayaç artmayacak.
+        response.set_cookie(key=cookie_name, value="true", max_age=3600)
     # ----------------------------------------------------
 
-    # 3. Navigasyon
+    # 3. Navigasyon (Önceki/Sonraki Bölüm)
     sonraki_bolum = db.query(models.WebtoonEpisode).filter(
         models.WebtoonEpisode.webtoon_id == bolum.webtoon_id,
         models.WebtoonEpisode.episode_number > bolum.episode_number
@@ -138,10 +144,10 @@ def bolum_oku(episode_id: int, request: Request, db: Session = Depends(get_db)):
         models.WebtoonEpisode.episode_number < bolum.episode_number
     ).order_by(models.WebtoonEpisode.episode_number.desc()).first()
 
-    # --- 4. RESİM LİSTESİ OLUŞTURMA ---
+    # 4. Resim Listesi Oluşturma (Aynı mantık devam ediyor...)
     image_urls = []
-
-    # YÖNTEM A: Veritabanından Çek (Admin panelinden yüklenenler)
+    
+    # YÖNTEM A: Veritabanı
     db_images = db.query(models.EpisodeImage)\
                   .filter(models.EpisodeImage.episode_id == episode_id)\
                   .order_by(models.EpisodeImage.page_order)\
@@ -149,23 +155,26 @@ def bolum_oku(episode_id: int, request: Request, db: Session = Depends(get_db)):
 
     if db_images:
         for img in db_images:
-            # Resim yolu "static/..." ise başına domain ekle
             full_url = str(request.base_url) + img.image_url
             image_urls.append(full_url)
     
-    # YÖNTEM B: Klasörden Çek (Bot tarafından indirilenler)
-    # Eğer DB boşsa ve bir Webtoon'a bağlıysa klasörü kontrol et
+    # YÖNTEM B: Klasör (Bot)
     if not image_urls and bolum.webtoon:
         slug = bolum.webtoon.slug
+        bot_base_path = f"static/images/{slug}"
+        if not slug or not os.path.exists(bot_base_path):
+            import re
+            text_slug = bolum.webtoon.title.lower()
+            text_slug = text_slug.replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
+            text_slug = re.sub(r'[^a-z0-9\s-]', '', text_slug)
+            slug = re.sub(r'[\s-]+', '-', text_slug).strip('-')
+
         chap_num = str(int(bolum.episode_number)) if bolum.episode_number % 1 == 0 else str(bolum.episode_number)
-        
-        # Botun indirdiği yol: static/images/{slug}/bolum-{num}
         bot_folder_path = f"static/images/{slug}/bolum-{chap_num}"
         
         if os.path.exists(bot_folder_path):
             files = os.listdir(bot_folder_path)
             try:
-                # Dosya isimlerini sayısal olarak sıralamaya çalış (sahne-1, sahne-2...)
                 files.sort(key=lambda x: int(x.split('sahne-')[1].split('.')[0]))
             except:
                 files.sort()
@@ -175,20 +184,18 @@ def bolum_oku(episode_id: int, request: Request, db: Session = Depends(get_db)):
                     url = f"{str(request.base_url)}static/images/{slug}/bolum-{chap_num}/{file}"
                     image_urls.append(url)
 
-    # 5. Yanıtı Döndür
     return {
         "id": bolum.id,
         "webtoon_id": bolum.webtoon_id,
         "webtoon_title": bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
         "webtoon_slug": bolum.webtoon.slug if bolum.webtoon else "",
         "webtoon_cover": f"{request.base_url}{bolum.webtoon.cover_image}" if bolum.webtoon and bolum.webtoon.cover_image else None,
-        
         "title": bolum.title,
         "episode_number": bolum.episode_number,
         "created_at": bolum.created_at,
         "view_count": bolum.view_count,
         "content_text": bolum.content_text,
-        "images": image_urls, # URL Listesi
+        "images": image_urls,
         "next_episode_id": sonraki_bolum.id if sonraki_bolum else None,
         "prev_episode_id": onceki_bolum.id if onceki_bolum else None
     }

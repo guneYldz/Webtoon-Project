@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import CommentSection from "@/components/CommentSection"; // 🔥 Yorum Bileşeni
+import CommentSection from "@/components/CommentSection"; 
 import Link from "next/link";
 import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
 import { API } from "@/api";
@@ -33,17 +33,13 @@ export default function NovelReadingPage() {
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      
-      // Aşağı kaydırıyorsak ve 50px geçtiysek GİZLE
       if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
         setShowNavbar(false);
       } else {
-        // Yukarı çıkıyorsak GÖSTER
         setShowNavbar(true);
       }
       lastScrollY.current = currentScrollY;
     };
-
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -51,12 +47,23 @@ export default function NovelReadingPage() {
   const loadChapter = async () => {
     try {
       setLoading(true);
+      // 1. İçeriği Çek (Mevcut Novel endpointinden)
       const res = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`);
       if (!res.ok) throw new Error("Bölüm yüklenemedi");
       
       const data = await res.json();
       setChapter(data);
       window.scrollTo(0, 0);
+
+      // 2. 👇 İZLENME SAYISINI ARTIR (SESSİZ SİNYAL)
+      // Novel endpoint'i izlenmeyi artırmıyorsa, 'episodes' endpointine kimlikli (cookies) istek atıyoruz.
+      if (data.id) {
+        fetch(`${API}/episodes/${data.id}`, { 
+            method: "GET",
+            credentials: "include" // 🔥 KRİTİK: Cookie gönder/al ayarı (F5 spam'i engeller)
+        }).catch(err => console.log("Sayaç güncellenemedi:", err));
+      }
+
     } catch (err) {
       console.error("Hata:", err);
     } finally {
@@ -103,6 +110,11 @@ export default function NovelReadingPage() {
                 <div className="flex items-center justify-center gap-4 text-gray-400 text-sm font-medium">
                       <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">Bölüm #{chapter.chapter_number}</span>
                       <span>{new Date(chapter.created_at).toLocaleDateString('tr-TR')}</span>
+                      
+                      {/* Göz Sayacı (İsteğe bağlı ekrana basmak istersen) */}
+                      {chapter.view_count !== undefined && (
+                         <span className="flex items-center gap-1">👁️ {chapter.view_count}</span>
+                      )}
                 </div>
             </div>
         </div>
@@ -116,11 +128,8 @@ export default function NovelReadingPage() {
         </article>
       </main>
 
-      {/* 3. YORUM ALANI (GÜNCELLENDİ) 🔥 */}
+      {/* 3. YORUM ALANI */}
       <div className={`mt-32 max-w-3xl mx-auto ${lato.className} border-t border-gray-800 pt-12 px-4`}>
-          {/* Eski kodun 60 satırını sildik, yerine sadece bu 5 satırı koyduk. 
-              Tüm işlemler CommentSection.js içinde yapılıyor.
-          */}
           <CommentSection 
              type="novel" 
              itemId={chapter.novel_id} 
@@ -137,13 +146,11 @@ export default function NovelReadingPage() {
         <div className="flex justify-center w-full">
             <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-16 px-6">
                 
-                {/* Sol: Geri Dön */}
                 <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group">
                   <span className="text-xl group-hover:-translate-x-1 transition">←</span> 
                   <span className={`hidden sm:inline ${lato.className} text-xs font-bold tracking-widest uppercase`}>Seri</span>
                 </Link>
                 
-                {/* Orta: Başlık */}
                 <div className="flex flex-col items-center justify-center px-4">
                     <h2 className={`text-xs font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>
                       {chapter.title}
@@ -151,7 +158,6 @@ export default function NovelReadingPage() {
                     <span className="text-[10px] text-purple-500 font-black tracking-widest">#{chapter.chapter_number}</span>
                 </div>
 
-                {/* Sağ: Butonlar */}
                 <div className={`flex gap-3 ${lato.className}`}>
                     <button 
                       onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)}
