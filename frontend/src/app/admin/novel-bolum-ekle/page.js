@@ -7,60 +7,61 @@ import { Editor, EditorProvider, Toolbar, BtnBold, BtnItalic, BtnUnderline, BtnL
 export default function NovelBolumEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [novels, setNovels] = useState([]); 
+  const [novels, setNovels] = useState([]);
+  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [selectedNovel, setSelectedNovel] = useState("");
   const [title, setTitle] = useState("");
   const [chapterNumber, setChapterNumber] = useState("");
-  const [content, setContent] = useState(""); 
+  const [content, setContent] = useState("");
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/novels/")
+    fetch(`${API}/novels/`)
       .then((res) => res.json())
       .then((data) => setNovels(data))
       .catch((err) => console.error("Romanlar çekilemedi:", err));
-  }, []);
+  }, [API]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedNovel || !content) {
-        alert("Lütfen bir roman seçin ve içerik girin."); 
-        return;
+      alert("Lütfen bir roman seçin ve içerik girin.");
+      return;
     }
-    
+
     setLoading(true);
-    const token = localStorage.getItem("token");
-    
+    const token = localStorage.getItem("admin_token");
+
     const formData = new FormData();
     formData.append("novel_id", selectedNovel);
     formData.append("chapter_number", chapterNumber);
     formData.append("title", title);
-    formData.append("content", content); 
+    formData.append("content", content);
 
     try {
-        const response = await fetch("http://127.0.0.1:8000/novels/bolum-ekle", {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${token}` },
-            body: formData,
-        });
+      const response = await fetch(`${API}/novels/bolum-ekle`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+        body: formData,
+      });
 
-        if (!response.ok) throw new Error("Yükleme sırasında bir hata oluştu.");
+      if (!response.ok) throw new Error("Yükleme sırasında bir hata oluştu.");
 
-        alert("✅ Roman Bölümü Başarıyla Yayınlandı!");
-        setTitle("");
-        setChapterNumber("");
-        setContent("");
+      alert("✅ Roman Bölümü Başarıyla Yayınlandı!");
+      setTitle("");
+      setChapterNumber("");
+      setContent("");
     } catch (error) {
-        alert("❌ Hata: " + error.message);
+      alert("❌ Hata: " + error.message);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center py-10 px-4">
       <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-4xl border border-gray-700">
-        
+
         <h1 className="text-3xl font-bold mb-6 text-blue-400 border-b border-gray-700 pb-4 flex justify-between items-center">
           <span>📖 Roman Bölümü Yükle</span>
         </h1>
@@ -103,32 +104,31 @@ export default function NovelBolumEkle() {
           <div>
             <label className="block text-gray-400 font-medium mb-1">Bölüm İçeriği</label>
             <div className="text-black bg-white rounded-lg">
-                <EditorProvider>
-                    <Editor 
-                        value={content} 
-                        onChange={(e) => setContent(e.target.value)} 
-                        className="min-h-[400px]"
-                    >
-                        <Toolbar>
-                            <BtnBold />
-                            <BtnItalic />
-                            <BtnUnderline />
-                            <BtnStrikeThrough />
-                            <BtnLink />
-                            <BtnNumberedList />
-                            <BtnBulletList />
-                        </Toolbar>
-                    </Editor>
-                </EditorProvider>
+              <EditorProvider>
+                <Editor
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="min-h-[400px]"
+                >
+                  <Toolbar>
+                    <BtnBold />
+                    <BtnItalic />
+                    <BtnUnderline />
+                    <BtnStrikeThrough />
+                    <BtnLink />
+                    <BtnNumberedList />
+                    <BtnBulletList />
+                  </Toolbar>
+                </Editor>
+              </EditorProvider>
             </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-4 rounded-lg text-white font-bold text-lg ${
-              loading ? "bg-gray-600" : "bg-blue-600 hover:bg-blue-500"
-            }`}
+            className={`w-full py-4 rounded-lg text-white font-bold text-lg ${loading ? "bg-gray-600" : "bg-blue-600 hover:bg-blue-500"
+              }`}
           >
             {loading ? "Bölüm Yayınlanıyor..." : "Bölümü Yayınla 🚀"}
           </button>

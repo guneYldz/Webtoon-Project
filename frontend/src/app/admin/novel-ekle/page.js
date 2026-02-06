@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 export default function NovelEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  
+  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
   // Form Verileri
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -34,9 +35,9 @@ export default function NovelEkle() {
     }
 
     setLoading(true);
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("admin_token");
     const formData = new FormData();
-    
+
     formData.append("title", title);
     formData.append("slug", slug);
     formData.append("author", author);
@@ -44,7 +45,7 @@ export default function NovelEkle() {
     formData.append("cover", cover); // Dosya objesi
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/novels/ekle", {
+      const response = await fetch(`${API}/novels/ekle`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -69,13 +70,13 @@ export default function NovelEkle() {
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center py-10 px-4">
       <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-2xl border border-gray-700">
-        
+
         <h1 className="text-3xl font-bold mb-6 text-purple-400 border-b border-gray-700 pb-4">
           📚 Yeni Roman (Novel) Oluştur
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          
+
           {/* Başlık ve Slug */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -143,9 +144,8 @@ export default function NovelEkle() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${
-              loading ? "bg-gray-600 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-500 hover:shadow-purple-500/30"
-            }`}
+            className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-500 hover:shadow-purple-500/30"
+              }`}
           >
             {loading ? "Oluşturuluyor..." : "Romanı Kaydet 🚀"}
           </button>

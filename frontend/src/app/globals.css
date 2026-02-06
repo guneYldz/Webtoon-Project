@@ -1,22 +1,58 @@
-@import "tailwindcss";
+/* Tailwind CSS loaded via CDN in layout.tsx */
 
 /* Koyu Tema Ayarları */
 body {
-  background-color: #121212; /* Çok koyu gri (neredeyse siyah) */
-  color: #e0e0e0;            /* Yazılar açık gri */
+  background-color: #121212;
+  /* Çok koyu gri (neredeyse siyah) */
+  color: #e0e0e0;
+  /* Yazılar açık gri */
 }
 
 /* Scrollbar (Kaydırma çubuğu) Güzelleştirme */
 ::-webkit-scrollbar {
   width: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #1a1a1a; 
+  background: #1a1a1a;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #333; 
+  background: #333;
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #555; 
+  background: #555;
+}
+
+/* 🔥 NUCLEAR FIX: Force dark background on breadcrumbs and any white containers */
+nav[aria-label="breadcrumb"],
+.breadcrumb,
+.breadcrumbs,
+div[class*="breadcrumb"],
+div:has(> a[href="/"]) {
+  background-color: transparent !important;
+  color: #e5e7eb !important;
+  border-bottom: 1px solid #1f2937;
+}
+
+/* Breadcrumb links */
+nav[aria-label="breadcrumb"] a,
+.breadcrumb a,
+.breadcrumbs a,
+div[class*="breadcrumb"] a {
+  color: #9ca3af !important;
+}
+
+nav[aria-label="breadcrumb"] a:hover,
+.breadcrumb a:hover,
+.breadcrumbs a:hover,
+div[class*="breadcrumb"] a:hover {
+  color: #ffffff !important;
+}
+
+/* Remove any white backgrounds that might leak through */
+* {
+  box-sizing: border-box;
 }

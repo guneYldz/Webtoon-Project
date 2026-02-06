@@ -29,6 +29,7 @@ class EpisodeListSchema(BaseModel):
     id: int
     title: str
     episode_number: float 
+    is_published: bool = False
     created_at: Optional[datetime] = None
     
     class Config:
@@ -40,6 +41,7 @@ class NovelChapterListSchema(BaseModel):
     id: int
     chapter_number: int
     title: str
+    is_published: bool = False
     created_at: Optional[datetime] = None
 
     class Config:
@@ -69,6 +71,7 @@ class WebtoonCard(BaseModel):
     view_count: int = 0
     type: ContentType
     is_featured: bool 
+    is_published: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -99,6 +102,7 @@ class NovelCard(BaseModel):
     cover_image: Optional[str] = None
     status: str
     source_url: Optional[str] = None 
+    is_published: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
@@ -137,6 +141,7 @@ class NovelDetail(BaseModel):
     summary: Optional[str] = None 
     cover_image: Optional[str] = None
     author: Optional[str] = None
+    is_published: bool = False
     source_url: Optional[str] = None 
     
     chapters: List[NovelChapterBase] = [] 
@@ -162,6 +167,7 @@ class EpisodeDetailSchema(BaseModel):
     webtoon_title: str          
     title: str                  
     episode_number: float
+    is_published: bool = False
     created_at: Optional[datetime] = None
     webtoon_cover: Optional[str] = None
     # İçerik

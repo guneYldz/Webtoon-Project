@@ -28,21 +28,27 @@ def check_editor_permission(user: models.User):
 # 1. LİSTELEME
 @router.get("/", response_model=List[schemas.NovelCard])
 def novelleri_getir(db: Session = Depends(get_db), limit: int = 100, skip: int = 0):
-    return db.query(models.Novel).order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
+
+    # O P T I M İ Z A S Y O N EKLENDİ (N+1 Sorunu Çözümü)
+    from sqlalchemy.orm import selectinload
+
+    query = db.query(models.Novel).filter(models.Novel.is_published == True).options(selectinload(models.Novel.chapters.and_(models.NovelChapter.is_published == True)))
+    return query.order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
 
 # 2. TEK ROMAN GETİR
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
 def novel_detay(slug_or_id: str, db: Session = Depends(get_db)):
     if slug_or_id.isdigit():
-        novel = db.query(models.Novel).filter(models.Novel.id == int(slug_or_id)).first()
+        novel = db.query(models.Novel).filter(models.Novel.id == int(slug_or_id), models.Novel.is_published == True).first()
     else:
-        novel = db.query(models.Novel).filter(models.Novel.slug == slug_or_id).first()
+        novel = db.query(models.Novel).filter(models.Novel.slug == slug_or_id, models.Novel.is_published == True).first()
 
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
     
     chapters = db.query(models.NovelChapter).filter(
-        models.NovelChapter.novel_id == novel.id
+        models.NovelChapter.novel_id == novel.id,
+        models.NovelChapter.is_published == True
     ).order_by(asc(models.NovelChapter.chapter_number)).all()
     
     novel.chapters = chapters
@@ -81,6 +87,7 @@ def novel_ekle(
         author=author,
         cover_image=cover_path,
         status="ongoing",
+        is_published=False,
         source_url=source_url 
     )
     
@@ -117,6 +124,7 @@ def novel_bolum_ekle(
         chapter_number=chapter_number,
         title=title,
         content=content,
+        is_published=False,
         view_count=0
     )
 

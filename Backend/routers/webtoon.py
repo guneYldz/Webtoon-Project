@@ -37,7 +37,14 @@ def webtoonlari_getir(
     skip: int = 0,         
     sort_by: str = "newest" 
 ):
-    query = db.query(models.Webtoon)
+
+    # O P T I M İ Z A S Y O N EKLENDİ (N+1 Sorunu Çözümü)
+    from sqlalchemy.orm import selectinload
+
+    query = db.query(models.Webtoon).filter(models.Webtoon.is_published == True).options(
+        selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)),
+        selectinload(models.Webtoon.categories)
+    )
 
     if sort_by == "newest":
         query = query.order_by(desc(models.Webtoon.created_at))
@@ -55,11 +62,11 @@ def webtoonlari_getir(
 def webtoon_detay(id_or_slug: str, db: Session = Depends(get_db)):
     # Gelen veri sayı mı? (Örn: "1", "5")
     if id_or_slug.isdigit():
-        webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == int(id_or_slug)).first()
+        webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == int(id_or_slug), models.Webtoon.is_published == True).first()
     
     # Yoksa yazı mı? (Örn: "shadow-slave")
     else:
-        webtoon = db.query(models.Webtoon).filter(models.Webtoon.slug == id_or_slug).first()
+        webtoon = db.query(models.Webtoon).filter(models.Webtoon.slug == id_or_slug, models.Webtoon.is_published == True).first()
     
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
@@ -130,6 +137,7 @@ def webtoon_ekle(
         cover_image=kapak_yolu, 
         banner_image=banner_yolu, 
         status="ongoing",
+        is_published=False,
         type=models.ContentType.MANGA # Enum Kullanımı
     )
     

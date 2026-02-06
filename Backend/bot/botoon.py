@@ -1,14 +1,13 @@
 import os
 import time
 import requests
-import pyodbc
 import undetected_chromedriver as uc
 from sqlalchemy import create_engine, text
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from slugify import slugify
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 from PIL import Image
 from io import BytesIO
 
@@ -16,27 +15,27 @@ from io import BytesIO
 # ⚙️ AYARLAR
 # ==========================================
 
-# .env dosyasını bulmak için Backend klasörünü hedefle
-# Bot "Backend/bot" içinde olduğu için, .env bir üst klasörde ("Backend") duruyor.
+# Botun çalıştığı klasör
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKEND_DIR = os.path.dirname(CURRENT_DIR)
-load_dotenv(os.path.join(BACKEND_DIR, ".env")) # .env'i yükle
-
-DB_CONNECTION = os.getenv("DB_CONNECTION")
-# 👇 DÜZELTME BURADA YAPILDI 👇
-# Botun nerede olduğunu bul (Backend/bot klasörü)
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Bir üst klasöre çık (Backend klasörü)
+# Bir üst klasör (Backend)
 BACKEND_DIR = os.path.dirname(CURRENT_DIR)
 
-# Static klasörünü tam yol olarak belirle
+# .env dosyasını yükle (API Key vb. için lazım ama DB için aşağıdakini kullanacağız)
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+
+# 🔥 KRİTİK AYAR: Docker PostgreSQL Bağlantısı (DIŞARIDAN ERİŞİM)
+# .env dosyasında ne yazarsa yazsın, bot Windows'ta olduğu için 5433 portunu kullanmalı.
+DB_CONNECTION = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+
+# Resimlerin kaydedileceği yer (Docker burayı görüyor)
 BASE_PATH = os.path.join(BACKEND_DIR, "static")
-print(f"📁 Resimler şuraya kaydedilecek: {BASE_PATH}") # Kontrol için yazdıralım
-SERI_DOSYASI = "seriler.txt" 
-SERI_ARASI_BEKLEME = 5
-TUR_ARASI_BEKLEME = 1800 
+print(f"📁 Resimler şuraya kaydedilecek: {BASE_PATH}")
 
+SERI_DOSYASI = "seriler.txt"
+SERI_ARASI_BEKLEME = 5
+TUR_ARASI_BEKLEME = 1800
+
+# PostgreSQL için motor oluşturuluyor
 engine = create_engine(DB_CONNECTION)
 
 # ==========================================
@@ -45,21 +44,18 @@ engine = create_engine(DB_CONNECTION)
 def process_and_save_image(img_url, folder_path, file_name):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        # Timeout ekledim ki takılıp kalmasın (10 saniye)
         response = requests.get(img_url, headers=headers, stream=True, timeout=10)
         
         if response.status_code == 200:
-            # 1. Güvenlik: Dosya boyutu çok küçükse (örn: 1KB altı) bu bir ikon veya hatadır.
-            if len(response.content) < 1000: 
+            if len(response.content) < 1000:
                 return None
 
-            # 2. Güvenlik: Pillow açabiliyor mu?
             try:
                 image = Image.open(BytesIO(response.content))
-                image.verify() # Dosyanın bozuk olup olmadığını kontrol et
-                image = Image.open(BytesIO(response.content)) # Tekrar aç (verify kapatır çünkü)
+                image.verify()
+                image = Image.open(BytesIO(response.content))
             except:
-                return None # Resim bozuksa sessizce geç
+                return None
 
             if not os.path.exists(folder_path): os.makedirs(folder_path)
             full_path = os.path.join(folder_path, file_name)
@@ -68,10 +64,9 @@ def process_and_save_image(img_url, folder_path, file_name):
             
             image.save(full_path, "WEBP", quality=80)
             print(f"      ✅ Kaydedildi: {file_name}")
-            return full_path.replace("\\", "/") 
+            return full_path.replace("\\", "/")
             
     except Exception as e:
-        # Hata mesajını sadece kritikse yazdır, küçük hataları görmezden gel
         if "cannot identify" not in str(e):
             print(f"      ❌ Resim hatası: {e}")
         return None
@@ -83,7 +78,7 @@ class AutoBot:
     def __init__(self):
         options = uc.ChromeOptions()
         options.add_argument("--start-maximized")
-        # options.add_argument("--headless") 
+        # options.add_argument("--headless") # İstersen açabilirsin
         self.driver = uc.Chrome(options=options)
 
     def check_single_series(self, target_url):
@@ -91,7 +86,7 @@ class AutoBot:
         
         try:
             self.driver.get(target_url)
-            time.sleep(5) 
+            time.sleep(5)
 
             # --- SERİ BİLGİLERİNİ AL ---
             try:
@@ -114,9 +109,9 @@ class AutoBot:
                 # --- BÖLÜM LİSTESİ ---
                 site_chapters = []
                 selector_strategies = [
-                    {"container": ".chapter-item", "link": "a.uk-link-toggle", "text_loc": "h3"}, 
+                    {"container": ".chapter-item", "link": "a.uk-link-toggle", "text_loc": "h3"},
                     {"container": "#chapterlist li", "link": "a", "text_loc": ".chapternum"},
-                    {"container": "#chapterlist li", "link": "a", "text_loc": ""}, 
+                    {"container": "#chapterlist li", "link": "a", "text_loc": ""},
                     {"container": "li.wp-manga-chapter", "link": "a", "text_loc": ""}
                 ]
 
@@ -181,11 +176,17 @@ class AutoBot:
                 if cover_url:
                     cover_path = process_and_save_image(cover_url, os.path.join(BASE_PATH, "covers"), f"{slug}-cover.webp")
                 
-                ins = text("""INSERT INTO webtoons (title, slug, summary, cover_image, status, type, view_count, is_featured, created_at) 
-                              VALUES (:t, :s, :sum, :c, 'ongoing', 'MANGA', 0, 0, GETDATE())""")
-                conn.execute(ins, {"t": title, "s": slug, "sum": f"{title} özeti", "c": cover_path})
+                # 🔥 DÜZELTME: GETDATE() -> NOW() ve is_published=FALSE
+                ins = text("""
+                    INSERT INTO webtoons (title, slug, summary, cover_image, status, type, view_count, is_featured, is_published, created_at) 
+                    VALUES (:t, :s, :sum, :c, 'ongoing', 'MANGA', 0, FALSE, FALSE, NOW())
+                    RETURNING id
+                """)
+                # Postgres'te RETURNING id ile ID'yi geri alırız
+                result = conn.execute(ins, {"t": title, "s": slug, "sum": f"{title} özeti", "c": cover_path})
+                new_id = result.fetchone()[0]
                 conn.commit()
-                return conn.execute(text("SELECT id FROM webtoons WHERE slug = :slug"), {"slug": slug}).fetchone()[0]
+                return new_id
 
     def get_db_chapters(self, webtoon_id):
         with engine.connect() as conn:
@@ -195,22 +196,17 @@ class AutoBot:
     def download_chapter(self, url, webtoon_id, chap_num, series_slug):
         try:
             self.driver.get(url)
-            
-            # --- ZORUNLU BEKLEME (WAIT) ---
             print("      ⏳ Sayfa yükleniyor, #readerarea bekleniyor...")
             try:
-                # 20 saniye boyunca readerarea elementinin görünmesini bekle
                 WebDriverWait(self.driver, 20).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "#readerarea img"))
                 )
             except:
                 print("      ⚠️ #readerarea zaman aşımına uğradı! Alternatifler deneniyor...")
 
-            # Sayfa yüklendi, aşağı kaydır
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
             time.sleep(2)
             
-            # JS ile linkleri çek
             image_urls = self.driver.execute_script("""
                 let images = document.querySelectorAll('#readerarea img, .reading-content img, .entry-content img');
                 let urls = [];
@@ -224,13 +220,14 @@ class AutoBot:
             if image_urls and len(image_urls) > 0:
                 print(f"      🎯 {len(image_urls)} resim bulundu! İndiriliyor...")
                 
-                # Veritabanı
                 with engine.connect() as conn:
                     check = conn.execute(text("SELECT id FROM webtoon_episodes WHERE webtoon_id=:w AND episode_number=:e"), {"w":webtoon_id, "e":chap_num}).fetchone()
                     if not check:
-                        # 👇 DÜZELTME BURADA YAPILDI: view_count EKLENDİ VE DEĞERİ 0 VERİLDİ
-                        conn.execute(text("INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, created_at) VALUES (:w, :e, :t, 0, GETDATE())"), 
-                                     {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
+                        # � DÜZELTME: GETDATE() -> NOW() ve is_published=FALSE
+                        conn.execute(text("""
+                            INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, is_published, created_at) 
+                            VALUES (:w, :e, :t, 0, FALSE, NOW())
+                        """), {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
                         conn.commit()
 
                 episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
@@ -243,11 +240,8 @@ class AutoBot:
                 
                 if count == 0: 
                     print("      ⚠️ Linkler bulundu ama indirilemedi.")
-                    # Hata durumunda ekran görüntüsü al
-                    self.driver.save_screenshot(f"hata_bolum_{chap_num}.png")
             else:
-                print("      ⚠️ RESİM HALA BULUNAMADI! Ekran görüntüsü alınıyor...")
-                self.driver.save_screenshot(f"hata_bos_{chap_num}.png")
+                print("      ⚠️ RESİM HALA BULUNAMADI!")
 
         except Exception as e:
             print(f"      ❌ İndirme hatası: {e}")
@@ -261,7 +255,7 @@ def main():
         return
 
     bot = AutoBot()
-    print("🤖 OTO-PİLOT BAŞLATILDI!")
+    print("🤖 OTO-PİLOT BAŞLATILDI (POSTGRESQL VERSİYONU)!")
 
     while True:
         with open(SERI_DOSYASI, "r", encoding="utf-8") as f:

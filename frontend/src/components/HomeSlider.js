@@ -5,12 +5,12 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, EffectFade } from 'swiper/modules';
 
 // Swiper CSS dosyalarını import ediyoruz (Zorunlu)
-import 'swiper/css';
-import 'swiper/css/pagination';
-import 'swiper/css/effect-fade'; // Eğer fade efekti istersen bunu kullanacağız
+// import 'swiper/css';
+// import 'swiper/css/pagination';
+// import 'swiper/css/effect-fade'; // Eğer fade efekti istersen bunu kullanacağız
 
 // Senin tasarım bileşenin
-import FeaturedSlider from "./FeaturedSlider"; 
+import FeaturedSlider from "./FeaturedSlider";
 import { API } from "@/api";
 
 // CSS ile Swiper'ın noktalarını (pagination) özelleştirelim
@@ -58,7 +58,7 @@ export default function HomeSlider() {
       <style>{styles}</style>
 
       <Swiper
-        modules={[Autoplay, Pagination]} // Modülleri yükle
+        modules={[Autoplay, Pagination, EffectFade]} // Modülleri yükle
         spaceBetween={0}                 // Slaytlar arası boşluk yok
         slidesPerView={1}                // Ekranda 1 tane göster
         loop={slides.length > 1}         // Eğer 1'den fazla slayt varsa sonsuz döngü yap
@@ -68,7 +68,7 @@ export default function HomeSlider() {
           delay: 5000,                   // 5 saniyede bir değiş
           disableOnInteraction: false,   // Kullanıcı dokununca durmasın, devam etsin
         }}
-        pagination={{ 
+        pagination={{
           clickable: true,               // Noktalara tıklanabilsin
           dynamicBullets: true           // Çok slayt varsa noktaları küçült
         }}

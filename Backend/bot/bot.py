@@ -3,27 +3,39 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 import time
 import os
+from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import cloudscraper
 
 # ==========================================
 # ⚙️ AYARLAR
 # ==========================================
-load_dotenv()
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-API_URL = "http://127.0.0.1:8000"
 
-BOT_USERNAME = os.getenv("BOT_USERNAME", "bot123@gmail.com") 
-BOT_PASSWORD = os.getenv("BOT_PASSWORD", "62dersim62") 
+# Botun çalıştığı klasör
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Bir üst klasör (Backend)
+BACKEND_DIR = os.path.dirname(CURRENT_DIR)
+
+# .env dosyasını yükle
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 BEKLEME_SURESI = 10 
+
+# 🔥 KRİTİK AYAR: Docker PostgreSQL Bağlantısı (DIŞARIDAN ERİŞİM)
+# .env dosyasında ne yazarsa yazsın, bot Windows'ta olduğu için 5433 portunu kullanmalı.
+DB_CONNECTION = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
 
 if not GOOGLE_API_KEY:
     print("❌ HATA: API Anahtarı bulunamadı! .env dosyasını kontrol et.")
     exit()
 
 genai.configure(api_key=GOOGLE_API_KEY)
-# En hızlı ve zeki model
-model = genai.GenerativeModel('gemini-2.5-flash')
+# Gemini 1.5 Flash (Zeki ve Hızlı)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# PostgreSQL için motor oluşturuluyor
+engine = create_engine(DB_CONNECTION)
 
 # ==========================================
 # 📚 ROMANLARA ÖZEL SÖZLÜKLER (CONFIG)
@@ -49,60 +61,33 @@ NOVEL_CONFIGS = {
 }
 
 # ==========================================
-# 🔑 GİRİŞ
+# 🔍 EN SON BÖLÜMÜ ÖĞREN (DOĞRUDAN DB)
 # ==========================================
-def get_auth_token():
+def get_last_chapter_number(novel_id):
     try:
-        response = requests.post(
-            f"{API_URL}/auth/giris-yap",
-            data={"username": BOT_USERNAME, "password": BOT_PASSWORD}
-        )
-        if response.status_code == 200:
-            return response.json().get("access_token")
-        print(f"❌ Giriş Başarısız! Kod: {response.status_code}")
-        return None
-    except Exception as e:
-        print(f"❌ Login Hatası: {e}")
-        return None
-
-# ==========================================
-# 🔍 EN SON BÖLÜMÜ ÖĞREN
-# ==========================================
-def get_last_chapter_number(token, novel_id, novel_slug):
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        # Önce ID ile dene
-        response = requests.get(f"{API_URL}/novels/{novel_id}", headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            chapters = data.get("chapters", [])
-            if chapters:
-                return max([ch["chapter_number"] for ch in chapters])
-        
-        # Olmazsa Slug ile dene
-        response = requests.get(f"{API_URL}/novels/{novel_slug}", headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            chapters = data.get("chapters", [])
-            if chapters:
-                return max([ch["chapter_number"] for ch in chapters])
-
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT chapter_number FROM novel_chapters WHERE novel_id = :nid ORDER BY chapter_number DESC LIMIT 1"),
+                {"nid": novel_id}
+            ).fetchone()
+            if result:
+                return result[0]
         return 0 
-    except:
+    except Exception as e:
+        print(f"❌ Son bölüm çekilirken hata: {e}")
         return 0
 
 # ==========================================
-# 📚 ROMAN LİSTESİ
+# 📚 ROMAN LİSTESİ (DOĞRUDAN DB)
 # ==========================================
-def get_all_novels(token):
-    headers = {"Authorization": f"Bearer {token}"}
+def get_active_novels():
     try:
-        response = requests.get(f"{API_URL}/novels/", headers=headers) 
-        if response.status_code == 200:
-            return response.json() 
-        return []
+        with engine.connect() as conn:
+            # Sadece source_url olanları çek
+            result = conn.execute(text("SELECT id, title, slug, source_url FROM novels WHERE source_url IS NOT NULL")).fetchall()
+            return [dict(row._mapping) for row in result]
     except Exception as e:
-        print(f"❌ Liste Hatası: {e}")
+        print(f"❌ Roman listesi hatası: {e}")
         return []
 
 # ==========================================
@@ -114,7 +99,6 @@ def scrape_chapter(url):
     try:
         response = scraper.get(url)
         
-        # 404 Yönetimi (Sonunda / olup olmamasına göre)
         if response.status_code == 404:
             if not url.endswith("/"):
                 response = scraper.get(url + "/")
@@ -131,11 +115,9 @@ def scrape_chapter(url):
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Başlık Bulma (H1, H2, H3 veya .title class'ı)
         title_tag = soup.find('h1') or soup.find('h2') or soup.find('h3', class_='title')
         title_text = title_tag.get_text(strip=True) if title_tag else f"Bölüm"
 
-        # 🔥 EVRENSEL İÇERİK BULUCU (Bilinen tüm yapıları dener)
         content = soup.find('div', class_='entry-content') or \
                   soup.find('div', class_='cha-content') or \
                   soup.find('div', class_='reading-content') or \
@@ -146,7 +128,6 @@ def scrape_chapter(url):
                   soup.find('article')
 
         if content:
-            # Reklamları ve gereksizleri temizle
             for bad in content.find_all(['script', 'style', 'div', 'a', 'iframe', 'p.display-hide', 'button']):
                 bad.decompose()
             
@@ -166,12 +147,11 @@ def scrape_chapter(url):
         return None, None
 
 # ==========================================
-# 🤖 ÇEVİRİ VE YÜKLEME
+# 🤖 ÇEVİRİ VE YÜKLEME (DOĞRUDAN DB)
 # ==========================================
-def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
+def translate_and_upload(novel, chapter_num, eng_title, eng_text):
     print(f"   🤖 AI Çeviriyor: {eng_title}...")
 
-    # Config Seçimi
     novel_title = novel.get('title', 'default')
     selected_glossary = NOVEL_CONFIGS.get("default")
     
@@ -202,37 +182,36 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
         if "İşte çeviriniz" in ceviri or "Çeviri:" in ceviri:
             ceviri = ceviri.replace("İşte çeviriniz:", "").replace("Çeviri:", "").strip()
         
-        payload = {
-            "novel_id": novel['id'],
-            "chapter_number": chapter_num,
-            "title": eng_title, 
-            "content": ceviri
-        }
-        headers = {"Authorization": f"Bearer {token}"}
-        
-        print("   📤 Bölüm yükleniyor...")
-        res = requests.post(f"{API_URL}/novels/bolum-ekle", data=payload, headers=headers)
-        
-        if res.status_code == 422: # Yedek JSON
-             res = requests.post(f"{API_URL}/novels/bolum-ekle", json=payload, headers=headers)
-        
-        if res.status_code == 404: # Yedek Rota
-            res = requests.post(f"{API_URL}/novels/chapters/", data=payload, headers=headers)
+        with engine.connect() as conn:
+            # Çift kontrol: Bölüm zaten var mı?
+            check = conn.execute(
+                text("SELECT id FROM novel_chapters WHERE novel_id = :nid AND chapter_number = :cnum"),
+                {"nid": novel['id'], "cnum": chapter_num}
+            ).fetchone()
+            
+            if check:
+                print(f"   ⏩ Bölüm {chapter_num} zaten var. Atlanıyor...")
+                return "SKIP"
 
-        if res.status_code in [200, 201]:
+            # 🔥 DÜZELTME: GETDATE() -> NOW() ve is_published=FALSE
+            conn.execute(
+                text("""
+                    INSERT INTO novel_chapters (novel_id, chapter_number, title, content, view_count, is_published, created_at) 
+                    VALUES (:nid, :cnum, :title, :content, 0, FALSE, NOW())
+                """),
+                {
+                    "nid": novel['id'],
+                    "cnum": chapter_num,
+                    "title": eng_title,
+                    "content": ceviri
+                }
+            )
+            conn.commit()
             print(f"   🎉 Bölüm {chapter_num} BAŞARIYLA KAYDEDİLDİ!")
             return "SUCCESS"
-        
-        elif res.status_code == 400 and "mevcut" in res.text:
-            print(f"   ⏩ Bölüm {chapter_num} zaten var. Atlanıyor...")
-            return "SKIP"
-            
-        else:
-            print(f"   ❌ Kayıt Hatası: {res.status_code} - {res.text}")
-            return "ERROR"
             
     except Exception as e:
-        print(f"   ❌ Hata: {e}")
+        print(f"   ❌ Çeviri/Yükleme Hatası: {e}")
         return "ERROR"
 
 # ==========================================
@@ -240,22 +219,19 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
 # ==========================================
 if __name__ == "__main__":
     
-    print("🏭 ROMAN FABRİKASI BAŞLATILDI")
+    print("🏭 ROMAN FABRİKASI BAŞLATILDI (POSTGRESQL VERSİYONU)")
     print("Bot, kaldığı yerden devam edecek.\n")
 
     while True:
-        token = get_auth_token()
+        active_novels = get_active_novels()
         
-        if token:
-            all_novels = get_all_novels(token)
-            active_novels = [n for n in all_novels if n.get('source_url')]
-            
+        if active_novels:
             print(f"📋 Kontrol edilecek roman sayısı: {len(active_novels)}")
 
             for novel in active_novels:
                 print(f"\n🔹 SERİ: {novel['title']}")
                 
-                last_ch = get_last_chapter_number(token, novel['id'], novel['slug'])
+                last_ch = get_last_chapter_number(novel['id'])
                 current_ch = last_ch + 1
                 
                 print(f"   ↪ Veritabanındaki Son Bölüm: {last_ch}")
@@ -274,7 +250,7 @@ if __name__ == "__main__":
                         print(f"   🏁 Güncel. Başka bölüm yok.")
                         break 
                     
-                    status = translate_and_upload(token, novel, current_ch, eng_title, eng_text)
+                    status = translate_and_upload(novel, current_ch, eng_title, eng_text)
                     
                     if status == "SUCCESS":
                         print("   ⏳ Diğer bölüme geçiliyor...")
@@ -287,9 +263,8 @@ if __name__ == "__main__":
                     else:
                         print("   ⚠️ Kritik hata, bu roman atlanıyor.")
                         break
-                
         else:
-            print("⚠️ Token alınamadı.")
+            print("⚠️ Aktif roman bulunamadı (source_url boş olabilir).")
 
         print(f"\n💤 Tur tamamlandı. Bot {BEKLEME_SURESI} saniye dinleniyor...")
         time.sleep(BEKLEME_SURESI)

@@ -53,6 +53,7 @@ def create_episode(
         title=title,
         episode_number=episode_number,
         content_text=content_text,
+        is_published=False,
         view_count=0
     )
     db.add(yeni_bolum)
@@ -107,13 +108,13 @@ def create_episode(
 def bolum_oku(episode_id: int, request: Request, response: Response, db: Session = Depends(get_db)):
     
     # 1. Bölümü Bul
-    bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == episode_id).first()
+    bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == episode_id, models.WebtoonEpisode.is_published == True).first()
     
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
     
     # --- AKILLI SAYAÇ SİSTEMİ (Cookie Kontrolü) ---
-    # Kullanıcının tarayıcısında "viewed_7" (7 nolu bölüm okundu mu?) diye bir iz var mı?
+    # ... (sayaç kodu aynı kalır)
     cookie_name = f"viewed_episode_{episode_id}"
     zaten_okudu = request.cookies.get(cookie_name)
 
@@ -128,20 +129,21 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
             
         db.commit()
         
-        # Kullanıcıya "Okudu" damgası (Cookie) yapıştır (Süre: 3600 saniye = 1 Saat)
-        # Yani 1 saat boyunca F5 atsa da sayaç artmayacak.
+        # Kullanıcıya "Okudu" damgası (Cookie) yapıştır
         response.set_cookie(key=cookie_name, value="true", max_age=3600)
     # ----------------------------------------------------
 
     # 3. Navigasyon (Önceki/Sonraki Bölüm)
     sonraki_bolum = db.query(models.WebtoonEpisode).filter(
         models.WebtoonEpisode.webtoon_id == bolum.webtoon_id,
-        models.WebtoonEpisode.episode_number > bolum.episode_number
+        models.WebtoonEpisode.episode_number > bolum.episode_number,
+        models.WebtoonEpisode.is_published == True
     ).order_by(models.WebtoonEpisode.episode_number.asc()).first()
 
     onceki_bolum = db.query(models.WebtoonEpisode).filter(
         models.WebtoonEpisode.webtoon_id == bolum.webtoon_id,
-        models.WebtoonEpisode.episode_number < bolum.episode_number
+        models.WebtoonEpisode.episode_number < bolum.episode_number,
+        models.WebtoonEpisode.is_published == True
     ).order_by(models.WebtoonEpisode.episode_number.desc()).first()
 
     # 4. Resim Listesi Oluşturma (Aynı mantık devam ediyor...)

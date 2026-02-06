@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 export default function WebtoonEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const [formData, setFormData] = useState({
     ad: "",
     ozet: "",
@@ -23,8 +24,8 @@ export default function WebtoonEkle() {
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
-       setFile(selectedFile);
-       setPreview(URL.createObjectURL(selectedFile)); // Önizleme URL'i oluştur
+      setFile(selectedFile);
+      setPreview(URL.createObjectURL(selectedFile)); // Önizleme URL'i oluştur
     }
   };
 
@@ -33,31 +34,31 @@ export default function WebtoonEkle() {
     e.preventDefault();
     setLoading(true);
 
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("admin_token");
     if (!token) {
       alert("Önce giriş yapmalısın!");
-      router.push("/login");
+      router.push("/admin/login"); // Updated to admin login path
       return;
     }
 
     const data = new FormData();
-    data.append("baslik", formData.ad);      
-    data.append("ozet", formData.ozet);      
+    data.append("baslik", formData.ad);
+    data.append("ozet", formData.ozet);
     // Status backend'de default 'ongoing' ama istersen backend'e ekleyebilirsin
-    
+
     if (file) {
-      data.append("resim", file);            
+      data.append("resim", file);
     } else {
-        alert("Lütfen bir kapak resmi seç!");
-        setLoading(false);
-        return;
+      alert("Lütfen bir kapak resmi seç!");
+      setLoading(false);
+      return;
     }
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/webtoons/ekle", {
+      const response = await fetch(`${API}/webtoons/ekle`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`, 
+          Authorization: `Bearer ${token}`,
         },
         body: data,
       });
@@ -68,7 +69,7 @@ export default function WebtoonEkle() {
       }
 
       alert("✅ Webtoon Başarıyla Eklendi!");
-      router.push("/"); 
+      router.push("/");
     } catch (err) {
       console.error(err);
       alert("❌ Hata: " + err.message);
@@ -80,13 +81,13 @@ export default function WebtoonEkle() {
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center py-10 px-4">
       <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-lg border border-gray-700">
-        
+
         <h1 className="text-3xl font-bold mb-6 text-blue-400 flex items-center gap-2 border-b border-gray-700 pb-4">
           📚 Yeni Webtoon Ekle
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          
+
           {/* İsim */}
           <div>
             <label className="block text-gray-400 font-medium mb-1">Webtoon Adı</label>
@@ -131,21 +132,21 @@ export default function WebtoonEkle() {
           <div>
             <label className="block text-gray-400 font-medium mb-1">Kapak Resmi</label>
             <div className="relative border-2 border-dashed border-gray-600 rounded-lg p-4 hover:bg-gray-750 transition text-center cursor-pointer">
-                <input
+              <input
                 type="file"
                 accept="image/*"
                 onChange={handleFileChange}
                 required
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <div className="flex flex-col items-center">
-                    {preview ? (
-                        <img src={preview} alt="Önizleme" className="h-32 object-cover rounded shadow-md mb-2" />
-                    ) : (
-                        <span className="text-4xl mb-2">🖼️</span>
-                    )}
-                    <span className="text-sm text-gray-400">{file ? file.name : "Resim Seç veya Sürükle"}</span>
-                </div>
+              />
+              <div className="flex flex-col items-center">
+                {preview ? (
+                  <img src={preview} alt="Önizleme" className="h-32 object-cover rounded shadow-md mb-2" />
+                ) : (
+                  <span className="text-4xl mb-2">🖼️</span>
+                )}
+                <span className="text-sm text-gray-400">{file ? file.name : "Resim Seç veya Sürükle"}</span>
+              </div>
             </div>
           </div>
 
@@ -153,11 +154,10 @@ export default function WebtoonEkle() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${
-              loading 
-              ? "bg-gray-600 cursor-not-allowed" 
-              : "bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/30"
-            }`}
+            className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${loading
+                ? "bg-gray-600 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/30"
+              }`}
           >
             {loading ? "Yükleniyor..." : "✨ Webtoon'u Oluştur"}
           </button>

@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # 1. VERİTABANI (PostgreSQL)
+  db:
+    image: postgres:15
+    container_name: webtoon_db
+    restart: always
+    environment:
+      POSTGRES_USER: webtoon_admin
+      POSTGRES_PASSWORD: gizlisifre123
+      POSTGRES_DB: webtoon_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - webtoon_network
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U webtoon_admin -d webtoon_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. BACKEND (FastAPI)
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: webtoon_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # DÜZELTME 1: Şifredeki harf hatası giderildi (gizlisifre123)
+      # DÜZELTME 2: Değişken adını standart "DATABASE_URL" yaptık
+      DB_CONNECTION: postgresql://webtoon_admin:gizlisifre123@db:5432/webtoon_db
+      SECRET_KEY: cok_gizli_anahtar
+    volumes:
+      - ./Backend:/app
+    ports:
+      - "8000:8000"
+    networks:
+      - webtoon_network
+
+  # 3. FRONTEND (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: webtoon_frontend
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      # DÜZELTME 3: Tarayıcının erişebilmesi için "localhost" yaptık
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    networks:
+      - webtoon_network
+
+volumes:
+  postgres_data:
+
+
+networks:
+  webtoon_network:
+    driver: bridge

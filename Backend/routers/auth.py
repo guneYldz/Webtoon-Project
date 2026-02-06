@@ -48,6 +48,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 # 1. Standart Kullanıcı Kontrolü
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    print(f"🔍 AUTH DEBUG: Token received: {token[:20]}...")
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Gecersiz kimlik bilgisi (Token hatali)",
@@ -55,22 +56,28 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub") # Token oluştururken "sub" içine email mi username mi koyduğumuza dikkat etmeliyiz.
-        # Aşağıda düzeltildi: Hem username hem email kontrolü yapılıyor.
+        print(f"🔍 AUTH DEBUG: Payload decoded: {payload}")
+        email: str = payload.get("sub")
+        role: str = payload.get("role")
         
         if email is None:
+            print("❌ AUTH DEBUG: Email (sub) is None")
             raise credentials_exception
-    except JWTError:
+            
+    except JWTError as e:
+        print(f"❌ AUTH DEBUG: JWT Error: {str(e)}")
         raise credentials_exception
 
-    # Önce username ile dene, olmazsa email ile dene (Çünkü token'a bazen username bazen email koyulabiliyor)
+    # Önce username ile dene, olmazsa email ile dene
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
          user = db.query(models.User).filter(models.User.username == email).first()
 
     if user is None:
+        print(f"❌ AUTH DEBUG: User not found in DB for sub: {email}")
         raise credentials_exception
         
+    print(f"✅ AUTH DEBUG: User authenticated: {user.username} (Role: {user.role})")
     return user
 
 # 2. ADMIN Kontrolü

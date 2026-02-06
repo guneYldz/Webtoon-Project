@@ -26,6 +26,9 @@ class User(Base):
     favorites = relationship("Favorite", back_populates="user")
     likes = relationship("Like", back_populates="user")
 
+    def __str__(self):
+        return self.username
+
 # 2. KATEGORİLER
 class Category(Base):
     __tablename__ = "categories"
@@ -61,6 +64,7 @@ class Webtoon(Base):
     view_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     is_featured = Column(Boolean, default=False)
+    is_published = Column(Boolean, default=False)
     banner_image = Column(String, nullable=True)
     
     # 👇 DÜZELTME BURADA: SQL Server hatasını önlemek için String(255) yapıldı
@@ -76,7 +80,7 @@ class Webtoon(Base):
         overlaps="category_links,webtoon_links"
     )
 
-    episodes = relationship("WebtoonEpisode", back_populates="webtoon")
+    episodes = relationship("WebtoonEpisode", back_populates="webtoon", cascade="all, delete-orphan")
     
     category_links = relationship(
         "WebtoonCategory", 
@@ -85,6 +89,9 @@ class Webtoon(Base):
     )
     
     favorites = relationship("Favorite", back_populates="webtoon")
+
+    def __str__(self):
+        return self.title
 
 # 4. WEBTOON-KATEGORİ ARA TABLOSU
 class WebtoonCategory(Base):
@@ -116,14 +123,18 @@ class WebtoonEpisode(Base):
     episode_number = Column(Float, nullable=False) 
     view_count = Column(Integer, default=0)
     likes_count = Column(Integer, default=0)
+    is_published = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     content_text = Column(Text, nullable=True)
 
     webtoon = relationship("Webtoon", back_populates="episodes")
-    images = relationship("EpisodeImage", back_populates="episode")
+    images = relationship("EpisodeImage", back_populates="episode", cascade="all, delete-orphan")
     
     comments = relationship("Comment", back_populates="webtoon_episode")
     likes = relationship("Like", back_populates="episode")
+
+    def __str__(self):
+        return f"{self.title} (Bölüm {self.episode_number})"
 
 # 6. BÖLÜM RESİMLERİ
 class EpisodeImage(Base):
@@ -135,6 +146,9 @@ class EpisodeImage(Base):
     page_order = Column(Integer, nullable=False)
 
     episode = relationship("WebtoonEpisode", back_populates="images")
+
+    def __str__(self):
+        return f"Image {self.page_order} for Episode {self.episode_id}"
 
 # 7. YORUMLAR
 class Comment(Base):
@@ -153,6 +167,9 @@ class Comment(Base):
     novel_chapter = relationship("NovelChapter", back_populates="comments")
     webtoon_episode = relationship("WebtoonEpisode", back_populates="comments")
 
+    def __str__(self):
+        return f"Yorum ({self.id}) - {self.content[:20]}..."
+
 # 8. FAVORİLER
 class Favorite(Base):
     __tablename__ = "favorites"
@@ -169,6 +186,9 @@ class Favorite(Base):
     webtoon = relationship("Webtoon", back_populates="favorites")
     novel = relationship("Novel", back_populates="favorites")
 
+    def __str__(self):
+        return f"Favorite: User {self.user_id}"
+
 # 9. BEĞENİLER
 class Like(Base):
     __tablename__ = "likes"
@@ -179,6 +199,9 @@ class Like(Base):
 
     user = relationship("User", back_populates="likes")
     episode = relationship("WebtoonEpisode", back_populates="likes")
+
+    def __str__(self):
+        return f"Like: User {self.user_id} - Episode {self.episode_id}"
 
 # 10. ROMANLAR
 class Novel(Base):
@@ -194,9 +217,13 @@ class Novel(Base):
     source_url = Column(String(500), nullable=True) 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     is_featured = Column(Boolean, default=False)
+    is_published = Column(Boolean, default=False)
     favorites = relationship("Favorite", back_populates="novel")
-    chapters = relationship("NovelChapter", back_populates="novel")
+    chapters = relationship("NovelChapter", back_populates="novel", cascade="all, delete-orphan")
     banner_image = Column(String, nullable=True)
+
+    def __str__(self):
+        return self.title
 
 class NovelChapter(Base):
     __tablename__ = "novel_chapters"
@@ -205,6 +232,7 @@ class NovelChapter(Base):
     chapter_number = Column(Float) # Float yaptım ki 1.5 gibi ara bölümler olabilsin
     title = Column(String)                  
     content = Column(Text)                  
+    is_published = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     # 👇 İŞTE EKSİK OLAN SÜTUN BUYDU!
@@ -215,3 +243,6 @@ class NovelChapter(Base):
     
     # Novel ile ilişkili yorumları bağladık (Eğer Comment modelin varsa)
     comments = relationship("Comment", back_populates="novel_chapter")
+
+    def __str__(self):
+        return f"{self.title} (Bölüm {self.chapter_number})"

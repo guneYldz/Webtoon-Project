@@ -1,16 +1,16 @@
 import Link from "next/link";
-import FavoriteButton from "@/components/FavoriteButton"; 
+import FavoriteButton from "@/components/FavoriteButton";
 
 // --- 1. SEO AYARLARI (DİNAMİK METADATA) ---
 export async function generateMetadata({ params }) {
-  const { slug } = await params;
-  
+  const { slug } = params;
+
   try {
     const res = await fetch(`http://127.0.0.1:8000/novels/${slug}`);
     const novel = await res.json();
-    
+
     if (!novel || novel.detail) {
-        return { title: "Roman Bulunamadı" };
+      return { title: "Roman Bulunamadı" };
     }
 
     return {
@@ -29,15 +29,15 @@ export async function generateMetadata({ params }) {
 
 // --- 2. SAYFA TASARIMI (SERVER COMPONENT) ---
 export default async function NovelDetail({ params }) {
-  const { slug } = await params;
-  
+  const { slug } = params;
+
   let novel = null;
 
   try {
     // Veriyi her girişte taze çek (cache: no-store)
-    const res = await fetch(`http://127.0.0.1:8000/novels/${slug}`, { cache: 'no-store' }); 
+    const res = await fetch(`http://127.0.0.1:8000/novels/${slug}`, { cache: 'no-store' });
     if (res.ok) {
-        novel = await res.json();
+      novel = await res.json();
     }
   } catch (err) {
     console.error("Bağlantı hatası:", err);
@@ -47,29 +47,29 @@ export default async function NovelDetail({ params }) {
   if (!novel) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">Roman Bulunamadı 😔</div>;
 
   // 👇 İLK BÖLÜMÜ BULMA MANTIĞI
-  const firstChapter = novel.chapters && novel.chapters.length > 0 
-    ? [...novel.chapters].sort((a, b) => a.chapter_number - b.chapter_number)[0] 
+  const firstChapter = novel.chapters && novel.chapters.length > 0
+    ? [...novel.chapters].sort((a, b) => a.chapter_number - b.chapter_number)[0]
     : null;
 
   return (
     <div className="min-h-screen bg-[#121212] pb-20 font-sans">
-      
+
       {/* ÜST KISIM (KAPAK & BİLGİLER) */}
       <div className="relative bg-[#1a1a1a] text-white overflow-hidden shadow-2xl border-b border-gray-800">
         {/* Arka plan resmi (bulanık) */}
-        <div 
+        <div
           className="absolute inset-0 bg-cover bg-center opacity-20 blur-3xl transform scale-110"
           style={{ backgroundImage: `url(http://127.0.0.1:8000/${novel.cover_image})` }}
         ></div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
 
         <div className="relative container mx-auto max-w-7xl px-4 py-16 flex flex-col md:flex-row gap-10 items-center md:items-start z-10">
-          
+
           {/* Kapak Resmi */}
           <div className="w-52 md:w-72 flex-shrink-0 rounded-2xl overflow-hidden border border-purple-500/30 shadow-[0_0_50px_rgba(147,51,234,0.2)]">
-            <img 
-              src={`http://127.0.0.1:8000/${novel.cover_image}`} 
-              alt={novel.title} 
+            <img
+              src={`http://127.0.0.1:8000/${novel.cover_image}`}
+              alt={novel.title}
               className="w-full h-auto object-cover"
             />
           </div>
@@ -79,41 +79,41 @@ export default async function NovelDetail({ params }) {
             <h1 className="text-4xl md:text-6xl font-black mb-4 drop-shadow-lg tracking-tight text-white italic">
               {novel.title}
             </h1>
-            
+
             <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-6">
-               <span className="bg-purple-600/20 text-purple-400 border border-purple-600/50 px-4 py-1.5 rounded-full text-sm font-bold tracking-widest uppercase">Novel</span>
-               <span className={`px-4 py-1.5 rounded-full text-sm font-bold border ${novel.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
-                 {novel.status === 'ongoing' ? 'Devam Ediyor' : 'Tamamlandı'}
-               </span>
-               <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-4 py-1.5 rounded-full text-sm">
-                 ✍️ {novel.author || "Bilinmeyen Yazar"}
-               </span>
+              <span className="bg-purple-600/20 text-purple-400 border border-purple-600/50 px-4 py-1.5 rounded-full text-sm font-bold tracking-widest uppercase">Novel</span>
+              <span className={`px-4 py-1.5 rounded-full text-sm font-bold border ${novel.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
+                {novel.status === 'ongoing' ? 'Devam Ediyor' : 'Tamamlandı'}
+              </span>
+              <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-4 py-1.5 rounded-full text-sm">
+                ✍️ {novel.author || "Bilinmeyen Yazar"}
+              </span>
             </div>
 
             {/* --- BUTONLAR ALANI --- */}
             <div className="flex flex-wrap justify-center md:justify-start gap-4 mb-8">
-                {/* 1. OKU BUTONU (Mor) */}
-                {firstChapter && (
-                    <Link 
-                        href={`/novel/${slug}/bolum/${firstChapter.chapter_number}`}
-                        className="px-8 py-3 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-500 shadow-[0_0_20px_rgba(147,51,234,0.3)] transition-all flex items-center gap-2"
-                    >
-                        📖 Hemen Oku
-                    </Link>
-                )}
-                
-                {/* 2. FAVORİ BUTONU (DİREKT KIRMIZI ❤️) */}
-                <FavoriteButton 
-                    type="novel"      
-                    id={novel.id}     
-                    // 👇 BURASI DEĞİŞTİ: bg-red-600 (Kırmızı) ve text-white (Beyaz) varsayılan oldu.
-                    className="px-8 py-3 rounded-full bg-red-600 text-white border border-red-600 font-bold hover:bg-red-700 hover:border-red-700 shadow-[0_0_15px_rgba(220,38,38,0.4)] transition-all flex items-center gap-2 group"
-                />
+              {/* 1. OKU BUTONU (Mor) */}
+              {firstChapter && (
+                <Link
+                  href={`/novel/${slug}/bolum/${firstChapter.chapter_number}`}
+                  className="px-8 py-3 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-500 shadow-[0_0_20px_rgba(147,51,234,0.3)] transition-all flex items-center gap-2"
+                >
+                  📖 Hemen Oku
+                </Link>
+              )}
+
+              {/* 2. FAVORİ BUTONU (DİREKT KIRMIZI ❤️) */}
+              <FavoriteButton
+                type="novel"
+                id={novel.id}
+                // 👇 BURASI DEĞİŞTİ: bg-red-600 (Kırmızı) ve text-white (Beyaz) varsayılan oldu.
+                className="px-8 py-3 rounded-full bg-red-600 text-white border border-red-600 font-bold hover:bg-red-700 hover:border-red-700 shadow-[0_0_15px_rgba(220,38,38,0.4)] transition-all flex items-center gap-2 group"
+              />
             </div>
 
             {/* Özet Kutusu */}
             <div className="bg-white/5 backdrop-blur-sm p-6 rounded-2xl border border-white/10">
-                <p className="text-gray-300 text-lg leading-relaxed italic">{novel.summary}</p>
+              <p className="text-gray-300 text-lg leading-relaxed italic">{novel.summary}</p>
             </div>
           </div>
         </div>
@@ -123,21 +123,21 @@ export default async function NovelDetail({ params }) {
       <div className="container mx-auto max-w-7xl px-4 py-12">
         <h3 className="text-2xl font-bold text-white mb-8 border-b border-gray-800 pb-4 flex justify-between items-center">
           <span className="flex items-center gap-2">
-             <span className="w-1.5 h-6 bg-purple-600 rounded-full"></span>
-             Bölüm Listesi
+            <span className="w-1.5 h-6 bg-purple-600 rounded-full"></span>
+            Bölüm Listesi
           </span>
           <span className="text-sm text-gray-400 bg-[#1e1e1e] px-3 py-1 rounded-full border border-gray-800">
             {novel.chapters?.length || 0} Bölüm
           </span>
         </h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {novel.chapters && novel.chapters.length > 0 ? (
             // Bölümleri numaraya göre tersten sırala (En yeni en üstte)
             [...novel.chapters].sort((a, b) => b.chapter_number - a.chapter_number).map((ch) => (
-              <Link 
-                key={ch.id} 
-                href={`/novel/${slug}/bolum/${ch.chapter_number}`} 
+              <Link
+                key={ch.id}
+                href={`/novel/${slug}/bolum/${ch.chapter_number}`}
                 className="bg-[#1e1e1e] p-5 rounded-2xl border border-gray-800 hover:border-purple-500/50 hover:bg-[#252525] transition-all flex items-center justify-between group"
               >
                 <div className="flex items-center gap-4">
