@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+// Swiper kütüphanesini çağırıyoruz
 // Swiper kütüphanesini çağırıyoruz
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, EffectFade } from 'swiper/modules';
@@ -29,28 +29,10 @@ const styles = `
   }
 `;
 
-export default function HomeSlider() {
-  const [slides, setSlides] = useState([]);
+export default function HomeSlider({ slides = [] }) {
+  // Verileri artık dışarıdan (Server Component'ten) alıyoruz.
 
-  // 1. Verileri Çek
-  useEffect(() => {
-    const fetchSliderData = async () => {
-      try {
-        const res = await fetch(`${API}/vitrin`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setSlides(data);
-          }
-        }
-      } catch (err) {
-        console.error("Slider hatası:", err);
-      }
-    };
-    fetchSliderData();
-  }, []);
-
-  if (slides.length === 0) return null;
+  if (!slides || slides.length === 0) return null;
 
   return (
     <div className="relative w-full h-[450px] md:h-[550px] rounded-2xl overflow-hidden border border-gray-800 bg-[#121212]">

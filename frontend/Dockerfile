@@ -1,5 +1,7 @@
 # 1. Aşama: Bağımlılıkları Yükle (Node 20'ye güncellendi)
 FROM node:20-alpine AS deps
+# Sharp için gerekli build dependencies
+RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
 # React 19 uyumsuzluğu için legacy-peer-deps şart

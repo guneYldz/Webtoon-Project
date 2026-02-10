@@ -4,3 +4,7 @@ venv/
 .venv/
 static/images/* # Resimleri de gönderme, çok yer kaplar
 !static/images/.gitkeep # Klasör yapısı bozulmasın diye (opsiyonel)
+static/profile_images/*
+static/novel_covers/*
+static/webtoon_covers/*
+static/banners/*

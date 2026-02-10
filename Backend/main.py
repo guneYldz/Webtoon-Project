@@ -77,19 +77,28 @@ class AdminAuth(AuthenticationBackend):
         username = form.get("username")
         password = form.get("password")
 
+        # 🚨 GÜVENLİK DÜZELTMESİ: Boş şifreye izin verme!
+        if not username or not password:
+            return False
+
         with Session(engine) as session:
             user = session.query(models.User).filter(models.User.username == username).first()
 
             if user:
                 password_valid = False
                 try:
+                    # 1. Hash Kontrolü (Argon2 vb.)
                     if pwd_context.verify(password, user.password):
                         password_valid = True
                 except Exception:
+                    # Hash değilse (eski düz metin şifreler için - SADECE GEREKLİYSE)
                     pass
 
-                if not password_valid and user.password == password:
-                    password_valid = True
+                # 2. Düz Metin Kontrolü (Sadece hash DEĞİLSE ve eski sistem varsa)
+                # Güvenlik için: EĞER şifre $ ile başlıyorsa (hash ise) düz metin kontrolü YAPMA!
+                if not password_valid and not user.password.startswith("$"):
+                     if user.password == password:
+                        password_valid = True
 
                 if password_valid and user.role == "admin":
                     request.session.update({"token": f"admin_token_{user.id}"})

@@ -1,42 +1,45 @@
 import { API } from "@/api";
 
+// Force dynamic to avoid build-time issues
+export const dynamic = 'force-dynamic';
+export const revalidate = 3600; // Revalidate every hour
+
 export default async function sitemap() {
-  // 1. Backend'den Tüm Romanları Çek
-  // Eğer API adresin boş gelirse localhost kullan
+  const baseUrl = "http://localhost:3000";
   const apiUrl = API || "http://127.0.0.1:8000";
   let novels = [];
 
   try {
     const res = await fetch(`${apiUrl}/novels/`, {
-      cache: 'no-store' // Hep taze veri olsun
+      cache: 'no-store'
     });
     if (res.ok) {
       novels = await res.json();
     }
   } catch (error) {
     console.error("Sitemap oluşturulurken hata:", error);
+    // Build fails gracefully, returns empty array
   }
 
-  // 2. Sabit Sayfaları Tanımla
+  // Static pages
   const staticRoutes = [
-    "",          // Anasayfa (localhost:3000/)
-    "/kesfet",   // Keşfet Sayfası
-    "/seriler",  // Seriler Listesi
+    "",
+    "/kesfet",
+    "/seriler",
   ].map((route) => ({
-    url: `http://localhost:3000${route}`, // Canlıya geçince burayı site adınla değiştirirsin
+    url: `${baseUrl}${route}`,
     lastModified: new Date(),
     changeFrequency: "daily",
     priority: 1,
   }));
 
-  // 3. Dinamik Roman Sayfalarını Haritaya Ekle
+  // Dynamic novel pages
   const novelRoutes = novels.map((novel) => ({
-    url: `http://localhost:3000/novel/${novel.slug}`,
-    lastModified: new Date(novel.updated_at || novel.created_at), // Varsa güncelleme, yoksa oluşma tarihi
-    changeFrequency: "daily", // Romanlar sık güncellenir
+    url: `${baseUrl}/novel/${novel.slug}`,
+    lastModified: new Date(novel.updated_at || novel.created_at),
+    changeFrequency: "daily",
     priority: 0.8,
   }));
 
-  // 4. Hepsini Birleştir ve Gönder
   return [...staticRoutes, ...novelRoutes];
 }

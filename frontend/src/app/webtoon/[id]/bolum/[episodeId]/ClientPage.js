@@ -165,13 +165,17 @@ export default function ClientWebtoonReadingPage() {
             <div className="max-w-4xl mx-auto bg-[#121212] shadow-2xl flex flex-col">
                 {episode.images && episode.images.length > 0 ? (
                     episode.images.map((imgUrl, index) => (
-                        <img
-                            key={index}
-                            src={imgUrl}
-                            alt={`Sayfa ${index + 1}`}
-                            className="w-full h-auto object-contain block"
-                            loading="lazy"
-                        />
+                        <div key={index} className="relative w-full aspect-[2/3]">
+                            <Image
+                                src={imgUrl}
+                                alt={`Sayfa ${index + 1}`}
+                                fill
+                                className="object-cover"
+                                sizes="100vw"
+                                priority={index < 2} // İlk 2 resim LCP için öncelikli
+                                loading={index < 2 ? undefined : "lazy"}
+                            />
+                        </div>
                     ))
                 ) : (
                     <div className="p-20 text-center text-gray-500">

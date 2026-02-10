@@ -64,7 +64,12 @@ def process_and_save_image(img_url, folder_path, file_name):
             
             image.save(full_path, "WEBP", quality=80)
             print(f"      ✅ Kaydedildi: {file_name}")
-            return full_path.replace("\\", "/")
+            
+            # 🔥 DÜZELTME: Mutlak yol yerine "static/..." formatında göreceli yol döndür
+            # full_path: C:/Users/.../Backend/static/covers/file.webp
+            # BACKEND_DIR: C:/Users/.../Backend
+            relative_path = os.path.relpath(full_path, BACKEND_DIR)
+            return relative_path.replace("\\", "/")
             
     except Exception as e:
         if "cannot identify" not in str(e):
@@ -79,7 +84,7 @@ class AutoBot:
         options = uc.ChromeOptions()
         options.add_argument("--start-maximized")
         # options.add_argument("--headless") # İstersen açabilirsin
-        self.driver = uc.Chrome(options=options)
+        self.driver = uc.Chrome(options=options, version_main=144)
 
     def check_single_series(self, target_url):
         print(f"\n🕵️ [{time.strftime('%H:%M:%S')}] Kontrol ediliyor: {target_url}")
@@ -176,10 +181,10 @@ class AutoBot:
                 if cover_url:
                     cover_path = process_and_save_image(cover_url, os.path.join(BASE_PATH, "covers"), f"{slug}-cover.webp")
                 
-                # 🔥 DÜZELTME: GETDATE() -> NOW() ve is_published=FALSE
+                # 🔥 DÜZELTME: GETDATE() -> NOW() ve is_published=TRUE
                 ins = text("""
                     INSERT INTO webtoons (title, slug, summary, cover_image, status, type, view_count, is_featured, is_published, created_at) 
-                    VALUES (:t, :s, :sum, :c, 'ongoing', 'MANGA', 0, FALSE, FALSE, NOW())
+                    VALUES (:t, :s, :sum, :c, 'ongoing', 'MANGA', 0, FALSE, TRUE, NOW())
                     RETURNING id
                 """)
                 # Postgres'te RETURNING id ile ID'yi geri alırız
@@ -223,10 +228,10 @@ class AutoBot:
                 with engine.connect() as conn:
                     check = conn.execute(text("SELECT id FROM webtoon_episodes WHERE webtoon_id=:w AND episode_number=:e"), {"w":webtoon_id, "e":chap_num}).fetchone()
                     if not check:
-                        # � DÜZELTME: GETDATE() -> NOW() ve is_published=FALSE
+                        # 🔥 DÜZELTME: GETDATE() -> NOW() ve is_published=TRUE (Bölüm de yayınlansın)
                         conn.execute(text("""
                             INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, is_published, created_at) 
-                            VALUES (:w, :e, :t, 0, FALSE, NOW())
+                            VALUES (:w, :e, :t, 0, TRUE, NOW())
                         """), {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
                         conn.commit()
 

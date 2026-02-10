@@ -11,6 +11,12 @@ import schemas
 from database import get_db
 from routers.auth import get_current_admin
 
+
+# --- YARDIMCI: DOĞAL SIRALAMA (1, 2, 10 SORUNU İÇİN) ---
+import re
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
+
 router = APIRouter(
     prefix="/episodes", 
     tags=["Episodes (Bölümler)"]
@@ -70,7 +76,10 @@ def create_episode(
         if not os.path.exists(klasor_yolu):
             os.makedirs(klasor_yolu)
 
-        resimler.sort(key=lambda x: x.filename)
+        try:
+            resimler.sort(key=lambda x: natural_sort_key(x.filename))
+        except:
+            resimler.sort(key=lambda x: x.filename)
 
         for index, resim in enumerate(resimler):
             if not resim.filename:
@@ -177,7 +186,7 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         if os.path.exists(bot_folder_path):
             files = os.listdir(bot_folder_path)
             try:
-                files.sort(key=lambda x: int(x.split('sahne-')[1].split('.')[0]))
+                files.sort(key=natural_sort_key)
             except:
                 files.sort()
 

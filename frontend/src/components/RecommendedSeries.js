@@ -51,10 +51,12 @@ export default function RecommendedSeries({ type = "novel" }) {
                                 <Image
                                     src={`${API}/${item.cover_image}`}
                                     alt={item.title}
-                                    fill
+                                    width={200}
+                                    height={300}
                                     unoptimized={true}
-                                    sizes="(max-width: 768px) 100vw, 33vw"
                                     className="object-cover group-hover:scale-105 transition duration-500"
+                                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 33vw, 200px"
+                                    style={{ height: 'auto' }}
                                 />
                             )}
                         </div>

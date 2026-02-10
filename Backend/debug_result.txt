@@ -1,0 +1,11 @@
+--- Debugging Episode 1 ---
+Episode 1 found: Title='Yılmaz  götten veriyo ', Published=False, WebtoonID=1
+WARNING: Episode 1 is NOT published. This explains the 404 error.
+
+--- Debugging Admin User ---
+Admin found: ID=1, Username='admin'
+Password stored: '$argon2id$v=19$m=65536,t=3,p=4$kXKuldJai5Hyfk9JCWEsJQ$a9LBrxydy/QeSqLFgoU1ZJJTAFaE7DFNO+wC8I+4dzs'
+
+--- Debugging Homepage Webtoons ---
+Featured Webtoons count: 1
+ - yılmaz62 (Published: True)

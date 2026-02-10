@@ -1,82 +1,103 @@
-"use client";
-
-import { useState, useEffect } from "react";
 import Link from "next/link";
-// 👇 DEĞİŞİKLİK 1: Artık tekli kartı değil, Slider Yöneticisini çağırıyoruz
+import Image from "next/image";
 import HomeSlider from "@/components/HomeSlider";
+
+// Force dynamic rendering to avoid build-time fetch errors
+export const dynamic = 'force-dynamic';
 import { API } from "@/api";
 
-export default function Home() {
-  const [allSeries, setAllSeries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [popularList, setPopularList] = useState([]);
+// Server-side fetching için URL (Docker içinden backend'e erişim)
+const SERVER_API = "http://backend:8000";
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [webtoonRes, novelRes] = await Promise.all([
-          fetch(`${API}/webtoons/`),
-          fetch(`${API}/novels/`)
-        ]);
+async function getData() {
+  try {
+    // Docker ortamında backend servisine istek atıyoruz
+    // Eğer localde çalışıyorsanız ve başarısız olursa localhost deneriz (fallback)
+    let webtoonRes, novelRes;
 
-        const webtoonData = await webtoonRes.json();
-        const novelData = await novelRes.json();
+    try {
+      [webtoonRes, novelRes] = await Promise.all([
+        fetch(`${SERVER_API}/webtoons/`, { cache: 'no-store' }), // Güncel veri için no-store
+        fetch(`${SERVER_API}/novels/`, { cache: 'no-store' })
+      ]);
+    } catch (error) {
+      console.log("Docker backend erişimi başarısız, localhost deneniyor...");
+      // Fallback to localhost if backend service is not found (e.g. running locally without docker-compose)
+      [webtoonRes, novelRes] = await Promise.all([
+        fetch(`http://127.0.0.1:8000/webtoons/`, { cache: 'no-store' }),
+        fetch(`http://127.0.0.1:8000/novels/`, { cache: 'no-store' })
+      ]);
+    }
 
-        // Verileri işle
-        const formattedWebtoons = webtoonData.map(item => ({
-          ...item,
-          typeLabel: "WEBTOON",
-          linkPath: "webtoon",
-          latestChapters: item.episodes ? [...item.episodes].sort((a, b) => b.episode_number - a.episode_number).slice(0, 2) : []
-        }));
+    if (!webtoonRes.ok || !novelRes.ok) {
+      throw new Error("API hatasi");
+    }
 
-        const formattedNovels = novelData.map(item => ({
-          ...item,
-          typeLabel: "NOVEL",
-          linkPath: "novel",
-          latestChapters: item.chapters ? [...item.chapters].sort((a, b) => b.chapter_number - a.chapter_number).slice(0, 2) : []
-        }));
+    const webtoonData = await webtoonRes.json();
+    const novelData = await novelRes.json();
 
-        const combinedData = [...formattedWebtoons, ...formattedNovels];
+    // Verileri işle
+    const formattedWebtoons = webtoonData.map(item => ({
+      ...item,
+      typeLabel: "WEBTOON",
+      linkPath: "webtoon",
+      latestChapters: item.episodes ? [...item.episodes].sort((a, b) => b.episode_number - a.episode_number).slice(0, 2) : []
+    }));
 
-        // Sıralama (Güncellenme tarihine göre)
-        combinedData.sort((a, b) => {
-          const dateA = new Date(a.updated_at || a.created_at);
-          const dateB = new Date(b.updated_at || b.created_at);
-          return dateB - dateA;
-        });
+    const formattedNovels = novelData.map(item => ({
+      ...item,
+      typeLabel: "NOVEL",
+      linkPath: "novel",
+      latestChapters: item.chapters ? [...item.chapters].sort((a, b) => b.chapter_number - a.chapter_number).slice(0, 2) : []
+    }));
 
-        setAllSeries(combinedData);
+    const combinedData = [...formattedWebtoons, ...formattedNovels];
 
-        // Vitrin verisini artık HomeSlider kendi çekiyor, burada hesaplamaya gerek yok.
+    // Sıralama (Güncellenme tarihine göre)
+    combinedData.sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at);
+      const dateB = new Date(b.updated_at || b.created_at);
+      return dateB - dateA;
+    });
 
-        // Trend Listesi (Görüntülenmeye göre)
-        const popular = [...combinedData].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 10);
-        setPopularList(popular);
-
-        setLoading(false);
-      } catch (err) {
-        console.error("Veriler çekilemedi:", err);
-        setLoading(false);
+    // Vitrin (Slider) verisi (HomeSlider artık prop alıyor, ama biz yine de tüm veriyi gönderelim, o filtrelesin veya direk vitrin endpointinden çekelim)
+    // HomeSlider.js mantığı değişti, Vitrin endpointini burada çekip ona yollamalıyız.
+    // Ancak optimize olsun diye direk vitrin endpointini de çekelim.
+    let vitrinData = [];
+    try {
+      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, { cache: 'no-store' }).catch(() => fetch(`http://127.0.0.1:8000/vitrin`, { cache: 'no-store' }));
+      if (vitrinRes.ok) {
+        vitrinData = await vitrinRes.json();
       }
-    };
+    } catch (e) { console.error("Vitrin fetch error", e); }
 
-    fetchData();
-  }, []);
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-    </div>
-  );
+    // Trend Listesi (Görüntülenmeye göre)
+    const popularList = [...combinedData].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 10);
+
+    return { allSeries: combinedData, popularList, vitrinData };
+
+  } catch (err) {
+    console.error("Veri çekme hatası:", err);
+    return { allSeries: [], popularList: [], vitrinData: [] };
+  }
+}
+
+export const metadata = {
+  title: "Kaos Manga | Ana Sayfa",
+  description: "En yeni Webtoon ve Novelleri Kaos Manga ile Türkçe oku.",
+};
+
+export default async function Home() {
+  const { allSeries, popularList, vitrinData } = await getData();
 
   return (
     <div className="min-h-screen font-sans bg-[#121212] pb-20">
       <div className="container mx-auto max-w-7xl px-4 py-8">
 
-        {/* 👇 DEĞİŞİKLİK 2: HERO VİTRİN - Slider Bileşeni Eklendi */}
+        {/* HERO VİTRİN - Slider Bileşeni */}
         <div className="mb-12">
-          <HomeSlider />
+          <HomeSlider slides={vitrinData} />
         </div>
 
         <div className="flex flex-col lg:flex-row gap-10 items-start">
@@ -99,23 +120,26 @@ export default function Home() {
 
                     {/* Kapak Görseli */}
                     <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-gray-600 transition-all duration-300">
-                      <Link href={`/${item.linkPath}/${item.slug || item.id}`}>
-                        <img
+                      <Link href={`/${item.linkPath}/${item.slug || item.id}`} className="relative block w-full h-full">
+                        <Image
                           src={`${API}/${item.cover_image}`}
                           alt={item.title}
-                          className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
+                          fill
+                          className="object-cover transition duration-500 group-hover:scale-110"
+                          sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+                          unoptimized={true} // Docker network safe
                         />
                       </Link>
 
                       {/* Tür Etiketi */}
-                      <div className="absolute top-2 left-2">
+                      <div className="absolute top-2 left-2 z-10">
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'
                           }`}>
                           {item.typeLabel}
                         </span>
                       </div>
 
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity pointer-events-none"></div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity pointer-events-none z-0"></div>
                     </div>
 
                     {/* Bilgiler ve Son Bölümler */}
@@ -168,8 +192,15 @@ export default function Home() {
                     <div className={`text-4xl font-black italic w-10 flex-shrink-0 text-center ${index < 3 ? 'text-transparent bg-clip-text bg-gradient-to-b from-blue-400 to-purple-600' : 'text-gray-800'}`}>
                       {index + 1}
                     </div>
-                    <div className="w-12 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-gray-800 group-hover:border-blue-500 transition-colors">
-                      <img src={`${API}/${w.cover_image}`} className="w-full h-full object-cover" alt="" />
+                    <div className="w-12 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-gray-800 group-hover:border-blue-500 transition-colors relative">
+                      {/* CSS img yerine Next Image */}
+                      <Image
+                        src={`${API}/${w.cover_image}`}
+                        alt={w.title}
+                        fill
+                        className="object-cover"
+                        unoptimized={true}
+                      />
                     </div>
                     <div className="flex flex-col justify-center min-w-0">
                       <h4 className="text-sm font-bold text-gray-200 group-hover:text-blue-400 transition truncate leading-tight">

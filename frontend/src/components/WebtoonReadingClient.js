@@ -14,12 +14,12 @@ import RecommendedSeries from "@/components/RecommendedSeries";
 const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
 
 // Props: params.id (seriesId) ve params.episodeId (episodeId)
-export default function WebtoonReadingClient({ seriesId, episodeId }) {
+export default function WebtoonReadingClient({ seriesId, episodeId, initialEpisode }) {
     const router = useRouter();
 
-    const [episode, setEpisode] = useState(null);
+    const [episode, setEpisode] = useState(initialEpisode || null);
     const [allEpisodes, setAllEpisodes] = useState([]); // Tüm bölümleri tutacak state
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!initialEpisode);
     const [error, setError] = useState(null);
 
     const [showNavbar, setShowNavbar] = useState(true);
@@ -41,30 +41,35 @@ export default function WebtoonReadingClient({ seriesId, episodeId }) {
 
     // --- 2. VERİ ÇEKME (AKILLI SAYAÇLI) ---
     useEffect(() => {
-        if (!episodeId) return;
+        const fetchData = async () => {
+            // API Adresi - CLIENT tarafında LOCALHOST kullan
+            const apiUrl = API || "http://127.0.0.1:8000";
 
-        const fetchEpisode = async () => {
-            try {
-                setLoading(true);
-                setError(null);
+            // Eğer initialEpisode yoksa, client'ta da episode'u çek
+            if (!initialEpisode && episodeId) {
+                try {
+                    setLoading(true);
+                    setError(null);
 
-                // API Adresi Güvenliği
-                const apiUrl = API || "http://127.0.0.1:8000";
+                    const res = await fetch(`${apiUrl}/episodes/${episodeId}`, {
+                        cache: "no-store",
+                        credentials: "include"
+                    });
 
-                // 🔥 KRİTİK NOKTA: credentials: "include" eklendi.
-                const res = await fetch(`${apiUrl}/episodes/${episodeId}`, {
-                    cache: "no-store",      // Eski veriyi tutma
-                    credentials: "include"  // Backend'e kimlik gönder (F5 koruması için)
-                });
+                    if (!res.ok) throw new Error("Bölüm yüklenemedi.");
+                    const data = await res.json();
+                    setEpisode(data);
+                } catch (err) {
+                    console.error("Hata:", err);
+                    setError("Bölüm bulunamadı veya yüklenirken hata oluştu.");
+                    setLoading(false);
+                    return;
+                }
+            }
 
-                if (!res.ok) throw new Error("Bölüm yüklenemedi.");
-                const data = await res.json();
-                setEpisode(data);
-
-                // Ek olarak tüm bölümleri çek (Dropdown için)
-                const webtoonId = data.webtoon_id || seriesId;
-
-                if (webtoonId) {
+            // Dropdown için tüm bölümleri çek (her durumda gerekli)
+            if ((episode || initialEpisode) && seriesId) {
+                try {
                     const webtoonRes = await fetch(`${apiUrl}/webtoons/${seriesId}`);
                     if (webtoonRes.ok) {
                         const webtoonData = await webtoonRes.json();
@@ -73,18 +78,16 @@ export default function WebtoonReadingClient({ seriesId, episodeId }) {
                             setAllEpisodes(sortedEpisodes);
                         }
                     }
+                } catch (err) {
+                    console.error("Bölüm listesi çekilemedi:", err);
                 }
-
-            } catch (err) {
-                console.error("Hata:", err);
-                setError("Bölüm bulunamadı veya yüklenirken hata oluştu.");
-            } finally {
-                setLoading(false);
             }
+
+            setLoading(false);
         };
 
-        fetchEpisode();
-    }, [episodeId, seriesId]);
+        fetchData();
+    }, [episodeId, seriesId, initialEpisode]);
 
     // --- 3. SCROLL BAR MANTIĞI ---
     useEffect(() => {
@@ -102,8 +105,11 @@ export default function WebtoonReadingClient({ seriesId, episodeId }) {
     }, []);
 
     if (loading) return (
-        <div className="min-h-screen bg-[#121212] flex items-center justify-center text-blue-500 animate-pulse font-bold tracking-widest">
-            YÜKLENİYOR...
+        <div className="min-h-screen bg-[#121212] flex items-center justify-center text-gray-400">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p>Yükleniyor...</p>
+            </div>
         </div>
     );
 
@@ -119,10 +125,10 @@ export default function WebtoonReadingClient({ seriesId, episodeId }) {
     if (!episode) return null;
 
     return (
-        <div className={`min-h-screen bg-[#121212] text-gray-200 pb-40 ${lato.className}`}>
+        <div className={`min-h-screen bg-[#121212] text-gray-200 pb-24 ${lato.className}`} style={{ paddingBottom: '64px' }}>
 
             {/* BREADCRUMBS (Sayfanın en tepesinde) */}
-            <div className="container mx-auto px-4 mt-4">
+            <div className="container mx-auto px-4 mt-4" style={{ minHeight: '60px' }}>
                 <Breadcrumbs items={[
                     { label: "Anasayfa", href: "/" },
                     { label: "Webtoonlar", href: "/seriler" },
@@ -171,23 +177,18 @@ export default function WebtoonReadingClient({ seriesId, episodeId }) {
             <div className="max-w-4xl mx-auto bg-[#121212] shadow-2xl flex flex-col">
                 {episode.images && episode.images.length > 0 ? (
                     episode.images.map((imgUrl, index) => (
-
-                        <div key={index} className="relative w-full h-auto">
-                            <Image
-                                src={imgUrl.startsWith("http") ? imgUrl : `${API}/${imgUrl}`}
-                                alt={`Sayfa ${index + 1}`}
-                                width={800}
-                                height={1200}
-                                quality={75}
-                                priority={index < 2}
-                                loading={index < 2 ? "eager" : "lazy"}
-                                className="w-full h-auto"
-                                unoptimized={true}
-                            />
-                        </div>
+                        <img
+                            key={index}
+                            src={imgUrl.startsWith("http") ? imgUrl : `${API}/${imgUrl}`}
+                            alt={`Sayfa ${index + 1}`}
+                            width="800"
+                            height="2000"
+                            className="w-full h-auto block"
+                            loading={index < 2 ? "eager" : "lazy"}
+                        />
                     ))
                 ) : (
-                    <div className="p-20 text-center text-gray-500">
+                    <div className="p-20 text-center text-gray-500" style={{ minHeight: '600px' }}>
                         <p>Bu bölüme henüz görsel yüklenmemiş.</p>
                     </div>
                 )}

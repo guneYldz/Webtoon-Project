@@ -1,7 +1,12 @@
-/* Tailwind CSS loaded via CDN in layout.tsx */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Koyu Tema Ayarları */
 
 /* Koyu Tema Ayarları */
 body {
+  margin: 0;
   background-color: #121212;
   /* Çok koyu gri (neredeyse siyah) */
   color: #e0e0e0;
@@ -30,8 +35,7 @@ body {
 nav[aria-label="breadcrumb"],
 .breadcrumb,
 .breadcrumbs,
-div[class*="breadcrumb"],
-div:has(> a[href="/"]) {
+div[class*="breadcrumb"] {
   background-color: transparent !important;
   color: #e5e7eb !important;
   border-bottom: 1px solid #1f2937;

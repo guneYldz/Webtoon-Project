@@ -24,12 +24,12 @@ export default function ReadingHero({
         : `${API}/${coverImage}`;
 
     return (
-        <div className="relative w-full py-12 md:py-20 overflow-hidden bg-[#121212]">
+        <div className="relative w-full py-12 md:py-20 overflow-hidden bg-[#121212]" style={{ minHeight: '500px' }}>
 
             {/* Arkadaki ışık efekti */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-blue-900/10 blur-[120px] rounded-full pointer-events-none"></div>
 
-            <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6">
+            <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6" style={{ minHeight: '400px' }}>
 
                 {/* Navigasyon - DARK MODE İÇİN DÜZELTİLDİ */}
                 <div className="w-full bg-[#121212] py-2 px-4">
@@ -47,12 +47,16 @@ export default function ReadingHero({
                 {/* Kapak Resmi */}
                 {coverImage && (
                     <div className="relative group">
-                        <div className="absolute -inset-4 bg-blue-600/10 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition duration-700"></div>
-                        <div className="relative w-32 md:w-48 aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border border-gray-700 group-hover:border-gray-500 transition-colors">
+                        <div className="absolute -inset-4 bg-blue-600/10 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition duration-700" style={{ willChange: 'opacity' }}></div>
+                        <div className="relative w-32 md:w-48 aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border border-gray-700 group-hover:border-gray-500 transition-colors bg-gray-800" style={{ minHeight: '192px' }}>
                             <img
                                 src={finalImage}
                                 alt={seriesTitle}
+                                width="200"
+                                height="300"
+                                loading="eager"
                                 className="w-full h-full object-cover"
+                                style={{ maxWidth: '100%', height: 'auto' }}
                             />
                         </div>
                     </div>

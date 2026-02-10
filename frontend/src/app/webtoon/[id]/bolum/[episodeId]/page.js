@@ -4,16 +4,17 @@ import WebtoonReadingClient from "@/components/WebtoonReadingClient";
 // 1. Next.js'in özel SEO fonksiyonu
 export async function generateMetadata({ params }) {
   const { id, episodeId } = params;
-  const apiUrl = API || "http://127.0.0.1:8000";
+  // Docker container içinden backend'e erişim için (Server-Side)
+  const apiUrl = "http://backend:8000";
 
   try {
     const res = await fetch(`${apiUrl}/episodes/${episodeId}`);
-    if (!res.ok) return { title: "Bölüm Bulunamadı" };
+    if (!res.ok) return { title: "Bölüm Bulunamadı | Kaos Manga" };
 
     const episode = await res.json();
 
     return {
-      title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} Oku | Site Adı`,
+      title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} Oku | Kaos Manga`,
       description: `${episode.webtoon_title} serisinin ${episode.episode_number}. bölümünü yüksek kalitede oku.`,
       alternates: {
         canonical: `http://localhost:3000/webtoon/${id}/bolum/${episodeId}`,
@@ -32,7 +33,8 @@ export async function generateMetadata({ params }) {
 
 export default async function WebtoonReadingPage({ params }) {
   const { id, episodeId } = params;
-  const apiUrl = API || "http://127.0.0.1:8000";
+  // Docker container içinden backend'e erişim için (Server-Side)
+  const apiUrl = "http://backend:8000";
 
   // Schema için veriyi çek
   let episode = null;
@@ -40,6 +42,26 @@ export default async function WebtoonReadingPage({ params }) {
     const res = await fetch(`${apiUrl}/episodes/${episodeId}`);
     if (res.ok) {
       episode = await res.json();
+
+      // 🔥 KRİTİK: Backend URL'lerini Client'ın kullanabileceği localhost URL'lerine çevir
+      if (episode) {
+        const clientApiUrl = "http://localhost:8000";
+
+        // Cover image URL'ini değiştir
+        if (episode.webtoon_cover && episode.webtoon_cover.includes("backend:8000")) {
+          episode.webtoon_cover = episode.webtoon_cover.replace("http://backend:8000", clientApiUrl);
+        }
+
+        // Episode images array'ini değiştir
+        if (episode.images && Array.isArray(episode.images)) {
+          episode.images = episode.images.map(imgUrl => {
+            if (typeof imgUrl === 'string' && imgUrl.includes("backend:8000")) {
+              return imgUrl.replace("http://backend:8000", clientApiUrl);
+            }
+            return imgUrl;
+          });
+        }
+      }
     }
   } catch (err) {
     console.error("Schema hata:", err);
@@ -68,7 +90,7 @@ export default async function WebtoonReadingPage({ params }) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       )}
-      <WebtoonReadingClient seriesId={id} episodeId={episodeId} />
+      <WebtoonReadingClient seriesId={id} episodeId={episodeId} initialEpisode={episode} />
     </>
   );
 }

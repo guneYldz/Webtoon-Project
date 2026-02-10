@@ -1,42 +1,42 @@
-from sqlalchemy import create_engine, text
+
+from database import SessionLocal
+from models import User
 from passlib.context import CryptContext
-import os
-from dotenv import load_dotenv
 
-# --- AYARLAR ---
-DB_CONNECTION = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
-pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
-
-engine = create_engine(DB_CONNECTION)
+# Şifreleme (Auth.py ile aynı)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 def create_admin():
-    username = "bot123@gmail.com"
-    password = "62dersim62"
-    hashed_password = pwd_context.hash(password)
-    
-    print(f"🚀 Admin oluşturuluyor: {username}...")
-    
-    with engine.connect() as conn:
-        # Önce bu kullanıcı var mı kontrol et
-        check = conn.execute(text("SELECT id FROM users WHERE username = :u"), {"u": username}).fetchone()
+    db = SessionLocal()
+    try:
+        # Önce kontrol et
+        existing_user = db.query(User).filter(User.username == "admin").first()
+        if existing_user:
+            print("❌ HATA: 'admin' kullanıcısı zaten var!")
+            return
+
+        # Yeni admin oluştur
+        new_admin = User(
+            username="admin",
+            email="admin@example.com",
+            password=pwd_context.hash("admin123"), # Şifre: admin123
+            role="admin",
+            is_active=True
+        )
+        db.add(new_admin)
+        db.commit()
         
-        if check:
-            print("⚠️ Bu kullanıcı zaten var! Şifresi güncelleniyor...")
-            conn.execute(
-                text("UPDATE users SET password = :p, role = 'admin' WHERE id = :id"),
-                {"p": hashed_password, "id": check[0]}
-            )
-        else:
-            conn.execute(
-                text("INSERT INTO users (username, email, password, role, is_active) VALUES (:u, :e, :p, 'admin', True)"),
-                {"u": username, "e": username, "p": hashed_password}
-            )
+        print("\n" + "="*40)
+        print("✅ BAŞARILI: Admin kullanıcısı oluşturuldu!")
+        print("👤 Kullanıcı Adı: admin")
+        print("📧 E-posta:      admin@example.com")
+        print("🔑 Şifre:        admin123")
+        print("="*40 + "\n")
         
-        conn.commit()
-        print(f"✅ Başarılı! Artık '{username}' ve '{password}' ile giriş yapabilirsin.")
+    except Exception as e:
+        print(f"❌ HATA OLUŞTU: {e}")
+    finally:
+        db.close()
 
 if __name__ == "__main__":
-    try:
-        create_admin()
-    except Exception as e:
-        print(f"❌ HATA: {e}")
+    create_admin()
