@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import FavoriteButton from "@/components/FavoriteButton";
 
 // --- 1. SEO AYARLARI (DİNAMİK METADATA) ---
@@ -6,7 +7,8 @@ export async function generateMetadata({ params }) {
   const { slug } = params;
 
   try {
-    const res = await fetch(`http://127.0.0.1:8000/novels/${slug}`);
+    const apiUrl = typeof window === 'undefined' ? 'http://webtoon_backend:8000' : 'http://127.0.0.1:8000';
+    const res = await fetch(`${apiUrl}/novels/${slug}`);
     const novel = await res.json();
 
     if (!novel || novel.detail) {
@@ -34,8 +36,17 @@ export default async function NovelDetail({ params }) {
   let novel = null;
 
   try {
-    // Veriyi her girişte taze çek (cache: no-store)
-    const res = await fetch(`http://127.0.0.1:8000/novels/${slug}`, { cache: 'no-store' });
+    // 🔥 DOCKER FIX: Server Component Docker network'te çalışıyor
+    // Client-side: localhost:8000 ✅
+    // Server-side (SSR): webtoon_backend:8000 ✅
+    const apiUrl = typeof window === 'undefined'
+      ? 'http://webtoon_backend:8000'  // Server-side (Docker network)
+      : 'http://127.0.0.1:8000';        // Client-side (browser)
+
+    const res = await fetch(`${apiUrl}/novels/${slug}`, {
+      cache: 'no-store',
+      credentials: typeof window === 'undefined' ? 'omit' : 'include'
+    });
     if (res.ok) {
       novel = await res.json();
     }

@@ -31,6 +31,7 @@ async def create_webtoon(
     status: str = Form("ongoing"),
     is_published: bool = Form(False),
     is_featured: bool = Form(False),
+    source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -75,6 +76,7 @@ async def create_webtoon(
             status=status,
             is_published=is_published,
             is_featured=is_featured,
+            source_url=source_url,
             cover_image=cover_path,
             banner_image=banner_path
         )
@@ -168,6 +170,7 @@ async def update_webtoon(
     status: Optional[str] = Form(None),
     is_published: Optional[bool] = Form(None),
     is_featured: Optional[bool] = Form(None),
+    source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -187,6 +190,8 @@ async def update_webtoon(
         webtoon.is_published = is_published
     if is_featured is not None:
         webtoon.is_featured = is_featured
+    if source_url is not None:
+        webtoon.source_url = source_url
     
     if cover_image and cover_image.filename:
         ext = cover_image.filename.split(".")[-1]
@@ -304,6 +309,7 @@ async def create_novel(
     status: str = Form("ongoing"),
     is_published: bool = Form(False),
     is_featured: bool = Form(False),
+    source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -341,6 +347,7 @@ async def create_novel(
             status=status,
             is_published=is_published,
             is_featured=is_featured,
+            source_url=source_url,
             cover_image=cover_path,
             banner_image=banner_path
         )
@@ -363,6 +370,7 @@ async def update_novel(
     status: Optional[str] = Form(None),
     is_published: Optional[bool] = Form(None),
     is_featured: Optional[bool] = Form(None),
+    source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -384,6 +392,8 @@ async def update_novel(
         novel.is_published = is_published
     if is_featured is not None:
         novel.is_featured = is_featured
+    if source_url is not None:
+        novel.source_url = source_url
     
     if cover_image and cover_image.filename:
         ext = cover_image.filename.split(".")[-1]

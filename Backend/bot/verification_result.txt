@@ -1,0 +1,13 @@
+Starting Verification...
+🤖 Initializing Bot...
+✅ Bot initialized.
+
+==================================================
+TEST 1: Novelight (API Method)
+==================================================
+
+==================================================
+TEST 2: LightNovelPub (Selenium Fallback)
+==================================================
+
+Testing Complete.

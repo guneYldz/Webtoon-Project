@@ -58,6 +58,8 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       # DÜZELTME 4: DevDependencies (Tailwind) yüklensin diye development modu zorluyoruz
       NODE_ENV: development
+      # FIX: ENOMEM hatasını önlemek için bellek limitini artırıyoruz
+      NODE_OPTIONS: "--max-old-space-size=4096"
     volumes:
       - ./frontend:/app
       - /app/node_modules

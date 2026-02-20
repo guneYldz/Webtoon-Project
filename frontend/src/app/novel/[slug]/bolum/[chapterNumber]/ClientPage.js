@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import CommentSection from "@/components/CommentSection";
 import Link from "next/link";
+import Image from "next/image";
 import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
 import { API } from "@/api";
 
@@ -143,11 +144,14 @@ export default function ClientNovelReadingPage() {
                 <div className="relative container mx-auto max-w-6xl px-6 py-16 flex flex-col items-center gap-8 z-10 text-center">
                     {/* Kapak Resmi (Varsa) */}
                     {chapter.novel_cover && (
-                        <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl transform hover:scale-105 transition-transform duration-500">
-                            <img
+                        <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl transform hover:scale-105 transition-transform duration-500 relative aspect-[2/3]">
+                            <Image
                                 src={`${API}/${chapter.novel_cover}`}
-                                alt={chapter.novel_title}
-                                className="w-full h-auto object-cover"
+                                alt={chapter.novel_title || "Novel Cover"}
+                                className="object-cover"
+                                fill
+                                priority={true}
+                                unoptimized={true}
                             />
                         </div>
                     )}
@@ -215,25 +219,25 @@ export default function ClientNovelReadingPage() {
                 <div className="flex justify-center mt-12 opacity-40 text-purple-500 text-2xl">❖</div>
 
                 {/* --- YENİ: ALT NAVİGASYON --- */}
-                <div className="flex items-center justify-between text-gray-400 font-medium text-sm md:text-base border-t border-b border-gray-800 py-6 mt-12 font-sans">
+                <div className="grid grid-cols-3 items-center text-gray-400 font-medium text-sm md:text-base border-t border-b border-gray-800 py-6 mt-12 font-sans">
 
                     <button
                         onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)}
                         disabled={!chapter.prev_chapter}
-                        className={`flex items-center gap-2 hover:text-white transition ${!chapter.prev_chapter ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        className={`flex items-center gap-2 hover:text-white transition justify-self-start ${!chapter.prev_chapter ? 'opacity-30 cursor-not-allowed' : ''}`}
                     >
                         <span>‹</span>
                         <span>Önceki</span>
                     </button>
 
-                    <Link href={`/novel/${slug}`} className="hover:text-white transition border-l border-r border-gray-800 px-6 md:px-12 text-center">
+                    <Link href={`/novel/${slug}`} className="hover:text-white transition border-l border-r border-gray-800 px-6 md:px-12 text-center justify-self-center">
                         Seri Sayfasına Dön
                     </Link>
 
                     <button
                         onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)}
                         disabled={!chapter.next_chapter}
-                        className={`flex items-center gap-2 hover:text-white transition ${!chapter.next_chapter ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        className={`flex items-center gap-2 hover:text-white transition justify-self-end ${!chapter.next_chapter ? 'opacity-30 cursor-not-allowed' : ''}`}
                     >
                         <span>Sonraki</span>
                         <span>›</span>
@@ -257,21 +261,21 @@ export default function ClientNovelReadingPage() {
                     }`}
             >
                 <div className="flex justify-center w-full">
-                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-16 px-6">
+                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] grid grid-cols-3 items-center text-white h-16 px-6">
 
-                        <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group">
+                        <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group justify-self-start">
                             <span className="text-xl group-hover:-translate-x-1 transition">←</span>
                             <span className={`hidden sm:inline ${lato.className} text-xs font-bold tracking-widest uppercase`}>Seri</span>
                         </Link>
 
-                        <div className="flex flex-col items-center justify-center px-4">
+                        <div className="flex flex-col items-center justify-center px-4 justify-self-center">
                             <h2 className={`text-xs font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>
                                 {chapter.title}
                             </h2>
                             <span className="text-[10px] text-purple-500 font-black tracking-widest">#{chapter.chapter_number}</span>
                         </div>
 
-                        <div className={`flex gap-3 ${lato.className}`}>
+                        <div className={`flex gap-3 ${lato.className} justify-self-end`}>
                             <button
                                 onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)}
                                 disabled={!chapter.prev_chapter}

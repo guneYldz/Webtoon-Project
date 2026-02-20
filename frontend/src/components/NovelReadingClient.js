@@ -104,7 +104,25 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
         } catch (e) { return "Tarih Hatalı"; }
     };
 
-    if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-purple-500 font-bold animate-pulse text-xl tracking-widest">YÜKLENİYOR...</div>;
+    if (loading) return (
+        <div className="min-h-screen bg-[#121212] font-sans pb-40 overflow-x-hidden">
+            {/* Loading Header Preservation */}
+            <div className="relative bg-[#1a1a1a] shadow-2xl border-b border-gray-800 mb-12 h-[400px] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-gray-400 text-sm animate-pulse tracking-widest">Bölüm Yükleniyor...</p>
+                </div>
+            </div>
+
+            <main className="container mx-auto max-w-4xl px-4 md:px-8">
+                <div className="space-y-4 opacity-10">
+                    <div className="h-4 bg-gray-700 rounded w-full"></div>
+                    <div className="h-4 bg-gray-700 rounded w-5/6"></div>
+                    <div className="h-4 bg-gray-700 rounded w-full"></div>
+                </div>
+            </main>
+        </div>
+    );
     if (!chapter) return <div className="min-h-screen bg-[#121212] text-white flex justify-center items-center">Bölüm Bulunamadı</div>;
 
     return (
@@ -126,15 +144,11 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                     </div>
 
                     {chapter.novel_cover && (
-                        <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl transform hover:scale-105 transition-transform duration-500 relative aspect-[2/3]">
-                            <Image
+                        <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl hover:scale-105 transition-transform duration-500">
+                            <img
                                 src={`${API}/${chapter.novel_cover}`}
                                 alt={chapter.novel_title}
-                                fill
-                                unoptimized={true}
-                                sizes="(max-width: 768px) 160px, 192px"
-                                className="object-cover"
-                                priority
+                                className="w-full h-auto object-cover"
                             />
                         </div>
                     )}
@@ -222,9 +236,9 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
             </div>
 
             {/* 4. SABİT ALT BAR */}
-            <div className={`fixed bottom-0 left-0 w-full z-[999] transition-transform duration-300 ease-in-out ${showNavbar ? "translate-y-0" : "translate-y-full"}`}>
-                <div className="flex justify-center w-full">
-                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-16 px-6">
+            <div className={`fixed bottom-0 left-0 w-full z-[999] h-16 transition-transform duration-300 ${showNavbar ? "translate-y-0" : "translate-y-full"}`}>
+                <div className="flex justify-center w-full h-full">
+                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-full px-6">
                         <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group">
                             <span className="text-xl group-hover:-translate-x-1 transition">←</span>
                             <span className={`hidden sm:inline ${lato.className} text-xs font-bold tracking-widest uppercase`}>Seri</span>

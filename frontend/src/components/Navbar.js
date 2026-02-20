@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image"; // Image import edildi
 import { usePathname, useRouter } from "next/navigation";
@@ -9,6 +10,9 @@ export default function Navbar() {
   const [user, setUser] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
+  const [isMounted, setIsMounted] = useState(false);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -49,13 +53,29 @@ export default function Navbar() {
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target) &&
+        buttonRef.current && !buttonRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Portal için mount durumu ve pozisyon hesaplama
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isDropdownOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 12, // 12px gap
+        right: window.innerWidth - rect.right
+      });
+    }
+  }, [isDropdownOpen]);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -67,7 +87,7 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`bg-[#1a1a1a] border-b border-gray-800 z-[100] h-20 max-h-20 overflow-hidden shadow-md ${isReadingPage ? "relative" : "sticky top-0"
+      className={`bg-[#1a1a1a] border-b border-gray-800 z-[1000] h-20 max-h-20 shadow-md ${isReadingPage ? "relative" : "sticky top-0"
         }`}
     >
       <div className="container mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
@@ -75,13 +95,13 @@ export default function Navbar() {
         {/* SOL: LOGO */}
         <Link href="/" className="flex items-center gap-4 group">
           {/* Logo - Optimized size */}
-          <div className="relative w-20 h-20 group-hover:scale-105 transition duration-300" style={{ width: '80px', height: '80px', minWidth: '80px', minHeight: '80px' }}>
+          <div className="relative w-16 h-16 group-hover:scale-105 transition duration-300">
             <Image
               src="/logo.png"
               alt="Kaos Manga Logo"
               fill
               className="object-contain"
-              sizes="80px"
+              sizes="64px"
               quality={100}
               priority
             />
@@ -112,10 +132,11 @@ export default function Navbar() {
         </div>
 
         {/* SAĞ: PROFİL ALANI */}
-        <div className="relative" ref={dropdownRef}>
+        <div className="relative">
           {user ? (
             <div>
               <button
+                ref={buttonRef}
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 py-1.5 px-3 rounded-full border border-gray-700 transition duration-300 focus:outline-none"
               >
@@ -132,8 +153,16 @@ export default function Navbar() {
                 </svg>
               </button>
 
-              {isDropdownOpen && (
-                <div className="absolute right-0 mt-3 w-64 bg-[#1e1e1e] border border-gray-700 rounded-lg shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              {/* Dropdown Portal ile render ediliyor - hiçbir overflow veya z-index sorunu yok! */}
+              {isDropdownOpen && isMounted && createPortal(
+                <div
+                  ref={dropdownRef}
+                  className="fixed w-64 bg-[#1e1e1e] border border-gray-700 rounded-lg shadow-2xl py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
+                  style={{
+                    top: `${dropdownPosition.top}px`,
+                    right: `${dropdownPosition.right}px`
+                  }}
+                >
 
                   <div className="px-4 py-2 border-b border-gray-700 mb-1">
                     <div className="flex justify-between items-center mb-1">
@@ -195,7 +224,8 @@ export default function Navbar() {
                   <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300 transition text-left">
                     🚪 Çıkış Yap
                   </button>
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           ) : (

@@ -122,25 +122,28 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
     
-    # --- AKILLI SAYAÇ SİSTEMİ (Cookie Kontrolü) ---
-    # ... (sayaç kodu aynı kalır)
-    cookie_name = f"viewed_episode_{episode_id}"
-    zaten_okudu = request.cookies.get(cookie_name)
-
-    if not zaten_okudu:
-        # Daha önce okumamış, sayacı artır!
-        if bolum.view_count is None: bolum.view_count = 0
-        bolum.view_count += 1 
+    
+    # 🔥 YENİ SİSTEM: IP Tabanlı View Count Rate Limiting
+    from utils.view_tracker import view_tracker
+    
+    client_ip = request.client.host
+    
+    # Episode view count (bölüm bazında)
+    if view_tracker.should_count_view(client_ip, "episode", episode_id):
+        # İlk kez izleniyor veya 1 saat geçmiş
+        if bolum.view_count is None:
+            bolum.view_count = 0
+        bolum.view_count += 1
         
+        # Webtoon view count da artır (bölüm okunduğunda seri de sayılır)
         if bolum.webtoon:
-            if bolum.webtoon.view_count is None: bolum.webtoon.view_count = 0
+            if bolum.webtoon.view_count is None:
+                bolum.webtoon.view_count = 0
             bolum.webtoon.view_count += 1
-            
-        db.commit()
         
-        # Kullanıcıya "Okudu" damgası (Cookie) yapıştır
-        response.set_cookie(key=cookie_name, value="true", max_age=3600)
+        db.commit()
     # ----------------------------------------------------
+
 
     # 3. Navigasyon (Önceki/Sonraki Bölüm)
     sonraki_bolum = db.query(models.WebtoonEpisode).filter(
@@ -210,3 +213,4 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         "next_episode_id": sonraki_bolum.id if sonraki_bolum else None,
         "prev_episode_id": onceki_bolum.id if onceki_bolum else None
     }
+

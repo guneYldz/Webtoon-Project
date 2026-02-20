@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status, Response, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List
@@ -59,7 +59,7 @@ def webtoonlari_getir(
 # 2. DETAY GÖSTERME (Bölümlerle Birlikte) - HERKESE AÇIK
 # 2. DETAY GÖSTERME (Hem ID hem Slug destekler) - HERKESE AÇIK
 @router.get("/{id_or_slug}", response_model=schemas.WebtoonDetail)
-def webtoon_detay(id_or_slug: str, db: Session = Depends(get_db)):
+def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Session = Depends(get_db)):
     # Gelen veri sayı mı? (Örn: "1", "5")
     if id_or_slug.isdigit():
         webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == int(id_or_slug), models.Webtoon.is_published == True).first()
@@ -71,9 +71,19 @@ def webtoon_detay(id_or_slug: str, db: Session = Depends(get_db)):
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
     
-    # Görüntülenme sayısını artır
-    webtoon.view_count += 1
-    db.commit()
+    
+    # 🔥 YENİ SİSTEM: IP Tabanlı View Count Rate Limiting
+    from utils.view_tracker import view_tracker
+    
+    client_ip = request.client.host
+    
+    # ViewTracker ile kontrol: Bu IP son 1 saat içinde bu webtoon'u gördü mü?
+    if view_tracker.should_count_view(client_ip, "webtoon", webtoon.id):
+        # İlk defa görüntüleniyor (veya 1 saat geçmiş), sayacı artır
+        if webtoon.view_count is None:
+            webtoon.view_count = 0
+        webtoon.view_count += 1
+        db.commit()
     
     return webtoon
 
@@ -86,7 +96,8 @@ def webtoon_ekle(
     resim: UploadFile = File(...), 
     # 👇 Banner resmi (İsteğe bağlı - None olabilir)
     banner: UploadFile = File(None), 
-    
+    source_url: str = Form(None), # Kaynak linki eklendi
+
     db: Session = Depends(get_db),
     # Eğer admin sistemini henüz kurmadıysan burayı geçici olarak get_db yapabilirsin:
     # current_user: models.User = Depends(get_current_admin) 
@@ -138,7 +149,8 @@ def webtoon_ekle(
         banner_image=banner_yolu, 
         status="ongoing",
         is_published=False,
-        type=models.ContentType.MANGA # Enum Kullanımı
+        type=models.ContentType.MANGA, # Enum Kullanımı
+        source_url=source_url
     )
     
     db.add(yeni)

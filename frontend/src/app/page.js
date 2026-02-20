@@ -122,8 +122,8 @@ export default async function Home() {
                     <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-gray-600 transition-all duration-300">
                       <Link href={`/${item.linkPath}/${item.slug || item.id}`} className="relative block w-full h-full">
                         <Image
-                          src={`${API}/${item.cover_image}`}
-                          alt={item.title}
+                          src={item.cover_image ? `${API}/${item.cover_image}` : '/placeholder.jpg'}
+                          alt={item.title || 'İsimsiz'}
                           fill
                           className="object-cover transition duration-500 group-hover:scale-110"
                           sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
@@ -182,7 +182,7 @@ export default async function Home() {
 
           {/* SAĞ: SIDEBAR (POPÜLER) */}
           <div className="w-full lg:w-80 flex-shrink-0">
-            <div className="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6 sticky top-24 shadow-2xl">
+            <div className="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-6 sticky top-24 shadow-2xl z-10">
               <h3 className="text-lg font-bold text-white mb-8 flex items-center gap-2">
                 <span className="text-yellow-500">🔥</span> Trend Listesi
               </h3>

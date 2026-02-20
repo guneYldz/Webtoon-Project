@@ -119,19 +119,6 @@ authentication_backend = AdminAuth(secret_key=SECRET_KEY)
 # 🛠️ ÖZEL ARAÇLAR (HATA ÖNLEYİCİLER)
 # ==========================================
 
-class NonCrasherFileField(Field):
-    """
-    SQLAdmin'in bozuk dosya işleme mantığından (AttributeError) 
-    ve WTForms'un otomatik Length validator hatasından (TypeError) kaçmak için.
-    Bu alan 'isinstance(x, FileField)' testinden geçmez ama 'Dosya Seç' butonunu render eder.
-    """
-    widget = FileInput()
-    def _value(self):
-        return "" # Dosya seçim kutusunda string yolu gösterme
-
-# ==========================================
-# 🛠️ ADMIN MODELLERİ
-# ==========================================
 
 class WebtoonAdmin(ModelView, model=models.Webtoon):
     name = "Seri"
@@ -157,8 +144,8 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
     }
 
     form_overrides = {
-        "cover_image": NonCrasherFileField,
-        "banner_image": NonCrasherFileField,
+        "cover_image": FileField,
+        "banner_image": FileField,
     }
 
     form_columns = [
@@ -296,8 +283,8 @@ class NovelAdmin(ModelView, model=models.Novel):
     ]
 
     form_overrides = {
-        "cover_image": NonCrasherFileField,
-        "banner_image": NonCrasherFileField,
+        "cover_image": FileField,
+        "banner_image": FileField,
     }
 
     form_columns = [
@@ -348,6 +335,22 @@ class NovelAdmin(ModelView, model=models.Novel):
                 print(f"   ℹ️ (NOVEL) {field} değişmedi veya boş bırakıldı.")
                 if field in data:
                     del data[field]
+        
+        # 🔥 ÖZEL DÜZELTME: source_url boş gelirse None yap (ki silinebilsin)
+        # SQLAdmin bazen boş stringleri data'dan silebilir, bu yüzden form'dan da kontrol gerekebilir.
+        form = await request.form()
+        source_url_form = form.get("source_url")
+        
+        print(f"📊 DEBUG SOURCE_URL: Form='{source_url_form}', Data='{data.get('source_url')}'")
+
+        if "source_url" in data:
+            if data["source_url"] == "":
+                 print("   🗑️ source_url siliniyor (None yapılıyor - DATA'dan)...")
+                 data["source_url"] = None
+        elif source_url_form == "":
+             # Eğer data içinde yoksa ama formda boş geldiyse
+             print("   🗑️ source_url siliniyor (None yapılıyor - FORM'dan)...")
+             data["source_url"] = None
                 
         print("⚡ VERİTABANINA TEMİZ PAKET GİDİYOR...")
         return await super().on_model_change(data, model, is_created, request)

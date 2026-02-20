@@ -77,8 +77,12 @@ export default function AdminLayout({
                         İçerik Yönetimi
                     </div>
                     <NavItem href="/admin/webtoons" icon="🎨" label="Webtoonlar" />
+                    <NavItem href="/admin/webtoon-bolumleri" icon="🎬" label="Webtoon Bölümleri" />
                     <NavItem href="/admin/novels" icon="📖" label="Noveller" />
+                    <NavItem href="/admin/novel-bolumleri" icon="📑" label="Novel Bölümleri" />
                     <NavItem href="/admin/categories" icon="📂" label="Kategoriler" />
+
+
 
                     <div className="pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         Kullanıcılar

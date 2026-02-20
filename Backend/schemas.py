@@ -144,7 +144,8 @@ class NovelDetail(BaseModel):
     is_published: bool = False
     source_url: Optional[str] = None 
     
-    chapters: List[NovelChapterBase] = [] 
+    # 🔥 DÜZELTİLDİ: NovelChapterBase yerine NovelChapterListSchema
+    chapters: List[NovelChapterListSchema] = [] 
 
     class Config:
         from_attributes = True

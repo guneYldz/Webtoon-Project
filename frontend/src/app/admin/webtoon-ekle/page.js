@@ -155,8 +155,8 @@ export default function WebtoonEkle() {
             type="submit"
             disabled={loading}
             className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${loading
-                ? "bg-gray-600 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/30"
+              ? "bg-gray-600 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/30"
               }`}
           >
             {loading ? "Yükleniyor..." : "✨ Webtoon'u Oluştur"}

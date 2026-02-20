@@ -56,7 +56,7 @@ export default function RecommendedSeries({ type = "novel" }) {
                                     unoptimized={true}
                                     className="object-cover group-hover:scale-105 transition duration-500"
                                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 33vw, 200px"
-                                    style={{ height: 'auto' }}
+                                    style={{ width: '100%', height: 'auto' }}
                                 />
                             )}
                         </div>

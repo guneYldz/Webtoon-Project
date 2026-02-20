@@ -15,6 +15,7 @@ export default function EditWebtoonPage({ params }) {
         status: "ongoing",
         is_published: false,
         is_featured: false, // SLIDER İÇİN
+        source_url: "", // State
     });
 
     const [coverImage, setCoverImage] = useState(null);
@@ -43,6 +44,7 @@ export default function EditWebtoonPage({ params }) {
                         status: w.status || "ongoing",
                         is_published: w.is_published || false,
                         is_featured: w.is_featured || false,
+                        source_url: w.source_url || "", // Load
                     });
                 }
             } catch (error) {
@@ -67,6 +69,7 @@ export default function EditWebtoonPage({ params }) {
             form.append("status", formData.status);
             form.append("is_published", formData.is_published.toString());
             form.append("is_featured", formData.is_featured.toString());
+            if (formData.source_url) form.append("source_url", formData.source_url); // Append
 
             if (coverImage) {
                 form.append("cover_image", coverImage);
@@ -181,6 +184,18 @@ export default function EditWebtoonPage({ params }) {
                     <label htmlFor="is_featured" className="font-medium">
                         ⭐ Öne Çıkan (Ana sayfada slider'da göster)
                     </label>
+                </div>
+
+                {/* Source URL */}
+                <div>
+                    <label className="block text-sm font-medium mb-2">Kaynak URL (Opsiyonel)</label>
+                    <input
+                        type="url"
+                        value={formData.source_url}
+                        onChange={(e) => setFormData({ ...formData, source_url: e.target.value })}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://orijinal-kaynak.com/..."
+                    />
                 </div>
 
                 {/* Kapak Resmi */}
