@@ -8,3 +8,5 @@ static/profile_images/*
 static/novel_covers/*
 static/webtoon_covers/*
 static/banners/*
+Backend/static/images/
+Backend/static/covers/
