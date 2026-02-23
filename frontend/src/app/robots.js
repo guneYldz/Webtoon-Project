@@ -1,5 +1,5 @@
 export default function robots() {
-    const baseUrl = "http://localhost:3000"; // Site canlıya geçince burayı güncelle!
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://kaosmanga.net";
 
     return {
         rules: {

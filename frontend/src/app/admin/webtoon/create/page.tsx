@@ -54,7 +54,8 @@ export default function CreateWebtoonPage() {
             //   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'; 
             // Development ortamında proxy ayarı yoksa tam URL gerekebilir. 
             // Ancak Next.js rewrites kullanıyorsak /api yeterli. Şimdilik direct backend'e atalım.
-            const API_URL = 'http://localhost:8000/api/admin/webtoon/create';
+            const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const API_URL = `${API}/api/admin/webtoon/create`;
 
             const res = await fetch(API_URL, {
                 method: 'POST',

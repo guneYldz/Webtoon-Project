@@ -7,7 +7,8 @@ export async function generateMetadata({ params }) {
   const { slug } = params;
 
   try {
-    const apiUrl = typeof window === 'undefined' ? 'http://webtoon_backend:8000' : 'http://127.0.0.1:8000';
+    const clientApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net";
+    const apiUrl = typeof window === 'undefined' ? 'http://backend:8000' : clientApiUrl;
     const res = await fetch(`${apiUrl}/novels/${slug}`);
     const novel = await res.json();
 
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }) {
       openGraph: {
         title: novel.title,
         description: novel.summary,
-        images: [novel.cover_image ? `http://127.0.0.1:8000/${novel.cover_image}` : ''],
+        images: [novel.cover_image ? `${process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net"}/${novel.cover_image}` : ''],
       },
     };
   } catch (error) {
@@ -38,10 +39,11 @@ export default async function NovelDetail({ params }) {
   try {
     // 🔥 DOCKER FIX: Server Component Docker network'te çalışıyor
     // Client-side: localhost:8000 ✅
-    // Server-side (SSR): webtoon_backend:8000 ✅
+    // Server-side (SSR): backend:8000 ✅
+    const clientApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net";
     const apiUrl = typeof window === 'undefined'
-      ? 'http://webtoon_backend:8000'  // Server-side (Docker network)
-      : 'http://127.0.0.1:8000';        // Client-side (browser)
+      ? 'http://backend:8000'  // Server-side (Docker network)
+      : clientApiUrl;                  // Client-side (browser)
 
     const res = await fetch(`${apiUrl}/novels/${slug}`, {
       cache: 'no-store',
@@ -70,7 +72,7 @@ export default async function NovelDetail({ params }) {
         {/* Arka plan resmi (bulanık) */}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-20 blur-3xl transform scale-110"
-          style={{ backgroundImage: `url(http://127.0.0.1:8000/${novel.cover_image})` }}
+          style={{ backgroundImage: `url(${process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net"}/${novel.cover_image})` }}
         ></div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
 
@@ -79,7 +81,7 @@ export default async function NovelDetail({ params }) {
           {/* Kapak Resmi */}
           <div className="w-52 md:w-72 flex-shrink-0 rounded-2xl overflow-hidden border border-purple-500/30 shadow-[0_0_50px_rgba(147,51,234,0.2)]">
             <img
-              src={`http://127.0.0.1:8000/${novel.cover_image}`}
+              src={`${process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net"}/${novel.cover_image}`}
               alt={novel.title}
               className="w-full h-auto object-cover"
             />

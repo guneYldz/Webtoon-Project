@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export default function EditNovelPage({ params }) {
+export default function EditNovelPage({ params }: { params: { id: string } }) {
     const router = useRouter();
-    const [novel, setNovel] = useState(null);
+    const [novel, setNovel] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
 
@@ -16,10 +16,10 @@ export default function EditNovelPage({ params }) {
         status: "ongoing",
         is_published: false,
         is_featured: false,
-        source_url: "", // State
+        source_url: "",
     });
 
-    const [coverImage, setCoverImage] = useState(null);
+    const [coverImage, setCoverImage] = useState<File | null>(null);
 
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const novelId = params.id;
@@ -59,7 +59,7 @@ export default function EditNovelPage({ params }) {
         fetchNovel();
     }, [novelId]);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setSubmitting(true);
 
@@ -71,7 +71,7 @@ export default function EditNovelPage({ params }) {
             form.append("status", formData.status);
             form.append("is_published", formData.is_published.toString());
             form.append("is_featured", formData.is_featured.toString());
-            if (formData.source_url) form.append("source_url", formData.source_url); // Append
+            form.append("source_url", formData.source_url || ""); // Her zaman gönder — boşsa backend null yapar
 
             if (coverImage) {
                 form.append("cover_image", coverImage);
@@ -93,7 +93,7 @@ export default function EditNovelPage({ params }) {
             } else {
                 alert("Hata: " + (data.detail || "Bilinmeyen hata"));
             }
-        } catch (error) {
+        } catch (error: any) {
             alert("Güncelleme hatası: " + error.message);
         } finally {
             setSubmitting(false);
@@ -225,7 +225,7 @@ export default function EditNovelPage({ params }) {
                     <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => setCoverImage(e.target.files[0])}
+                        onChange={(e) => setCoverImage(e.target.files?.[0] || null)}
                         className="w-full px-4 py-2 border rounded-lg"
                     />
                     <p className="text-xs text-gray-500 mt-1">

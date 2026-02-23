@@ -4,6 +4,17 @@ const nextConfig = {
   images: {
     remotePatterns: [
       {
+        protocol: 'https',
+        hostname: 'api.kaosmanga.net',
+        pathname: '/static/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '89.47.113.248',
+        port: '8000',
+        pathname: '/static/**',
+      },
+      {
         protocol: 'http',
         hostname: 'localhost',
         port: '8000',

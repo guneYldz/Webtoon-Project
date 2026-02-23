@@ -8,7 +8,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: webtoon_admin
-      POSTGRES_PASSWORD: gizlisifre123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: webtoon_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -33,12 +33,15 @@ services:
       db:
         condition: service_healthy
     environment:
-      # DÜZELTME 1: Şifredeki harf hatası giderildi (gizlisifre123)
-      # DÜZELTME 2: Değişken adını standart "DATABASE_URL" yaptık
-      DB_CONNECTION: postgresql://webtoon_admin:gizlisifre123@db:5432/webtoon_db
-      SECRET_KEY: cok_gizli_anahtar
+      # DÜZELTME 1: Şifreler artık .env dosyasından çekiliyor (Github güvenliği için)
+      DB_CONNECTION: ${DB_CONNECTION}
+      SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ./Backend:/app
+      # 🔥 KRİTİK: Docker restart atınca resimlerin silinmemesi için Volume bağlantıları eklendi
+      - webtoon_covers:/app/static/covers
+      - webtoon_banners:/app/static/banners
+      - webtoon_images:/app/static/images
     ports:
       - "8000:8000"
     networks:
@@ -49,22 +52,21 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     container_name: webtoon_frontend
     restart: always
     depends_on:
       - backend
     environment:
-      # DÜZELTME 3: Tarayıcının erişebilmesi için "localhost" yaptık
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      # DÜZELTME 4: DevDependencies (Tailwind) yüklensin diye development modu zorluyoruz
-      NODE_ENV: development
-      # FIX: ENOMEM hatasını önlemek için bellek limitini artırıyoruz
+      # Sunucunun gerçek IP'si / Domaini - tarayıcılar apiyi buradan çekecek
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Localhost API Fallback ihtimaline karşı HTTP URL (Nginx yoksa direkt port tüneli)
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      # Node production modunda çalıştırılıyor
+      NODE_ENV: production
       NODE_OPTIONS: "--max-old-space-size=4096"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    command: sh -c "npm install && npm run dev"
     ports:
       - "3000:3000"
     networks:
@@ -72,6 +74,9 @@ services:
 
 volumes:
   postgres_data:
+  webtoon_covers:
+  webtoon_banners:
+  webtoon_images:
 
 
 networks:

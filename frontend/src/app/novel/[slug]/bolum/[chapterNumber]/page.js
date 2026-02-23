@@ -4,7 +4,8 @@ import NovelReadingClient from "@/components/NovelReadingClient";
 // --- 1. SEO METADATA (Zaten Vardı) ---
 export async function generateMetadata({ params }) {
   const { slug, chapterNumber } = params;
-  const apiUrl = API || "http://127.0.0.1:8000";
+  const clientApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net";
+  const apiUrl = typeof window === 'undefined' ? 'http://backend:8000' : clientApiUrl;
 
   // Slug'dan okunabilir roman adı üret (fallback için)
   const novelNameFromSlug = slug
@@ -48,7 +49,8 @@ export async function generateMetadata({ params }) {
 // --- 2. SAYFA BİLEŞENİ (SCHEMA EKLENDİ 🔥) ---
 export default async function Page({ params }) {
   const { slug, chapterNumber } = params;
-  const apiUrl = API || "http://127.0.0.1:8000";
+  const clientApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net";
+  const apiUrl = typeof window === 'undefined' ? 'http://backend:8000' : clientApiUrl;
 
   // Veriyi burada da çekiyoruz (Next.js cache sayesinde çift istek gitmez, hızlıdır)
   let chapter = null;

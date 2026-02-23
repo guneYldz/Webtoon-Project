@@ -154,6 +154,8 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
                 <div className="flex justify-center">
                     <div className="relative w-full max-w-xs">
                         <select
+                            id="episode-select"
+                            name="episode-select"
                             className="w-full bg-[#1a1a1a] text-gray-300 border border-gray-800 rounded-lg px-4 py-3 appearance-none outline-none focus:border-blue-500 transition cursor-pointer"
                             onChange={(e) => router.push(`/webtoon/${seriesId}/bolum/${e.target.value}`)}
                             value={episode.id}

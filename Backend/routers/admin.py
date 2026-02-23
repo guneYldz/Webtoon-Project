@@ -180,6 +180,8 @@ async def update_webtoon(
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
     
+    print(f"DEBUG: update_webtoon source_url='{source_url}' (type: {type(source_url)})")
+    
     if title is not None:
         webtoon.title = title
     if summary is not None:
@@ -191,7 +193,7 @@ async def update_webtoon(
     if is_featured is not None:
         webtoon.is_featured = is_featured
     if source_url is not None:
-        webtoon.source_url = source_url
+        webtoon.source_url = source_url.strip() or None  # Boş string → NULL
     
     if cover_image and cover_image.filename:
         ext = cover_image.filename.split(".")[-1]
@@ -380,6 +382,8 @@ async def update_novel(
     if not novel:
         raise HTTPException(status_code=404, detail="Novel bulunamadı")
     
+    print(f"DEBUG: update_novel source_url='{source_url}' (type: {type(source_url)})")
+    
     if title is not None:
         novel.title = title
     if summary is not None:
@@ -393,7 +397,7 @@ async def update_novel(
     if is_featured is not None:
         novel.is_featured = is_featured
     if source_url is not None:
-        novel.source_url = source_url
+        novel.source_url = source_url.strip() or None  # Boş string → NULL
     
     if cover_image and cover_image.filename:
         ext = cover_image.filename.split(".")[-1]

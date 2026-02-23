@@ -42,29 +42,29 @@ app = FastAPI()
 # ==========================================
 # 🚨 MIDDLEWARE AYARLARI
 # ==========================================
-SECRET_KEY = os.getenv("SECRET_KEY", "cok-gizli-anahtar-123")
+SECRET_KEY = os.getenv("SECRET_KEY") 
+
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment değişkeni bulunamadı!")
+
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], 
+    allow_origins=[
+        "https://kaosmanga.net",
+        "https://www.kaosmanga.net",
+        "http://kaosmanga.net",
+        "http://89.47.113.248",
+        "http://89.47.113.248:3000",
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000"
+    ], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    print(f"📥 REQUEST: {request.method} {request.url}")
-    auth_header = request.headers.get("Authorization")
-    if auth_header:
-        print(f"   🔑 Auth Header: {auth_header[:15]}...")
-    else:
-        print("   ⚠️ No Authorization Header found!")
-    
-    response = await call_next(request)
-    print(f"📤 RESPONSE: {response.status_code}")
-    return response
 
 # ==========================================
 # 🔐 GÜVENLİK VE GİRİŞ SİSTEMİ
@@ -162,8 +162,6 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
         "source_url"
     ]
 
-
-
     async def on_model_change(self, data, model, is_created, request):
         print("⚡ GHOST HUNTER (WEBTOON) ÇALIŞTI...") 
         
@@ -198,6 +196,19 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
                 print(f"   ℹ️ {field} değişmedi veya boş bırakıldı. Mevcut değer korunuyor.")
                 if field in data:
                     del data[field]
+        
+        # 🔥 ÖZEL DÜZELTME: source_url boş gelirse None yap (ki silinebilsin)
+        form = await request.form()
+        source_url_form = form.get("source_url")
+        print(f"📊 DEBUG (WEBTOON) SOURCE_URL: Form='{source_url_form}', Data='{data.get('source_url')}'")
+
+        if "source_url" in data:
+            if data["source_url"] == "":
+                print("   🗑️ source_url siliniyor (None yapılıyor - DATA'dan)...")
+                data["source_url"] = None
+        elif source_url_form == "":
+            print("   🗑️ source_url siliniyor (None yapılıyor - FORM'dan)...")
+            data["source_url"] = None
                 
         print("⚡ VERİTABANINA TEMİZ PAKET GİDİYOR...")
         return await super().on_model_change(data, model, is_created, request)

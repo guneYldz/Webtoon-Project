@@ -1,3 +1,4 @@
+import sys
 import os
 import time
 import re
@@ -11,6 +12,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
 from google import genai
 from slugify import slugify
+
+# Force UTF-8 for console output
+if sys.stdout.encoding != 'utf-8':
+    try:
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    except: pass
 
 # ==========================================
 # ⚙️ AYARLAR
@@ -81,11 +89,7 @@ NOVEL_CONFIGS = {
         9. "Memory" -> "Anı"
         10. "Echo" -> "Yankı"
     """,
-    "default": """
-        1. Özel isimleri (Karakter adları, şehir adları) ASLA çevirme.
-        2. Büyü isimlerini mümkünse Türkçe karşılığıyla, parantez içinde İngilizcesi olacak şekilde çevir.
-        3. Ton: Edebi, akıcı ve romanın türüne uygun.
-    """,
+    
 
     "Ghost Story": """
         1. "Ghost Story" -> "Hayalet Hikayesi"
@@ -100,6 +104,11 @@ NOVEL_CONFIGS = {
         10. "Still gotta work" -> "Hâlâ çalışmak lazım" (Serinin ironik tonunu koru)
         11. Karakter adlarını (varsa özel isimler) ASLA çevirme.
         12. Ton: Gerilimli ama ana karakterin işine bağlılığını hissettiren, hafif absürt ve edebi bir dil.
+    """,
+    "default": """
+        1. Özel isimleri (Karakter adları, şehir adları) ASLA çevirme.
+        2. Büyü isimlerini mümkünse Türkçe karşılığıyla, parantez içinde İngilizcesi olacak şekilde çevir.
+        3. Ton: Edebi, akıcı ve romanın türüne uygun.
     """,
 
     
@@ -146,7 +155,98 @@ class AutoNovelBot:
         options.add_argument("--disable-blink-features=AutomationControlled")
         # options.add_argument("--headless")  # İstersen aç
         self.driver = uc.Chrome(options=options, version_main=144)
+        self.driver.set_page_load_timeout(60) # Cloudflare 524 için kısaltılmış timeout (Hızlı deneme için)
         print("✅ Chrome driver hazır!")
+    
+    def safe_get(self, url, max_retries=5):
+        """Cloudflare 524/522 ve diğer timeoutları yöneten güvenli GET"""
+        from selenium.common.exceptions import TimeoutException
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"📡 Sayfaya gidiliyor (Deneme {attempt+1}/{max_retries}): {url}")
+                self.driver.get(url)
+                time.sleep(3) # Temel yükleme süresi
+                
+                # Cloudflare Hata Kontrolü
+                try:
+                    page_title = self.driver.title.lower()
+                    page_source_lower = self.driver.page_source.lower()
+                except:
+                    page_title = ""
+                    page_source_lower = ""
+                
+                # 🛑 Kalıcı hatalar - tekrar deneme ANLAMSIZ, hemen çık
+                is_permanent_error = any(err in page_title or err in page_source_lower for err in [
+                    "526",        # SSL sertifika hatası
+                    "525",        # SSL Handshake hatası
+                    "523",        # Origin unreachable
+                    "521",        # Web server is down
+                    "invalid ssl certificate",
+                    "ssl handshake failed",
+                ])
+                if is_permanent_error:
+                    print(f"🛑 Kalıcı hata tespit edildi (SSL/526 vb.) - bu hata tekrar denemeyle geçmez: {page_title}")
+                    return False
+
+                # Error 524, 522, 520, 504 (Gateway Timeout) - Geçici, tekrar denenebilir
+                is_cf_error = any(err in page_title or err in page_source_lower for err in [
+                    "error 524", "error 522", "error 520", "error 504",
+                    "a timeout occurred", "ray id"
+                ])
+                
+                # Turkish and English "Just a moment" variants
+                is_waf = any(waf in page_source_lower or waf in page_title for waf in [
+                    "checking your browser", "just a moment", "bir dakika lütfen", 
+                    "doğrulama başarılı", "checking if the site connection is secure"
+                ])
+                
+                if is_cf_error or (is_waf and len(page_source_lower) < 5000):
+                    print(f"⚠️ Cloudflare Engeli/Hatası tespit edildi! (Title: {page_title}) {attempt+1}/{max_retries}")
+                    if attempt < max_retries - 1:
+                        wait_time = 15 * (attempt + 1)  # 15, 30, 45, 60sn (eskiden 20, 40, 60, 80)
+                        print(f"⏳ {wait_time} saniye bekleniyor...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        print("❌ Maksimum deneme sayısına ulaşıldı.")
+                        return False
+                
+                # Eğer sayfa hala WAF sayfasındaysa ama hata değilse, biraz daha bekle
+                if is_waf:
+                    print("🛡️ Cloudflare koruması bekletiyor, 15sn ek süre...")
+                    time.sleep(15)
+                    # Yeniden kontrol et
+                    try:
+                        new_source = self.driver.page_source.lower()
+                        if any(waf in new_source for waf in ["bir dakika lütfen", "just a moment", "doğrulama başarılı"]):
+                             print("⚠️ Hala WAF sayfasındayız, sayfa yenileniyor (Force reload)...")
+                             self.driver.execute_script("window.location.reload();")
+                             time.sleep(10)
+                             continue
+                    except: pass
+                
+                if len(self.driver.page_source) < 500:
+                    print("⚠️ Sayfa içeriği çok kısa, bir şeyler yanlış gitmiş olabilir.")
+                    time.sleep(5)
+                
+                return True
+            except TimeoutException:
+                print(f"⏰ Zaman aşımı (Deneme {attempt+1})")
+                try:
+                    self.driver.execute_script("window.stop();") # Yüklemeyi durdur
+                except: pass
+                
+                if attempt < max_retries - 1:
+                    time.sleep(10)
+                    continue
+            except Exception as e:
+                print(f"❌ safe_get hatası: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(5)
+                    continue
+                return False
+        return False
 
     def __del__(self):
         """Driver'ı temizle"""
@@ -175,8 +275,9 @@ class AutoNovelBot:
             if not current_cover or not os.path.exists(os.path.join(BACKEND_DIR, str(current_cover))):
                 print("🖼️ Kapak resmi veri tabanında yok veya dosyası silinmiş. Yeniden çekiliyor...")
                 
-                self.driver.get(novel['source_url'])
-                time.sleep(5)
+                if not self.safe_get(novel['source_url']):
+                    print("❌ Metadata için ana sayfa yüklenemedi.")
+                    return
                 
                 # LightNovelPub & Genel Selectorlar
                 cover_selectors = [
@@ -263,16 +364,19 @@ class AutoNovelBot:
             url = novel['source_url']
             domain = "/".join(url.split("/")[:3]) # örn: https://lightnovelpub.me
             
-            if "lightnovelpub" in url or "novelight" in url:
+            if "lightnovelpub" in url or "novelight" in url or "novellive" in url:
                 print(f"🛡️ WAF Bypass: Önce ana sayfaya gidiliyor... ({domain})")
                 try:
-                    self.driver.get(domain)
+                    self.safe_get(domain)
                     import random
                     time.sleep(random.uniform(3, 6)) # İnsan gibi bekle
                 except: pass
 
             # Ana sayfayı aç
-            self.driver.get(url)
+            if not self.safe_get(url):
+                print(f"❌ {url} yüklenemedi. Atlanıyor.")
+                return
+            
             print("⏳ Sayfa yükleniyor...")
             time.sleep(5)  # JavaScript yüklensin
 
@@ -281,23 +385,24 @@ class AutoNovelBot:
             
             if not chapter_links:
                 print("⚠️ HATA: Bölüm listesi bulunamadı! Site yapısı tanımlanamadı.")
-                return 
-
-            print(f"📋 Toplam {len(chapter_links)} bölüm bulundu!")
-
-            # DB'den son bölümü öğren
-            last_chapter = get_last_chapter_number(novel['id'])
-            print(f"💾 Veritabanındaki son bölüm: {last_chapter}")
-
-            # Yeni bölümleri filtrele
-            new_chapters = [ch for ch in chapter_links if ch['num'] > last_chapter]
+                return # Keep the return here
+             # 🚀 Geliştirilmiş Filtreleme: DB'de eksik olan TÜM bölümleri bul (Gaps fix)
+            with engine.connect() as conn:
+                existing_chapters_rows = conn.execute(
+                    text("SELECT chapter_number FROM novel_chapters WHERE novel_id = :nid"),
+                    {"nid": novel['id']}
+                ).fetchall()
+                existing_chapters = [float(row[0]) for row in existing_chapters_rows]
+            
+            existing_set = set(existing_chapters)
+            new_chapters = [ch for ch in chapter_links if float(ch['num']) not in existing_set]
 
             if not new_chapters:
-                print(f"✅ Durum: GÜNCEL. Tüm bölümler zaten mevcut.")
+                print(f"✅ {novel['title']} için tüm bölümler güncel.")
                 return
 
-            print(f"🚀 {len(new_chapters)} YENİ BÖLÜM YAKALANDI!")
-
+            print(f"📦 {len(new_chapters)} yeni/eksik bölüm işlenecek.")
+            
             # Yeni bölümleri sırayla işle (küçükten büyüğe)
             new_chapters.sort(key=lambda x: x['num'])
             
@@ -307,10 +412,21 @@ class AutoNovelBot:
                 print(f"🔗 Link: {chapter['url']}")
                 
                 # Bölümü çek ve çevir
-                self.process_chapter(novel, chapter['num'], chapter['url'])
+                status = self.process_chapter(novel, chapter['num'], chapter['url'])
                 
-                print("⏳ Sonraki bölüme geçiliyor... (60sn bekleniyor - Gemini kota)")
-                time.sleep(60)  # Gemini free tier: dakikada 15 istek
+                if status is False:
+                    print("🛑 KRİTİK: AI kotası doldu veya hata oluştu. Roman işleme durduruluyor.")
+                    break
+                elif status is True:
+                    # İçerik bulundu ve işlendi (veya bulunamadı ama kota sorunu yok)
+                    # translate_and_upload çağrıldıysa 60sn bekle, sadece atlandıysa 5sn bekle
+                    if hasattr(self, '_last_translated') and self._last_translated:
+                        print("⏳ Sonraki bölüme geçiliyor... (60sn bekleniyor - Gemini kota)")
+                        time.sleep(60)
+                        self._last_translated = False
+                    else:
+                        print("⏳ Bölüm atlandı, kısa bekleme (5sn)...")
+                        time.sleep(5)
 
         except Exception as e:
             print(f"❌ Novel kontrol hatası: {e}")
@@ -319,6 +435,7 @@ class AutoNovelBot:
         """
         Webtoon botundaki selector_strategies mantığı
         Farklı site yapılarını deneyerek bölüm linklerini toplar
+        🚀 GÜNCELLEME: LightNovelPub için pagination desteği eklendi.
         """
         # Novelight özel: "Tüm bölümleri göster" butonu varsa tıkla
         try:
@@ -336,8 +453,10 @@ class AutoNovelBot:
             {"container": ".chapters .chapter", "link": "a", "text_loc": "", "is_self_link": True},
 
             # Pattern 0.5: LightNovelPub (Özel & İyileştirilmiş)
-            {"container": ".chapter-list li", "link": "a", "text_loc": ".chapter-title"}, # LightNovelPub updated
-            {"container": ".ul-list5 li", "link": "a", "text_loc": ""}, # Old LightNovelPub
+            {"container": ".chapter-list li", "link": "a", "text_loc": ".chapter-title"}, 
+            {"container": ".chapter-list li", "link": "a", "text_loc": ""}, 
+            {"container": ".ul-list5 li", "link": "a", "text_loc": ""}, 
+            {"container": "tr[data-chapter]", "link": "a", "text_loc": ".chapter-name"},
 
             # Pattern 1: WP Manga tipi siteler
             {"container": ".wp-manga-chapter", "link": "a", "text_loc": ""},
@@ -361,77 +480,239 @@ class AutoNovelBot:
             {"container": "table.table tr", "link": "a", "text_loc": ""},
         ]
 
-        found_items = []
-        active_strategy = None
-
-        # Her stratejiyi dene
-        for strategy in selector_strategies:
+        all_chapter_links = []
+        base_url = self.driver.current_url.rstrip('/')
+        print(f"🕵️ get_chapter_links başlatıldı. URL: {base_url}")
+        print(f"📄 Sayfa Başlığı: {self.driver.title}")
+        print(f"📏 Kaynak Uzunluğu: {len(self.driver.page_source)}")
+        
+        # 🚀 LNP/NovelLive ÖZEL: requests kütüphanesi ile bölüm listesini çek
+        is_lnp = "lightnovelpub.me" in base_url.lower() or "novellive.app" in base_url.lower()
+        if is_lnp:
             try:
-                items = self.driver.find_elements(By.CSS_SELECTOR, strategy["container"])
-                if items and len(items) > 0:
-                    found_items = items
-                    active_strategy = strategy
-                    print(f"🔧 Site Yapısı Tespit Edildi: {strategy['container']} ({len(items)} bölüm)")
-                    break
-            except:
-                continue
+                from bs4 import BeautifulSoup
+                import requests as _req
 
-        if not found_items:
-            print("⚠️ Hiçbir selector pattern çalışmadı!")
-            print(f"PAGE TITLE: {self.driver.title}")
-            try:
-                # Debug için kaydet
-                with open("debug_fail_source.html", "w", encoding="utf-8") as f:
-                    f.write(self.driver.page_source)
-                self.driver.save_screenshot("debug_fail.png")
-                print("📸 Debug resim ve kaynak kodu kaydedildi (debug_fail.png, debug_fail_source.html)")
-            except: pass
-            return []
+                # Selenium'un Cloudflare cookie'lerini al
+                sel_cookies = {c['name']: c['value'] for c in self.driver.get_cookies()}
+                headers = {
+                    "User-Agent": self.driver.execute_script("return navigator.userAgent;"),
+                    "Referer": base_url,
+                    "Accept": "text/html,application/xhtml+xml",
+                }
 
-        # Linkleri topla
-        chapter_links = []
-        for item in found_items:
-            try:
-                # Linki bul
-                if active_strategy.get("is_self_link"):
-                    link_elem = item
-                    # Item bir 'a' tagi ise doğrudan href al
-                    if item.tag_name == 'a':
-                        link = item.get_attribute("href")
+                book_path = base_url.split("lightnovelpub.me")[-1].split("novellive.app")[-1].rstrip("/")
+                lnp_links = []
+                page_num = 1
+                max_lnp_pages = 30
+
+                while page_num <= max_lnp_pages:
+                    if page_num == 1:
+                        page_url = f"https://lightnovelpub.me{book_path}"
                     else:
-                        # Değilse içinde ara
-                        link_elem = item.find_element(By.TAG_NAME, "a") # Daha genel
-                        link = link_elem.get_attribute("href")
+                        page_url = f"https://lightnovelpub.me{book_path}/{page_num}"
+
+                    print(f"🌐 LNP requests çekiliyor: {page_url}")
+                    try:
+                        r = _req.get(page_url, cookies=sel_cookies, headers=headers, timeout=20)
+                        if r.status_code != 200:
+                            print(f"⚠️ HTTP {r.status_code}, durduruluyor.")
+                            break
+                        soup = BeautifulSoup(r.text, "html.parser")
+                        items = soup.select(".ul-list5 li a")
+                        if not items:
+                            items = soup.select(".chapter-list li a")
+                        if not items:
+                            print(f"⚠️ Sayfa {page_num}'de liste bulunamadı, durduruluyor.")
+                            break
+
+                        new_found = 0
+                        for a_tag in items:
+                            href = a_tag.get("href", "")
+                            if not href.startswith("http"):
+                                href = "https://lightnovelpub.me" + href
+                            text = a_tag.get_text(strip=True)
+                            m = re.search(r"(\d+(\.\d+)?)", text)
+                            if m:
+                                ch_num = float(m.group(1))
+                                if not any(ch['num'] == ch_num for ch in lnp_links):
+                                    lnp_links.append({"num": ch_num, "url": href})
+                                    new_found += 1
+
+                        print(f"   ✅ Sayfa {page_num}: {new_found} yeni bölüm ({len(lnp_links)} toplam)")
+
+                        # Sonraki sayfa var mı?
+                        next_el = soup.select_one(".page a.next, li.next a, a[title*='Next']")
+                        if not next_el:
+                            # Metin bazlı kontrol
+                            for a in soup.select(".page a"):
+                                if "next" in a.get_text(strip=True).lower():
+                                    next_el = a
+                                    break
+                        if next_el:
+                            page_num += 1
+                        else:
+                            break
+                    except Exception as req_err:
+                        print(f"⚠️ requests hatası sayfa {page_num}: {req_err}")
+                        break
+
+                if lnp_links:
+                    lnp_links.sort(key=lambda x: x['num'])
+                    print(f"🎯 LNP requests ile {len(lnp_links)} bölüm toplandı!")
+                    return lnp_links
                 else:
-                    link_elem = item.find_element(By.CSS_SELECTOR, active_strategy["link"])
-                    link = link_elem.get_attribute("href")
-                
-                if not link or not link.startswith("http"):
+                    print("⚠️ LNP requests boş döndü, Selenium yoluna devam ediliyor...")
+            except Exception as lnp_e:
+                print(f"⚠️ LNP requests hatası: {lnp_e}")
+
+        
+        current_page = 1
+        max_pages = 25
+        visited_urls = set()  # 🔒 Sonsuz döngü engeli
+
+        def normalize_url(u):
+            """lightnovelpub.me ve novellive.app aynı site - normalize et"""
+            return u.replace("novellive.app", "lightnovelpub.me").rstrip("/")
+
+        while current_page <= max_pages:
+            found_items = []
+            active_strategy = None
+
+            # Her stratejiyi dene
+            for strategy in selector_strategies:
+                try:
+                    items = self.driver.find_elements(By.CSS_SELECTOR, strategy["container"])
+                    if items and len(items) > 0:
+                        found_items = items
+                        active_strategy = strategy
+                        print(f"🔧 {len(items)} satır bulundu ({strategy['container']})")
+                        break
+                except:
                     continue
 
-                # Metni bul
-                raw_text = ""
-                if active_strategy["text_loc"]:
+            if not found_items:
+                if current_page == 1:
+                    print(f"⚠️ Hiçbir selector pattern çalışmadı! URL: {self.driver.current_url}")
+                    print(f"🔍 Sayfa başlığı: {self.driver.title}")
+                    if "bir dakika" in self.driver.title.lower() or "just a moment" in self.driver.title.lower():
+                        print("🛑 HALA CLOUDFLARE SAYFASINDAYIZ! safe_get geçememiş.")
                     try:
-                        raw_text = item.find_element(By.CSS_SELECTOR, active_strategy["text_loc"]).text.strip()
-                    except:
-                        raw_text = item.text.strip()
-                else:
-                    raw_text = item.text.strip()
-                    if not raw_text:
-                        raw_text = link_elem.get_attribute("textContent").strip()
+                        self.driver.save_screenshot("debug_lnp_fail.png")
+                        with open("debug_lnp_fail.html", "w", encoding="utf-8") as f:
+                            f.write(self.driver.page_source)
+                    except: pass
+                break
 
-                # Bölüm numarasını çıkar (Regex ile)
-                match = re.search(r"(\d+(\.\d+)?)", raw_text)
-                if match:
-                    chapter_num = float(match.group(1))
-                    chapter_links.append({"num": chapter_num, "url": link})
+            # Linkleri bu sayfadan topla
+            page_links_count = 0
+            for item in found_items:
+                try:
+                    if active_strategy.get("is_self_link"):
+                        if item.tag_name == 'a':
+                            link = item.get_attribute("href")
+                        else:
+                            link = item.find_element(By.TAG_NAME, "a").get_attribute("href")
+                    else:
+                        link = item.find_element(By.CSS_SELECTOR, active_strategy["link"]).get_attribute("href")
                     
-            except Exception as e:
-                # print(f"Hata: {e}")
-                continue
+                    if not link or not link.startswith("http"):
+                        if page_links_count == 0 and current_page == 1:
+                            print(f"   🐛 DEBUG link skip: '{link}'")
+                        continue
 
-        return chapter_links
+                    raw_text = ""
+                    if active_strategy["text_loc"]:
+                        try:
+                            raw_text = item.find_element(By.CSS_SELECTOR, active_strategy["text_loc"]).text.strip()
+                        except:
+                            raw_text = item.text.strip()
+                    else:
+                        raw_text = item.text.strip() or item.find_element(By.TAG_NAME, "a").get_attribute("textContent").strip()
+
+                    match = re.search(r"(\d+(\.\d+)?)", raw_text)
+                    if match:
+                        chapter_num = float(match.group(1))
+                        # Mükerrer kontrolü
+                        if not any(ch['num'] == chapter_num for ch in all_chapter_links):
+                            all_chapter_links.append({"num": chapter_num, "url": link})
+                            page_links_count += 1
+                        
+                except Exception as item_err:
+                    print(f"   🐛 DEBUG item_err (ilk): {type(item_err).__name__}: {item_err}")
+                    continue
+
+            # 📄 Sayfalama (Pagination) Mantığı Veri Toplama: 
+            try:
+                # Sayfadaki "Next" veya "Sonraki" butonunu bulmayı dene
+                selectors = [
+                    ".page a.next", ".page .next a", "a[title*='Next']", 
+                    ".pagination-next", ".pagination .next a", "li.next a", 
+                    "a.next-page", "a.index-container-btn"
+                ]
+                potential_next_elements = []
+                for sel in selectors:
+                    potential_next_elements.extend(self.driver.find_elements(By.CSS_SELECTOR, sel))
+                
+                next_url = None
+                for el in potential_next_elements:
+                    txt = el.text.strip().lower()
+                    title = (el.get_attribute("title") or "").lower()
+                    if "next" in txt or "sonraki" in txt or ">" in txt or "next" in title:
+                        next_url = el.get_attribute("href")
+                        if next_url:
+                            norm_next = normalize_url(next_url)
+                            norm_current = normalize_url(self.driver.current_url)
+                            if norm_next != norm_current and norm_next not in visited_urls:
+                                print(f"🔗 'Next' butonu metin ile bulundu: {txt} -> {next_url}")
+                                break
+                            else:
+                                next_url = None  # Ziyaret edilmiş veya aynı sayfa
+                
+                # Fallback: URL'den tahmin et
+                if not next_url:
+                    current_page += 1
+                    # LNP için /chapters/page-2 yaygın
+                    if "chapters" in base_url.lower():
+                        if "/page-" in base_url:
+                            next_url = re.sub(r'page-\d+', f'page-{current_page}', base_url)
+                        else:
+                            next_url = f"{base_url.rstrip('/')}/page-{current_page}"
+                    else:
+                        # Bazı LNP versiyonlarında /x direkt çalışır
+                        next_url = f"{base_url.rstrip('/')}/{current_page}"
+                
+                if next_url and normalize_url(next_url) not in visited_urls:
+                    visited_urls.add(normalize_url(self.driver.current_url))
+                    print(f"📄 Sonraki sayfaya geçiliyor: {next_url}")
+                    if not self.safe_get(next_url):
+                        print(f"⚠️ Sayfa {current_page} yüklenemedi. Durduruluyor.")
+                        break
+                    
+                    time.sleep(12) 
+                    
+                    # Sayfa değişimini kontrol et (Hata ayıklama için kaydet)
+                    try:
+                        new_items = self.driver.find_elements(By.CSS_SELECTOR, active_strategy["container"])
+                        if not new_items:
+                            print(f"⚠️ Sayfa {current_page} boş! Kaydediliyor...")
+                            with open(f"debug_lnp_p{current_page}.html", "w", encoding="utf-8") as f:
+                                f.write(self.driver.page_source)
+                    except: pass
+                else:
+                    print("🛑 Sonraki sayfa linki bulunamadı veya aynı sayfa. Bitiyor.")
+                    break 
+            except Exception as paging_e:
+                print(f"⚠️ Sayfalama hatası: {paging_e}")
+                break
+
+        # İşlem bittiğinde özet bilgi ver
+        print(f"🔢 DEBUG: get_chapter_links bitti. all_chapter_links içinde {len(all_chapter_links)} bölüm var.")
+        if all_chapter_links:
+            all_chapter_links.sort(key=lambda x: x['num'])
+            print(f"✅ Toplam {len(all_chapter_links)} bölüm toplandı. (Aralık: {all_chapter_links[0]['num']} - {all_chapter_links[-1]['num']})")
+
+        return all_chapter_links
 
     def process_chapter(self, novel, chapter_num, chapter_url):
         """
@@ -450,16 +731,28 @@ class AutoNovelBot:
                     print(f"⏩ Bölüm {chapter_num} zaten var. Atlanıyor...")
                     return
 
-            # 1. YÖNTEM: Requests (Hızlı)
+            # 1. YÖNTEM: Requests (Hızlı) - Selenium cookie'leri ile WAF bypass
             print("⚡ İçerik çekiliyor (Mod: Requests)...")
             content_found = False
             title_text = f"Bölüm {chapter_num}"
             text_content = ""
 
+            # Selenium'dan Cloudflare cookie'leri al
+            try:
+                sel_cookies = {c['name']: c['value'] for c in self.driver.get_cookies()}
+                sel_ua = self.driver.execute_script("return navigator.userAgent;")
+            except:
+                sel_cookies = {}
+                sel_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+
+            # Site domain'ini Referer olarak kullan
+            domain = "/".join(chapter_url.split("/")[:3])
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Referer': 'https://google.com',
-                'X-Requested-With': 'XMLHttpRequest'
+                'User-Agent': sel_ua,
+                'Referer': domain + "/",
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Connection': 'keep-alive',
             }
             
             # 🚀 Novelight API (ÖNCELİKLİ)
@@ -486,9 +779,10 @@ class AutoNovelBot:
                 except Exception as api_e:
                      print(f"⚠️ Novelight API hatası: {api_e}")
 
+           
             try:
                 if not content_found:
-                    response = requests.get(chapter_url, headers=headers, timeout=10)
+                    response = requests.get(chapter_url, headers=headers, cookies=sel_cookies, timeout=15)
                 
                     # Cloudflare veya Koruma kontrolü (403/503)
                     if response.status_code in [403, 503]:
@@ -542,75 +836,122 @@ class AutoNovelBot:
             if not content_found:
                 print("🐢 Selenium Moduna Geçiliyor (Cloudflare/JS Handling)...")
                 try:
-                    self.driver.get(chapter_url)
+                    # 🔥 KRİTİK: safe_get kullan (WAF bypass mantığı ile)
+                    # Doğrudan driver.get() yerine safe_get() - Cloudflare cookie'leri korunuyor
+                    success = self.safe_get(chapter_url)
                     
-                    # İçeriğin yüklenmesini bekle (JS render için)
-                    print("⏳ Yükleniyor (20sn)...")
-                    time.sleep(20) 
-                    
-                    # Olası içerik selectorları (CSS Selector formatı)
-                    selectors = [
-                        ".m-read .txt",          # LightNovelPub (Specific)
-                        ".chapter-text",         # Novelight
-                        ".txt",                  # Generic
-                        "#chapter-container",
-                        ".entry-content",
-                        ".cha-content",
-                        ".chapter-content",
-                        "#chapter-content",
-                        "#chr-content"
-                    ]
-                    
-                    found_element = None
-                    for sel in selectors:
-                        try:
-                            elem = self.driver.find_element(By.CSS_SELECTOR, sel)
-                            if elem and len(elem.text) > 50:
-                                found_element = elem
-                                print(f"🔧 Selenium Selector Buldu: {sel}")
-                                break
-                        except:
-                            continue
-                    
-                    if found_element:
-                        # Metni JS ile almayı dene (Gizli elementleri ayıklamak için innerText bazen daha temizdir)
-                        text_content = self.driver.execute_script("return arguments[0].innerText;", found_element)
-                        
-                        # Başlığı da Selenium ile al
-                        try:
-                            title_elem = self.driver.find_element(By.TAG_NAME, "h1")
-                            title_text = title_elem.text.strip()
-                        except:
-                            pass
-                            
-                        if len(text_content) > 50:
-                            content_found = True
-                            print(f"✅ İçerik Selenium ile çekildi! ({len(text_content)} karakter)")
+                    if not success:
+                        print("❌ Selenium: Sayfa yüklenemedi (safe_get başarısız)")
                     else:
-                        print("❌ Selenium da içerik bulamadı!")
+                        # İçeriğin yüklenmesini bekle (JS render için)
+                        print("⏳ İçerik yükleniyor (15sn)...")
+                        time.sleep(15)
+                        
+                        # Olası içerik selectorları - LightNovelPub öncelikli
+                        selectors = [
+                            ".m-read .txt",           # LightNovelPub klasik
+                            ".reading-content .text-left",  # LightNovelPub alternatif
+                            ".chapter-reading-content",      # LNP yeni yapı
+                            "#chr-content",                  # LNP ID
+                            ".chr-text",                     # LNP class
+                            ".chapter-c",                    # LNP alternatif
+                            ".chapter-text",                 # Novelight
+                            ".txt",                          # Generic
+                            "#chapter-container",
+                            ".entry-content",
+                            ".cha-content",
+                            ".chapter-content",
+                            "#chapter-content",
+                            "[class*='chapter'][class*='text']",  # Wildcard
+                            "[class*='read'][class*='content']",  # Wildcard
+                        ]
+                        
+                        found_element = None
+                        for sel in selectors:
+                            try:
+                                elem = self.driver.find_element(By.CSS_SELECTOR, sel)
+                                if elem and len(elem.text) > 50:
+                                    found_element = elem
+                                    print(f"🔧 Selenium Selector Buldu: {sel}")
+                                    break
+                            except:
+                                continue
+                        
+                        # Selector bulunamadıysa body içinden metin çıkarmayı dene
+                        if not found_element:
+                            print("⚠️ Selector bulunamadı. JS ile sayfa yapısı kontrol ediliyor...")
+                            try:
+                                # Sayfanın tüm text node'larını topla
+                                page_source = self.driver.page_source
+                                temp_soup = BeautifulSoup(page_source, 'html.parser')
+                                # Script/style temizle
+                                for bad in temp_soup.find_all(['script', 'style', 'nav', 'header', 'footer']):
+                                    bad.decompose()
+                                # En uzun metin bloğunu bul (muhtemelen içerik)
+                                candidates = []
+                                for tag in temp_soup.find_all(['div', 'article', 'section', 'main']):
+                                    t = tag.get_text(separator='\n', strip=True)
+                                    if len(t) > 500:
+                                        candidates.append((len(t), tag.get('class', []), t))
+                                if candidates:
+                                    candidates.sort(key=lambda x: x[0], reverse=True)
+                                    best = candidates[0]
+                                    print(f"🔍 BS4 ile en uzun blok bulundu: {best[1]} ({best[0]} karakter)")
+                                    text_content = best[2]
+                                    if len(text_content) > 200:
+                                        content_found = True
+                                        print(f"✅ İçerik BS4 fallback ile çekildi! ({len(text_content)} karakter)")
+                            except Exception as bs_e:
+                                print(f"⚠️ BS4 fallback hatası: {bs_e}")
+                        
+                        if found_element:
+                            # Metni JS ile al (innerText daha temiz)
+                            text_content = self.driver.execute_script("return arguments[0].innerText;", found_element)
+                            
+                            # Başlığı da Selenium ile al
+                            try:
+                                title_elem = self.driver.find_element(By.TAG_NAME, "h1")
+                                title_text = title_elem.text.strip()
+                            except:
+                                pass
+                                
+                            if len(text_content) > 50:
+                                content_found = True
+                                print(f"✅ İçerik Selenium ile çekildi! ({len(text_content)} karakter)")
+                        
+                        if not content_found:
+                            # Debug için sayfayı kaydet
+                            print("❌ Selenium da içerik bulamadı!")
+                            try:
+                                self.driver.save_screenshot(f"debug_chapter_{chapter_num}.png")
+                                print(f"📸 Screenshot kaydedildi: debug_chapter_{chapter_num}.png")
+                                print(f"🔍 Sayfa başlığı: {self.driver.title}")
+                                print(f"📏 Kaynak uzunluğu: {len(self.driver.page_source)}")
+                            except: pass
 
                 except Exception as sel_e:
                     print(f"❌ Selenium hatası: {sel_e}")
 
             # Sonuç Kontrolü ve Kayıt
             if content_found and text_content:
-                self.translate_and_upload(novel, chapter_num, title_text, text_content)
+                return self.translate_and_upload(novel, chapter_num, title_text, text_content)
             else:
-                print(f"❌ Başarısız: Bölüm {chapter_num} içeriği hiçbir yöntemle alınamadı.")
+                print(f"❌ Başarısız: Bölüm {chapter_num} içeriği hiçbir yöntemle alınamadı. (Atlanıyor)")
+                return True # İçerik bulunamadı ama kota sorunu değil, devam et (kısa bekleme)
 
         except Exception as e:
             print(f"❌ Bölüm işleme genel hatası: {e}")
 
     def translate_and_upload(self, novel, chapter_num, eng_title, eng_text):
         """
-        Gemini ile çevir ve DB'ye kaydet
+        Gemini ile çevir ve DB'ye kaydet.
+        Başarılıysa True, kota/hata nedeniyle yapılamadıysa False döner.
         """
         print(f"🤖 AI Çeviriyor: {eng_title}...")
 
         novel_title = novel.get('title', 'default')
         selected_glossary = NOVEL_CONFIGS.get("default")
         
-        # Romana özel sözlük var mı?
         for key in NOVEL_CONFIGS:
             if key.lower() in novel_title.lower():
                 selected_glossary = NOVEL_CONFIGS[key]
@@ -618,53 +959,82 @@ class AutoNovelBot:
                 break
                 
         system_instruction = f"""
-Sen, profesyonel bir fantastik roman çevirmenisin.
+Sen, profesyonel bir fantastik roman çevirmenisin. Türk okuyucusu için akıcı, epik ve edebi bir dille Türkçeye çeviri yaparsın.
 
-GÖREVİN:
-Aşağıdaki İngilizce roman bölümünü, Türk okuyucusu için akıcı, epik ve edebi bir dille Türkçeye çevirmek.
+KRİTİK KURALLAR:
+1. SADECE ÇEVİRİ METNİNİ DÖNDÜR. 
+2. ASLA "Tabii ki", "Elbette", "İşte çeviri", "Merhaba" gibi giriş cümleleri kurma. 
+3. ASLA metin hakkında açıklama yapma.
+4. Çeviride "{selected_glossary}" terimlerini kullan.
 
-ÇEVİRİ KURALLARI:
-1. **Ton:** Romanın türüne uygun (Karanlık, Epik, Eğlenceli vb.) bir ton kullan.
-2. **Format:** Orijinal metindeki satır boşluklarını koru.
-3. **ÖZEL TERİMLER:** {selected_glossary}
-
-METİN:
+GÖREV: Aşağıdaki metni Türkçeye çevir:
 {eng_text}
 """
 
-        # Tek seferde çevir (RPM=5 olduğu için chunk yerine 1 istek daha iyi)
-        max_retries = len(GOOGLE_API_KEYS)
-        ceviri = eng_text  # Varsayılan: İngilizce (fallback)
+        ceviri = None
+        max_cycles = 3 # Tüm keyler bittikten sonra max 3 kez 65sn bekle
         
-        for attempt in range(max_retries):
-            try:
-                print(f"🔑 Key #{_current_key_index + 1} ile çeviriliyor...")
-                active_client = get_gemini_client()
-                response = active_client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=system_instruction
-                )
-                ceviri = response.text.strip()
-                print(f"✅ Çeviri başarılı! ({len(ceviri)} karakter)")
-                break
-            except Exception as e:
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                    print(f"⚠️ Key #{_current_key_index + 1} kota aşıldı. Sonraki key'e geçiliyor...")
-                    rotate_key()
-                    if attempt == max_retries - 1:
-                        print("❌ Tüm key'ler kota aşıldı! İngilizce olarak kaydediliyor.")
-                else:
-                    print(f"❌ Çeviri hatası: {e}")
-                    break
+        for cycle in range(max_cycles):
+            for i in range(len(GOOGLE_API_KEYS)):
+                try:
+                    print(f"🔑 Key #{_current_key_index + 1} ile çeviriliyor... (Döngü {cycle+1}/{max_cycles})")
+                    active_client = get_gemini_client()
+                    response = active_client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=system_instruction
+                    )
+                    raw_ceviri = response.text.strip()
+                    
+                    # AI sohbet temizliği
+                    lines = raw_ceviri.split('\n')
+                    cleaned_lines = []
+                    found_story_start = False
+                    chat_keywords = ["elbette", "tabii", "işte", "çeviri", "sure,", "certainly", "here is", "ok,", "tamam", "çevirdim", "kimliğimle"]
+                    
+                    for idx, line in enumerate(lines):
+                        l_strip = line.strip().lower()
+                        if found_story_start:
+                            cleaned_lines.append(line)
+                            continue
+                        if idx < 5:
+                            if any(k in l_strip for k in chat_keywords) or not l_strip:
+                                continue
+                            found_story_start = True
+                            cleaned_lines.append(line)
+                        else:
+                            cleaned_lines.append(line)
+                    
+                    ceviri = '\n'.join(cleaned_lines).strip()
+                    
+                    if len(ceviri) > 50:
+                        print(f"✅ Çeviri başarılı! ({len(ceviri)} karakter)")
+                        break # İç döngüden çık (key döngüsü)
+                    
+                except Exception as e:
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        print(f"⚠️ Key #{_current_key_index + 1} kota aşıldı.")
+                        rotate_key()
+                    else:
+                        print(f"❌ Çeviri hatası: {e}")
+                        return False # Kritik hata
 
-        
+            if ceviri:
+                break # Dış döngüden çık (cycle döngüsü)
+                
+            # Eğer buradaysak tüm keyler 429 verdi
+            wait_time = 65
+            print(f"⏳ Tüm API anahtarları doldu. {wait_time} saniye bekleniyor... ({cycle+1}/{max_cycles})")
+            time.sleep(wait_time)
+
+        if not ceviri:
+            print("❌ HATA: Tüm denemeler sonunda çeviri yapılamadı. İngilizce kaydedilmiyor, işlem durdurulacak.")
+            return False
+
         try:
-            # ceviri, translate_chunk tarafından zaten set edildi
-            # Temizlik: Gemini bazen açıklama ekler
+            # Temizlik
             if "İşte çeviriniz" in ceviri or "Çeviri:" in ceviri:
                 ceviri = ceviri.replace("İşte çeviriniz:", "").replace("Çeviri:", "").strip()
             
-            # DB'ye kaydet (ON CONFLICT: aynı bölüm varsa sessizce atla)
             with engine.connect() as conn:
                 result = conn.execute(
                     text("""
@@ -682,11 +1052,15 @@ METİN:
                 conn.commit()
                 if result.rowcount > 0:
                     print(f"🎉 Bölüm {chapter_num} BAŞARIYLA KAYDEDİLDİ!")
+                    self._last_translated = True  # 60sn bekleme için flag
+                    return True
                 else:
                     print(f"⏩ Bölüm {chapter_num} zaten mevcut, atlandı.")
+                    return True
                 
         except Exception as e:
-            print(f"❌ Çeviri/Yükleme Hatası: {e}")
+            print(f"❌ Veritabanı Kayıt Hatası: {e}")
+            return False
 
     def get_or_create_novel(self, url):
         """
@@ -830,7 +1204,7 @@ def main():
     while True:
         try:
             # novelseriler.txt dosyasını oku
-            txt_path = os.path.join(BACKEND_DIR, "novelseriler.txt")
+            txt_path = os.path.join(CURRENT_DIR, "novelseriler.txt")
             if not os.path.exists(txt_path):
                 print(f"⚠️ Dosya bulunamadı: {txt_path}")
                 time.sleep(60)

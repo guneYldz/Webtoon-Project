@@ -17,7 +17,7 @@ export async function generateMetadata({ params }) {
       title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} Oku | Kaos Manga`,
       description: `${episode.webtoon_title} serisinin ${episode.episode_number}. bölümünü yüksek kalitede oku.`,
       alternates: {
-        canonical: `http://localhost:3000/webtoon/${id}/bolum/${episodeId}`,
+        canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://kaosmanga.net"}/webtoon/${id}/bolum/${episodeId}`,
       },
       openGraph: {
         title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} OKU`,
@@ -45,7 +45,7 @@ export default async function WebtoonReadingPage({ params }) {
 
       // 🔥 KRİTİK: Backend URL'lerini Client'ın kullanabileceği localhost URL'lerine çevir
       if (episode) {
-        const clientApiUrl = "http://localhost:8000";
+        const clientApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net";
 
         // Cover image URL'ini değiştir
         if (episode.webtoon_cover && episode.webtoon_cover.includes("backend:8000")) {
@@ -78,7 +78,7 @@ export default async function WebtoonReadingPage({ params }) {
     "isPartOf": {
       "@type": "ComicSeries",
       "name": episode.webtoon_title,
-      "url": `http://localhost:3000/webtoon/${id}`
+      "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://kaosmanga.net"}/webtoon/${id}`
     }
   } : null;
 

@@ -39,7 +39,7 @@ class EpisodeListSchema(BaseModel):
 # Novel Bölüm Listesi (Özet - Anasayfa için)
 class NovelChapterListSchema(BaseModel):
     id: int
-    chapter_number: int
+    chapter_number: float
     title: str
     is_published: bool = False
     created_at: Optional[datetime] = None
@@ -116,7 +116,7 @@ class NovelCard(BaseModel):
 class NovelChapterBase(BaseModel):
     id: int
     novel_id: int
-    chapter_number: int
+    chapter_number: float
     title: str
     content: str 
     created_at: Optional[datetime] = None

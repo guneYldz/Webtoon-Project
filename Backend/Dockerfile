@@ -25,4 +25,4 @@ EXPOSE 8000
 
 # 8. BAŞLATMA KOMUTU (Senin istediğin güvenli yöntem)
 # "python -m" modül olarak çalıştırır, path sorunlarını engeller.
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
