@@ -13,6 +13,7 @@ export default function Navbar() {
   const buttonRef = useRef(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
   const [isMounted, setIsMounted] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -62,6 +63,28 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Scroll kilidi - Mobil menü açıkken arka plan kaymasın
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+  }, [isMobileMenuOpen]);
+
+  // ESC tuşu ile kapatma
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === "Escape") {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    if (isMobileMenuOpen) {
+      window.addEventListener("keydown", handleEsc);
+    }
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [isMobileMenuOpen]);
+
   // Portal için mount durumu ve pozisyon hesaplama
   useEffect(() => {
     setIsMounted(true);
@@ -92,28 +115,41 @@ export default function Navbar() {
     >
       <div className="container mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
 
-        {/* SOL: LOGO */}
-        <Link href="/" className="flex items-center gap-4 group">
-          {/* Logo - Optimized size */}
-          <div className="relative w-16 h-16 group-hover:scale-105 transition duration-300">
-            <Image
-              src="/logo.png"
-              alt="Kaos Manga Logo"
-              fill
-              className="object-contain"
-              sizes="64px"
-              quality={100}
-              priority
-            />
-          </div>
-
-          <span
-            className="text-2xl font-black text-white tracking-widest group-hover:text-purple-400 transition bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-500"
-            style={{ fontFamily: 'var(--font-cinzel), serif' }} // Yeni Font
+        {/* SOL: HAMBURGER & LOGO */}
+        <div className="flex items-center gap-2">
+          {/* HAMBURGER BUTONU (Mobil) */}
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="md:hidden text-gray-400 hover:text-white transition p-2 -ml-2"
+            aria-label="Menüyü Aç"
           >
-            KAOS MANGA
-          </span>
-        </Link>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
+
+          <Link href="/" className="flex items-center gap-4 group">
+            {/* Logo - Optimized size */}
+            <div className="relative w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-105 transition duration-300">
+              <Image
+                src="/logo.png"
+                alt="Kaos Manga Logo"
+                fill
+                className="object-contain"
+                sizes="64px"
+                quality={100}
+                priority
+              />
+            </div>
+
+            <span
+              className="text-xl sm:text-2xl font-black text-white tracking-widest group-hover:text-purple-400 transition bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-500 hidden sm:block"
+              style={{ fontFamily: 'var(--font-cinzel), serif' }}
+            >
+              KAOS MANGA
+            </span>
+          </Link>
+        </div>
 
         {/* ORTA: LİNKLER */}
         <div className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-400">
@@ -241,6 +277,73 @@ export default function Navbar() {
               </div>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* MOBİL MENÜ OVERLAY */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] md:hidden animate-in fade-in duration-300"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* MOBİL MENÜ YAN PANEL */}
+      <div className={`fixed top-0 left-0 w-[280px] h-full bg-[#1a1a1a] border-r border-gray-800 z-[2001] md:hidden transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="p-6 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-8">
+            <span
+              className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500"
+              style={{ fontFamily: 'var(--font-cinzel), serif' }}
+            >
+              KAOS MANGA
+            </span>
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-gray-400 hover:text-white p-1"
+              aria-label="Menüyü Kapat"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              🏠 Ana Sayfa
+            </Link>
+            <Link href="/kesfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              🔍 Keşfet
+            </Link>
+            <Link href="/seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              📚 Seriler
+            </Link>
+            <Link href="/yeniler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              ✨ Yeniler
+            </Link>
+          </div>
+
+          <div className="mt-auto border-t border-gray-800 pt-6">
+            {!user ? (
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); router.push("/login"); }}
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-xl font-bold hover:shadow-lg hover:shadow-purple-500/20 transition active:scale-95"
+              >
+                Giriş Yap
+              </button>
+            ) : (
+              <div className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white font-bold">
+                  {user.username ? user.username.charAt(0).toUpperCase() : "U"}
+                </div>
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-sm font-bold text-white truncate">{user.username}</span>
+                  <span className="text-xs text-gray-500 capitalize">{user.role || 'user'}</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </nav>
