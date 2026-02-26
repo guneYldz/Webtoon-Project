@@ -15,7 +15,7 @@ export default function WebtoonChaptersPage() {
         const fetchWebtoons = async () => {
             try {
                 // Reverted to Public API to ensure visibility
-                const res = await fetch(`${API}/webtoons`);
+                const res = await fetch(`${API}/webtoons/`);
                 if (res.ok) {
                     const data = await res.json();
                     setWebtoons(data);
@@ -38,7 +38,7 @@ export default function WebtoonChaptersPage() {
             setLoading(true);
             try {
                 // Fetch webtoon details from Public API
-                const res = await fetch(`${API}/webtoons/${selectedWebtoon}`);
+                const res = await fetch(`${API}/webtoons/${selectedWebtoon}/`);
 
                 if (res.ok) {
                     const data = await res.json();

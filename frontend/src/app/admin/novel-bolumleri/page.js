@@ -25,7 +25,7 @@ export default function NovelChaptersPage() {
         const fetchNovels = async () => {
             try {
                 // Reverted to Public API
-                const res = await fetch(`${API}/novels`);
+                const res = await fetch(`${API}/novels/`);
                 if (res.ok) {
                     const data = await res.json();
                     setNovels(data);
@@ -49,7 +49,7 @@ export default function NovelChaptersPage() {
             setLoading(true);
             try {
                 // Fetch novel details from Public API
-                const res = await fetch(`${API}/novels/${selectedNovelId}`);
+                const res = await fetch(`${API}/novels/${selectedNovelId}/`);
                 if (res.ok) {
                     const data = await res.json();
                     setNovels(prev => prev.map(n => n.id === data.id ? data : n)); // Update novel details in list if needed

@@ -59,7 +59,7 @@ def create_episode(
         title=title,
         episode_number=episode_number,
         content_text=content_text,
-        is_published=False,
+        is_published=True,
         view_count=0
     )
     db.add(yeni_bolum)
