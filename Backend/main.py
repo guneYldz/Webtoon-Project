@@ -276,3 +276,24 @@ def get_vitrin(db: Session = Depends(get_db)):
         })
     random.shuffle(vitrin_listesi)
     return vitrin_listesi
+
+@app.get("/fix_db")
+def fix_database_episodes(db: Session = Depends(get_db)):
+    try:
+        w_eps = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.is_published == False).all()
+        w_count = 0
+        for ep in w_eps:
+            ep.is_published = True
+            w_count += 1
+            
+        n_eps = db.query(models.NovelChapter).filter(models.NovelChapter.is_published == False).all()
+        n_count = 0
+        for ep in n_eps:
+            ep.is_published = True
+            n_count += 1
+            
+        db.commit()
+        return {"mesaj": f"Başarıyla {w_count} webtoon bölümü ve {n_count} novel bölümü yayınlandı!"}
+    except Exception as e:
+        db.rollback()
+        return {"hata": str(e)}

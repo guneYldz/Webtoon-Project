@@ -159,7 +159,7 @@ def novel_bolum_ekle(
         chapter_number=chapter_number,
         title=title,
         content=content,
-        is_published=False,
+        is_published=True,
         view_count=0
     )
 

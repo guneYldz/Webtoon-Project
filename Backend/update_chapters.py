@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import models
 
-DATABASE_URL = "postgresql://webtoon_admin:Hn4moZSWvtV6Qswj@localhost:5433/webtoon_db"
+DATABASE_URL = "postgresql://webtoon_admin:Hn4moZSWvtV6Qswj@localhost:5432/webtoon_db"
 try:
     engine = create_engine(DATABASE_URL)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
