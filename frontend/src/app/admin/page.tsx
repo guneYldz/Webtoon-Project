@@ -13,14 +13,14 @@ export default function AdminDashboard() {
         total_comments: 0
     });
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
     useEffect(() => {
         async function fetchStats() {
             // 1. Token'ı al
-            const token = localStorage.getItem("access_token") ||
-                localStorage.getItem("admin_token") ||
-                localStorage.getItem("token");
+            const token = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
 
             if (!token) {
                 window.location.href = "/login-admin";
@@ -29,7 +29,7 @@ export default function AdminDashboard() {
 
             try {
                 // 2. İsteğe Header ekle
-                const res = await fetch(`${API}/api/admin/stats`, {
+                const res = await fetch(`${API}/admin/stats`, {
                     headers: {
                         "Content-Type": "application/json",
                         "Authorization": `Bearer ${token}`
@@ -38,8 +38,8 @@ export default function AdminDashboard() {
 
                 if (res.status === 401) {
                     // Token geçersizse login'e at
-                    localStorage.removeItem("access_token");
-                    localStorage.removeItem("admin_token");
+                    sessionStorage.removeItem("access_token");
+                    sessionStorage.removeItem("admin_token");
                     window.location.href = "/login-admin";
                     return;
                 }

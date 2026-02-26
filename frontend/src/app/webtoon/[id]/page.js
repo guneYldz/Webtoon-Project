@@ -14,7 +14,7 @@ export default function WebtoonDetail() {
 
   useEffect(() => {
     // Backend'den Webtoon detaylarını ve bölümleri çek
-    fetch(`http://127.0.0.1:8000/webtoons/${id}`, {
+    fetch(`https://kaosmanga.net/api/webtoons/${id}`, {
       credentials: 'include' // 🔥 Cookie gönder/al
     })
       .then((res) => {
@@ -48,7 +48,7 @@ export default function WebtoonDetail() {
         {/* Arkaplan Blur Efekti */}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-30 blur-3xl transform scale-110"
-          style={{ backgroundImage: `url(http://127.0.0.1:8000/${webtoon.cover_image})` }}
+          style={{ backgroundImage: `url(https://kaosmanga.net/api/${webtoon.cover_image})` }}
         ></div>
 
         {/* İçeriği merkeze almak için gradient ekledik */}
@@ -58,7 +58,7 @@ export default function WebtoonDetail() {
           {/* Kapak Resmi */}
           <div className="w-52 md:w-72 flex-shrink-0 rounded-xl overflow-hidden border border-gray-700 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
             <img
-              src={`http://127.0.0.1:8000/${webtoon.cover_image}`}
+              src={`https://kaosmanga.net/api/${webtoon.cover_image}`}
               alt={webtoon.title}
               className="w-full h-auto object-cover"
             />

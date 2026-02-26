@@ -21,16 +21,19 @@ export default function EditNovelPage({ params }: { params: { id: string } }) {
 
     const [coverImage, setCoverImage] = useState<File | null>(null);
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
     const novelId = params.id;
 
     // Novel verilerini yükle
     useEffect(() => {
         const fetchNovel = async () => {
             try {
-                const res = await fetch(`${API}/api/admin/novels/${novelId}`, {
+                const token = sessionStorage.getItem("access_token") ||
+                    sessionStorage.getItem("admin_token") ||
+                    sessionStorage.getItem("token");
+                const res = await fetch(`${API}/admin/novels/${novelId}`, {
                     headers: {
-                        "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                        "Authorization": `Bearer ${token}`
                     }
                 });
                 const data = await res.json();
@@ -77,10 +80,13 @@ export default function EditNovelPage({ params }: { params: { id: string } }) {
                 form.append("cover_image", coverImage);
             }
 
-            const res = await fetch(`${API}/api/admin/novels/${novelId}`, {
+            const putToken = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
+            const res = await fetch(`${API}/admin/novels/${novelId}`, {
                 method: "PUT",
                 headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                    "Authorization": `Bearer ${putToken}`
                 },
                 body: form,
             });

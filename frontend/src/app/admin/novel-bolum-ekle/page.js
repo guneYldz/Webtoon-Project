@@ -8,7 +8,7 @@ export default function NovelBolumEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [novels, setNovels] = useState([]);
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
   const [selectedNovel, setSelectedNovel] = useState("");
   const [title, setTitle] = useState("");
@@ -30,7 +30,9 @@ export default function NovelBolumEkle() {
     }
 
     setLoading(true);
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("access_token") ||
+      sessionStorage.getItem("admin_token") ||
+      sessionStorage.getItem("token");
 
     const formData = new FormData();
     formData.append("novel_id", selectedNovel);

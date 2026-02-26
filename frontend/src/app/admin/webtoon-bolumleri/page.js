@@ -65,7 +65,9 @@ export default function WebtoonChaptersPage() {
 
         setDeleting(episodeId);
         try {
-            const token = localStorage.getItem("admin_token") || localStorage.getItem("access_token");
+            const token = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
 
             // Use specific delete endpoint added to routers/episode.py
             const res = await fetch(`${API}/episodes/${episodeId}`, {

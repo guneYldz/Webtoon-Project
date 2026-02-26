@@ -8,7 +8,7 @@ export default function BolumEkle() {
   const [loading, setLoading] = useState(false);
   const [webtoons, setWebtoons] = useState([]);
 
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
   // Mod Seçimi: 'single' (Tek Bölüm) veya 'bulk' (Toplu Klasör)
   const [mode, setMode] = useState("single");
@@ -119,7 +119,9 @@ export default function BolumEkle() {
 
   // --- YARDIMCI: API İSTEĞİ ATAN FONKSİYON ---
   async function uploadOneEpisode(webtoonId, epTitle, epNum, epFiles) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("access_token") ||
+      sessionStorage.getItem("admin_token") ||
+      sessionStorage.getItem("token");
     const formData = new FormData();
 
     formData.append("webtoon_id", webtoonId);

@@ -11,7 +11,7 @@ import traceback
 from routers.auth import get_current_admin  # ADMIN AUTH
 
 router = APIRouter(
-    prefix="/api/admin",
+    prefix="/admin",
     tags=["Admin Paneli"]
 )
 

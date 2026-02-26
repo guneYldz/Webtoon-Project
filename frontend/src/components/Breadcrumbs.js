@@ -16,7 +16,7 @@ export default function Breadcrumbs({ items }) {
     return (
         <nav
             aria-label="Breadcrumb"
-            className="w-full text-sm text-gray-400 mb-6 font-sans bg-[#121212]"
+            className="w-full text-sm text-gray-400 mb-6 font-sans"
         >
             <script
                 type="application/ld+json"

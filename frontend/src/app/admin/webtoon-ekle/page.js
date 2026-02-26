@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export default function WebtoonEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
   const [formData, setFormData] = useState({
     ad: "",
     ozet: "",
@@ -34,7 +34,7 @@ export default function WebtoonEkle() {
     e.preventDefault();
     setLoading(true);
 
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     if (!token) {
       alert("Önce giriş yapmalısın!");
       router.push("/admin/login"); // Updated to admin login path

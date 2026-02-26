@@ -17,9 +17,9 @@ export default function AdminLayout({
     useEffect(() => {
         // Token kontrolü - sadece client-side'da çalışır
         const checkAuth = () => {
-            const token = localStorage.getItem("admin_token");
-            const role = localStorage.getItem("admin_role");
-            const user = localStorage.getItem("admin_user");
+            const token = sessionStorage.getItem("admin_token");
+            const role = sessionStorage.getItem("admin_role");
+            const user = sessionStorage.getItem("admin_user");
 
             if (!token || role !== "admin") {
                 // Token yok veya admin değil - login'e yönlendir
@@ -38,9 +38,9 @@ export default function AdminLayout({
     }, []); // Boş dependency array - sadece mount'ta çalışır
 
     const handleLogout = () => {
-        localStorage.removeItem("admin_token");
-        localStorage.removeItem("admin_role");
-        localStorage.removeItem("admin_user");
+        sessionStorage.removeItem("admin_token");
+        sessionStorage.removeItem("admin_role");
+        sessionStorage.removeItem("admin_user");
         router.push("/login-admin");
     };
 

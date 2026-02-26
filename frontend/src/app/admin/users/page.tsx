@@ -11,15 +11,15 @@ export default function UsersListPage() {
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({});
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
     const fetchUsers = async () => {
         setLoading(true);
         try {
             // 1. Token'ı al
-            const token = localStorage.getItem("access_token") ||
-                localStorage.getItem("admin_token") ||
-                localStorage.getItem("token");
+            const token = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
 
             console.log("🔍 DEBUG: Fetching users with token:", token ? "Exists" : "MISSING");
 
@@ -32,7 +32,7 @@ export default function UsersListPage() {
             if (search) params.append("search", search);
             if (roleFilter) params.append("role", roleFilter);
 
-            const res = await fetch(`${API}/api/admin/users?${params}`, {
+            const res = await fetch(`${API}/admin/users?${params}`, {
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
@@ -51,8 +51,8 @@ export default function UsersListPage() {
                 console.error("❌ Kullanıcı listesi yüklenemedi. Status:", res.status);
                 if (res.status === 401) {
                     alert("Oturum süresi dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.");
-                    localStorage.removeItem("access_token");
-                    localStorage.removeItem("admin_token");
+                    sessionStorage.removeItem("access_token");
+                    sessionStorage.removeItem("admin_token");
                     window.location.href = "/login-admin";
                 }
             }
@@ -78,10 +78,10 @@ export default function UsersListPage() {
             const form = new FormData();
             form.append("is_active", (!currentStatus).toString());
 
-            const res = await fetch(`${API}/api/admin/users/${userId}`, {
+            const res = await fetch(`${API}/admin/users/${userId}`, {
                 method: "PUT",
                 headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                    "Authorization": `Bearer ${sessionStorage.getItem("admin_token")}`
                 },
                 body: form
             });

@@ -10,7 +10,7 @@ export default function WebtoonCard({ webtoon }) {
       <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:shadow-blue-900/40 group-hover:border-blue-500/50 transition duration-300">
         <Link href={`/webtoon/${webtoon.id}`}>
           <img 
-            src={`http://127.0.0.1:8000/${webtoon.cover_image}`} 
+            src={`https://kaosmanga.net/api/${webtoon.cover_image}`} 
             alt={webtoon.title} 
             className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
             loading="lazy"

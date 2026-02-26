@@ -51,11 +51,11 @@ export default function CreateWebtoonPage() {
             if (files.cover) data.append('cover_image', files.cover);
             if (files.banner) data.append('banner_image', files.banner);
 
-            //   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'; 
+            //   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://kaosmanga.net/api'; 
             // Development ortamında proxy ayarı yoksa tam URL gerekebilir. 
             // Ancak Next.js rewrites kullanıyorsak /api yeterli. Şimdilik direct backend'e atalım.
-            const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            const API_URL = `${API}/api/admin/webtoon/create`;
+            const API = process.env.NEXT_PUBLIC_API_URL || 'https://kaosmanga.net/api';
+            const API_URL = `${API}/admin/webtoon/create`;
 
             const res = await fetch(API_URL, {
                 method: 'POST',

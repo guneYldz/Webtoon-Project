@@ -28,7 +28,7 @@ export default function RegisterPage() {
 
     try {
       // Backend yapına göre parametreleri URL'ye ekliyoruz (Query Params)
-      const url = new URL("http://127.0.0.1:8000/auth/kayit-ol");
+      const url = new URL("https://kaosmanga.net/api/auth/kayit-ol");
       url.searchParams.append("kullanici_adi", formData.username);
       url.searchParams.append("eposta", formData.email);
       url.searchParams.append("sifre", formData.password);

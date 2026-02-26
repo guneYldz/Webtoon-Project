@@ -31,16 +31,6 @@ body {
   background: #555;
 }
 
-/* 🔥 NUCLEAR FIX: Force dark background on breadcrumbs and any white containers */
-nav[aria-label="breadcrumb"],
-.breadcrumb,
-.breadcrumbs,
-div[class*="breadcrumb"] {
-  background-color: transparent !important;
-  color: #e5e7eb !important;
-  border-bottom: 1px solid #1f2937;
-}
-
 /* Breadcrumb links */
 nav[aria-label="breadcrumb"] a,
 .breadcrumb a,
@@ -59,4 +49,48 @@ div[class*="breadcrumb"] a:hover {
 /* Remove any white backgrounds that might leak through */
 * {
   box-sizing: border-box;
+}
+
+/* Novel okuma alanı HTML içerik stilleri */
+.novel-content b,
+.novel-content strong {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.novel-content i,
+.novel-content em {
+  font-style: italic;
+}
+
+.novel-content u {
+  text-decoration: underline;
+}
+
+.novel-content strike,
+.novel-content s {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.novel-content ol {
+  list-style-type: decimal;
+  padding-left: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.novel-content ul {
+  list-style-type: disc;
+  padding-left: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.novel-content li {
+  margin-bottom: 0.5rem;
+  line-height: 1.8;
+}
+
+.novel-content p {
+  margin-bottom: 1.5rem;
+  line-height: 1.8;
 }

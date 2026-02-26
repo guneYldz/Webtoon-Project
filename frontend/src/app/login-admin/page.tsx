@@ -17,7 +17,7 @@ export default function AdminLoginPage() {
     const [locked, setLocked] = useState(false);
     const [lockTime, setLockTime] = useState(0);
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
     // Sayfa yüklendiğinde kilit durumunu kontrol et
     useEffect(() => {
@@ -119,13 +119,13 @@ export default function AdminLoginPage() {
             localStorage.removeItem("login_attempts");
             localStorage.removeItem("lock_time");
 
-            // Token'ı kaydet (Geniş uyumluluk için birden fazla anahtar kullanıyoruz)
-            localStorage.setItem("admin_token", data.access_token);
-            localStorage.setItem("access_token", data.access_token);
-            localStorage.setItem("token", data.access_token);
+            // Token'ı kaydet (Tarayıcı kapanınca silinecek - SessionStorage)
+            sessionStorage.setItem("admin_token", data.access_token);
+            sessionStorage.setItem("access_token", data.access_token);
+            sessionStorage.setItem("token", data.access_token);
 
-            localStorage.setItem("admin_user", data.username);
-            localStorage.setItem("admin_role", data.role);
+            sessionStorage.setItem("admin_user", data.username);
+            sessionStorage.setItem("admin_role", data.role);
 
             // Admin paneline yönlendir
             router.push("/admin");

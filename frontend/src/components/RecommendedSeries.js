@@ -11,7 +11,7 @@ export default function RecommendedSeries({ type = "novel" }) {
     useEffect(() => {
         const fetchRecommendations = async () => {
             try {
-                const apiUrl = API || "http://127.0.0.1:8000";
+                const apiUrl = API || "https://kaosmanga.net/api";
                 // Fetch list of series based on type
                 // Note: Ideally backend should have a /recommendations endpoint. 
                 // For now, we fetch latest/all and pick random.

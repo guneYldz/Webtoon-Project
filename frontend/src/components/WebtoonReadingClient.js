@@ -43,7 +43,9 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
     useEffect(() => {
         const fetchData = async () => {
             // API Adresi - CLIENT tarafında LOCALHOST kullan
-            const apiUrl = API || "http://127.0.0.1:8000";
+            const apiUrl = API || "https://kaosmanga.net/api";
+
+            let currentEpisode = initialEpisode;
 
             // Eğer initialEpisode yoksa, client'ta da episode'u çek
             if (!initialEpisode && episodeId) {
@@ -59,6 +61,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
                     if (!res.ok) throw new Error("Bölüm yüklenemedi.");
                     const data = await res.json();
                     setEpisode(data);
+                    currentEpisode = data;
                 } catch (err) {
                     console.error("Hata:", err);
                     setError("Bölüm bulunamadı veya yüklenirken hata oluştu.");
@@ -68,7 +71,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
             }
 
             // Dropdown için tüm bölümleri çek (her durumda gerekli)
-            if ((episode || initialEpisode) && seriesId) {
+            if (currentEpisode && seriesId) {
                 try {
                     const webtoonRes = await fetch(`${apiUrl}/webtoons/${seriesId}`);
                     if (webtoonRes.ok) {

@@ -34,12 +34,12 @@ def rotate_key():
 
 client = get_gemini_client() if GOOGLE_API_KEYS else None
 
-# LOCALHOST AYARI: Kendi bilgisayarında test ettiğin için 8000 portunu kullanıyoruz.
-API_URL = "http://127.0.0.1:8000" 
+# LOCALHOST AYARI: Docker'ın dışarı açtığı porta bağlanıyoruz.
+API_URL = "http://127.0.0.1:8000"
 
-BOT_USERNAME = os.getenv("BOT_USERNAME", "gunyz.62@gmail.com") 
-BOT_PASSWORD = os.getenv("BOT_PASSWORD", "62dersim62") 
-BEKLEME_SURESI = 15 
+BOT_USERNAME = os.getenv("BOT_USERNAME", "gunyz.62@gmail.com")
+BOT_PASSWORD = os.getenv("BOT_PASSWORD", "62dersim62")
+BEKLEME_SURESI = 15
 
 # SERİYE ÖZEL AYARLAR (Config Yapısı)
 NOVEL_CONFIGS = {
@@ -55,8 +55,6 @@ NOVEL_CONFIGS = {
         9. "Memory" -> "Anı"
         10. "Echo" -> "Yankı"
     """,
-    
-
     "Ghost Story": """
         1. "Ghost Story" -> "Hayalet Hikayesi"
         2. "Entity" -> "Varlık" (Eğer korkutucu bir tondaysa "Ucube" de kullanılabilir)
@@ -84,9 +82,14 @@ NOVEL_CONFIGS = {
 def get_auth_token():
     try:
         response = requests.post(f"{API_URL}/auth/giris-yap", data={"username": BOT_USERNAME, "password": BOT_PASSWORD})
-        return response.json().get("access_token") if response.status_code == 200 else None
+        if response.status_code == 200:
+            print("✅ Giriş Başarılı! Token alındı.")
+            return response.json().get("access_token")
+        else:
+            print(f"❌ Giriş Reddedildi! Kod: {response.status_code} | Hata: {response.text}")
+            return None
     except Exception as e:
-        print(f"❌ Giriş Hatası (Local): {e}")
+        print(f"❌ Sunucuya Bağlanılamadı (Local API): {e}")
         return None
 
 def get_last_chapter_number(token, novel_id, novel_slug):
@@ -104,26 +107,30 @@ def get_all_novels(token):
     headers = {"Authorization": f"Bearer {token}"}
     try:
         res = requests.get(f"{API_URL}/novels/", headers=headers)
-        return res.json() if res.status_code == 200 else []
-    except: return []
+        if res.status_code == 200:
+            return res.json()
+        else:
+            print(f"❌ Romanlar çekilemedi! Sunucu Kod: {res.status_code}")
+            return []
+    except Exception as e:
+        print(f"❌ Roman API'sine bağlanırken hata: {e}")
+        return []
 
 # ==========================================
 # 🕷️ SCRAPER
 # ==========================================
 def scrape_chapter(url):
     print(f"   🌍 Kaynak taranıyor: {url}")
-    scraper = cloudscraper.create_scraper() 
+    scraper = cloudscraper.create_scraper()
     try:
         response = scraper.get(url, timeout=10)
         if response.status_code != 200: return None, None
-        
+
         soup = BeautifulSoup(response.text, 'html.parser')
         title_tag = soup.find('h1') or soup.find('span', class_='title__')
-        
-        # Freewebnovel içerik kutusu
-        content = soup.find('div', class_='txt') or \
-                  soup.find('div', id='content')
-        
+
+        content = soup.find('div', class_='txt') or soup.find('div', id='content')
+
         if content:
             for bad in content.find_all(['script', 'style', 'iframe', 'a']):
                 bad.decompose()
@@ -138,34 +145,33 @@ def scrape_chapter(url):
 # ==========================================
 def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
     global client
-    
+
     if not client:
         print("❌ HATA: Gemini client başlatılamadı!")
         return "ERROR"
 
-    # Seriye özel konfigürasyon seçimi
     novel_key = "default"
     if "Shadow Slave" in novel['title']: novel_key = "Shadow Slave"
     elif "Ghost Story" in novel['title']: novel_key = "Ghost Story"
-    
+
     config = NOVEL_CONFIGS[novel_key]
 
     print(f"   🤖 AI ({novel_key}) Çeviriyor... (Key: {GOOGLE_API_KEYS[_current_key_index][:5]}...)")
 
     prompt = f"""
     Sen profesyonel bir roman çevirmenisin. GÖREVİN: Aşağıdaki metni Türkçeye çevirmek.
-    
+
     KURALLAR:
     1. ASLA 'Elbette', 'İşte çeviri' gibi giriş cümleleri yazma.
     2. SADECE romanın metnini döndür.
     3. Çeviride şu talimatları uygula:
 {config}
-    
+
     METİN:
-    {eng_text[:8000]} 
+    {eng_text[:8000]}
     """
 
-    max_cycles = 3  # Tüm keyler bittikten sonra max 3 kez bekle
+    max_cycles = 3
     for cycle in range(max_cycles):
         for key_attempt in range(len(GOOGLE_API_KEYS)):
             try:
@@ -175,15 +181,14 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
                     contents=prompt
                 )
                 ceviri = response.text.strip()
-                
-                # AI sohbet filtresi
+
                 if ceviri.startswith(("Elbette", "İşte", "Çeviri:", "Tabii")):
                     ceviri = "\n".join(ceviri.split("\n")[1:])
 
                 payload = {"novel_id": novel['id'], "chapter_number": chapter_num, "title": eng_title, "content": ceviri}
                 headers = {"Authorization": f"Bearer {token}"}
                 res = requests.post(f"{API_URL}/novels/bolum-ekle", data=payload, headers=headers)
-                
+
                 if res.status_code in [200, 201]:
                     print(f"   🎉 Bölüm {chapter_num} BAŞARIYLA KAYDEDİLDİ!")
                     return "SUCCESS"
@@ -201,13 +206,11 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
                     print(f"   ❌ API Hatası: {e}")
                     return "ERROR"
 
-        # Tüm key'ler doldu — bir sonraki rpm penceresi için bekle
         wait_secs = 65
         print(f"⏳ Tüm key'ler ({len(GOOGLE_API_KEYS)}) rate limit'e çarptı. {wait_secs}sn bekleniyor... (Döngü {cycle+1}/{max_cycles})")
         time.sleep(wait_secs)
 
     print("❌ Tüm denemeler başarısız. İngilizce olarak kaydediliyor.")
-    # Fallback: orijinal İngilizce metni kaydet
     payload = {"novel_id": novel['id'], "chapter_number": chapter_num, "title": eng_title, "content": eng_text}
     headers = {"Authorization": f"Bearer {token}"}
     res = requests.post(f"{API_URL}/novels/bolum-ekle", data=payload, headers=headers)
@@ -218,37 +221,41 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
 # ==========================================
 if __name__ == "__main__":
     print("🚀 KAOS BOT YEREL TEST MODU BAŞLATILDI")
-    
+
     while True:
         token = get_auth_token()
         if token:
             novels = get_all_novels(token)
-            # ⚠️ SADECE freewebnovel.com URL'leri işle
-            # bot.py lightnovelpub/novellive URL'lerini yönetiyor,
-            # kaosnovelbot sadece kendi domain'lerini alır → çakışma önlenir
+            print(f"📚 Veritabanından toplam {len(novels)} roman okundu.")
+            
             KAOS_DOMAINS = ["freewebnovel.com"]
             active_novels = [
                 n for n in novels
                 if n.get('source_url') and any(d in n['source_url'] for d in KAOS_DOMAINS)
             ]
-            
+            print(f"🎯 Freewebnovel şartına uyan roman sayısı: {len(active_novels)}")
+
+            if len(active_novels) == 0:
+                print("⚠️ İşlem yapılacak uygun roman bulunamadı. Belki veritabanında 'source_url' kısmı boştur veya freewebnovel içermiyordur.")
+
             for novel in active_novels:
                 print(f"\n🔹 KONTROL: {novel['title']}")
                 last_ch = get_last_chapter_number(token, novel['id'], novel['slug'])
-                current_ch = int(last_ch) + 1  # int'e çevir — float gelirse chapter-26.0 hatası oluşuyor
-                
+                current_ch = int(last_ch) + 1
+
                 while True:
-                    # Link yapısı: .../chapter-{}
                     target_url = novel['source_url'].format(current_ch)
                     eng_title, eng_text = scrape_chapter(target_url)
-                    
-                    if not eng_text: break
-                    
+
+                    if not eng_text: 
+                        print(f"   ⚠️ {current_ch}. Bölüm bulunamadı veya çekilemedi, seriyi atlıyorum.")
+                        break
+
                     status = translate_and_upload(token, novel, current_ch, eng_title, eng_text)
                     if status in ["SUCCESS", "SKIP"]:
                         current_ch += 1
                         time.sleep(5)
                     else: break
-        
+
         print(f"\n💤 Bekleme modu ({BEKLEME_SURESI}sn)...")
         time.sleep(BEKLEME_SURESI)

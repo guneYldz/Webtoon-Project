@@ -28,7 +28,7 @@ export default function Navbar() {
     }
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/auth/me", {
+      const res = await fetch("https://kaosmanga.net/api/auth/me", {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` }
       });

@@ -75,7 +75,9 @@ export default function NovelChaptersPage() {
 
         setDeleting(chapterNumber);
         try {
-            const token = localStorage.getItem("admin_token") || localStorage.getItem("access_token");
+            const token = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
 
             // Delete endpoint expects SLUG
             const res = await fetch(`${API}/novels/${novelSlug}/chapters/${chapterNumber}`, {
@@ -118,7 +120,9 @@ export default function NovelChaptersPage() {
         if (!editingChapter) return;
 
         try {
-            const token = localStorage.getItem("admin_token") || localStorage.getItem("access_token");
+            const token = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
             const formData = new FormData();
             formData.append("title", editForm.title);
             formData.append("content", editForm.content);

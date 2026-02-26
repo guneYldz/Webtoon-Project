@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { API } from "@/api"; // Süslü parantezleri kaldırdık // API adresin (http://127.0.0.1:8000)
+import { API } from "@/api"; // Süslü parantezleri kaldırdık // API adresin (https://kaosmanga.net/api)
 
 export default function FavoritesPage() {
   const [favorites, setFavorites] = useState([]);

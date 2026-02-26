@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
 export default function ProfilePage() {
   const router = useRouter();

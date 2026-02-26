@@ -18,7 +18,7 @@ export default function NovelReadingPage() {
   useEffect(() => {
     setLoading(true);
     // Backend'de roman bölümlerini slug ve bölüm numarasına göre çeken uç nokta
-    fetch(`http://127.0.0.1:8000/novels/${slug}/chapters/${chapterNumber}`)
+    fetch(`https://kaosmanga.net/api/novels/${slug}/chapters/${chapterNumber}`)
       .then((res) => {
         if (!res.ok) throw new Error("Bölüm bulunamadı");
         return res.json();

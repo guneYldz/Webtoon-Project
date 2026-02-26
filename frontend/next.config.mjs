@@ -10,7 +10,7 @@ const nextConfig = {
       },
       {
         protocol: 'http',
-        hostname: '89.47.113.248',
+        hostname: 'kaosmanga.net',
         port: '8000',
         pathname: '/static/**',
       },

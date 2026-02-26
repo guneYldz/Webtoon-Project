@@ -9,14 +9,14 @@ export default function CategoriesPage() {
     const [editingId, setEditingId] = useState(null);
     const [editingName, setEditingName] = useState("");
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
     const fetchCategories = async () => {
         try {
             // 1. Token'ı al
-            const token = localStorage.getItem("access_token") ||
-                localStorage.getItem("admin_token") ||
-                localStorage.getItem("token");
+            const token = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
 
             console.log("🔍 DEBUG: Fetching categories with token:", token ? "Exists" : "MISSING");
 
@@ -25,7 +25,7 @@ export default function CategoriesPage() {
                 return;
             }
 
-            const res = await fetch(`${API}/api/admin/categories`, {
+            const res = await fetch(`${API}/admin/categories`, {
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
@@ -43,8 +43,8 @@ export default function CategoriesPage() {
                 console.error("❌ Kategoriler yüklenemedi. Status:", res.status);
                 if (res.status === 401) {
                     alert("Oturum süresi dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.");
-                    localStorage.removeItem("access_token");
-                    localStorage.removeItem("admin_token");
+                    sessionStorage.removeItem("access_token");
+                    sessionStorage.removeItem("admin_token");
                     window.location.href = "/login-admin";
                 }
             }
@@ -67,10 +67,10 @@ export default function CategoriesPage() {
             const form = new FormData();
             form.append("name", newCategoryName);
 
-            const res = await fetch(`${API}/api/admin/categories`, {
+            const res = await fetch(`${API}/admin/categories`, {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                    "Authorization": `Bearer ${sessionStorage.getItem("admin_token")}`
                 },
                 body: form
             });
@@ -90,10 +90,10 @@ export default function CategoriesPage() {
             const form = new FormData();
             form.append("name", editingName);
 
-            const res = await fetch(`${API}/api/admin/categories/${id}`, {
+            const res = await fetch(`${API}/admin/categories/${id}`, {
                 method: "PUT",
                 headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                    "Authorization": `Bearer ${sessionStorage.getItem("admin_token")}`
                 },
                 body: form
             });
@@ -112,10 +112,10 @@ export default function CategoriesPage() {
         if (!confirm("Bu kategoriyi silmek istediğinden emin misin?")) return;
 
         try {
-            const res = await fetch(`${API}/api/admin/categories/${id}`, {
+            const res = await fetch(`${API}/admin/categories/${id}`, {
                 method: "DELETE",
                 headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                    "Authorization": `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
             const data = await res.json();

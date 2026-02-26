@@ -12,15 +12,15 @@ export default function WebtoonsListPage() {
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({});
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
     const fetchWebtoons = async () => {
         setLoading(true);
         try {
             // 1. Token'ı al (Kullanıcının önerdiği access_token ve bizim kullandığımız fallbakler)
-            const token = localStorage.getItem("access_token") ||
-                localStorage.getItem("admin_token") ||
-                localStorage.getItem("token");
+            const token = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
 
             console.log("🔍 DEBUG: Fetching webtoons with token:", token ? "Exists" : "MISSING");
 
@@ -39,8 +39,8 @@ export default function WebtoonsListPage() {
             if (statusFilter) params.append("status", statusFilter);
             if (publishedFilter !== "") params.append("is_published", publishedFilter);
 
-            // Önce paginated olanı deneyelim, kullanıcı loglarında bu hata veriyor
-            const res = await fetch(`${API}/api/admin/webtoons?${params}`, {
+            // ÇİFT API HATASI DÜZELTİLDİ: /api/admin yerine /admin kullanıldı
+            const res = await fetch(`${API}/admin/webtoons?${params}`, {
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
@@ -63,8 +63,8 @@ export default function WebtoonsListPage() {
                 console.error("❌ Veri çekilemedi. Status:", res.status);
                 if (res.status === 401) {
                     alert("Oturum süresi dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.");
-                    localStorage.removeItem("access_token");
-                    localStorage.removeItem("admin_token");
+                    sessionStorage.removeItem("access_token");
+                    sessionStorage.removeItem("admin_token");
                     window.location.href = "/login-admin";
                 }
             }
@@ -89,10 +89,11 @@ export default function WebtoonsListPage() {
         if (!confirm("Bu webtoon'u silmek istediğinden emin misin?")) return;
 
         try {
-            const res = await fetch(`${API}/api/admin/webtoons/${id}`, {
+            // ÇİFT API HATASI DÜZELTİLDİ: /api/admin yerine /admin kullanıldı
+            const res = await fetch(`${API}/admin/webtoons/${id}`, {
                 method: "DELETE",
                 headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                    "Authorization": `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
             const data = await res.json();

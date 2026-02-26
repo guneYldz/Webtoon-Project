@@ -24,8 +24,8 @@ async function getData() {
       console.log("Docker backend erişimi başarısız, localhost deneniyor...");
       // Fallback to localhost if backend service is not found (e.g. running locally without docker-compose)
       [webtoonRes, novelRes] = await Promise.all([
-        fetch(`http://127.0.0.1:8000/webtoons/`, { cache: 'no-store' }),
-        fetch(`http://127.0.0.1:8000/novels/`, { cache: 'no-store' })
+        fetch(`https://kaosmanga.net/api/webtoons/`, { cache: 'no-store' }),
+        fetch(`https://kaosmanga.net/api/novels/`, { cache: 'no-store' })
       ]);
     }
 
@@ -65,7 +65,7 @@ async function getData() {
     // Ancak optimize olsun diye direk vitrin endpointini de çekelim.
     let vitrinData = [];
     try {
-      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, { cache: 'no-store' }).catch(() => fetch(`http://127.0.0.1:8000/vitrin`, { cache: 'no-store' }));
+      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, { cache: 'no-store' }).catch(() => fetch(`https://kaosmanga.net/api/vitrin`, { cache: 'no-store' }));
       if (vitrinRes.ok) {
         vitrinData = await vitrinRes.json();
       }

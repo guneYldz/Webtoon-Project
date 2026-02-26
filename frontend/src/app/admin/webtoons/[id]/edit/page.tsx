@@ -21,16 +21,19 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
     const [coverImage, setCoverImage] = useState<File | null>(null);
     const [bannerImage, setBannerImage] = useState<File | null>(null);
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
     const webtoonId = params.id;
 
     // Webtoon verilerini yükle
     useEffect(() => {
         const fetchWebtoon = async () => {
             try {
-                const res = await fetch(`${API}/api/admin/webtoons/${webtoonId}`, {
+                const token = sessionStorage.getItem("access_token") ||
+                    sessionStorage.getItem("admin_token") ||
+                    sessionStorage.getItem("token");
+                const res = await fetch(`${API}/admin/webtoons/${webtoonId}`, {
                     headers: {
-                        "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                        "Authorization": `Bearer ${token}`
                     }
                 });
                 const data = await res.json();
@@ -78,10 +81,13 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
                 form.append("banner_image", bannerImage);
             }
 
-            const res = await fetch(`${API}/api/admin/webtoons/${webtoonId}`, {
+            const putToken = sessionStorage.getItem("access_token") ||
+                sessionStorage.getItem("admin_token") ||
+                sessionStorage.getItem("token");
+            const res = await fetch(`${API}/admin/webtoons/${webtoonId}`, {
                 method: "PUT",
                 headers: {
-                    "Authorization": `Bearer ${localStorage.getItem("admin_token")}`
+                    "Authorization": `Bearer ${putToken}`
                 },
                 body: form,
             });

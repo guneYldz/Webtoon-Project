@@ -14,8 +14,8 @@ export default function SerilerPage() {
     const fetchData = async () => {
       try {
         const [webtoonRes, novelRes] = await Promise.all([
-          fetch("http://127.0.0.1:8000/webtoons/"),
-          fetch("http://127.0.0.1:8000/novels/")
+          fetch("https://kaosmanga.net/api/webtoons/"),
+          fetch("https://kaosmanga.net/api/novels/")
         ]);
 
         const webtoonData = await webtoonRes.json();
@@ -69,7 +69,7 @@ export default function SerilerPage() {
                 <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-green-500/50 transition duration-300">
                   <Link href={`/webtoon/${w.id}`}>
                     <img
-                      src={`http://127.0.0.1:8000/${w.cover_image}`}
+                      src={`https://kaosmanga.net/api/${w.cover_image}`}
                       alt={w.title}
                       className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
                     />
@@ -110,7 +110,7 @@ export default function SerilerPage() {
                 <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-purple-500/50 transition duration-300">
                   <Link href={`/novel/${n.slug}`}>
                     <img
-                      src={`http://127.0.0.1:8000/${n.cover_image}`}
+                      src={`https://kaosmanga.net/api/${n.cover_image}`}
                       alt={n.title}
                       className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
                     />

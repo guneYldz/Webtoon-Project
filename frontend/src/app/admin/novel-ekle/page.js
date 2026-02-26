@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export default function NovelEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
   // Form Verileri
   const [title, setTitle] = useState("");
@@ -35,7 +35,7 @@ export default function NovelEkle() {
     }
 
     setLoading(true);
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const formData = new FormData();
 
     formData.append("title", title);

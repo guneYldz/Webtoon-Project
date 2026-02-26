@@ -46,7 +46,7 @@ export default function ClientWebtoonReadingPage() {
                 setError(null);
 
                 // API Adresi Güvenliği
-                const apiUrl = API || "http://127.0.0.1:8000";
+                const apiUrl = API || "https://kaosmanga.net/api";
 
                 // 🔥 KRİTİK NOKTA: credentials: "include" eklendi.
                 const res = await fetch(`${apiUrl}/episodes/${params.episodeId}`, {

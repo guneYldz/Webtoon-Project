@@ -22,8 +22,8 @@ export default function KesfetPage() {
     const fetchData = async () => {
       try {
         const [webtoonRes, novelRes] = await Promise.all([
-          fetch("http://127.0.0.1:8000/webtoons/"),
-          fetch("http://127.0.0.1:8000/novels/")
+          fetch("https://kaosmanga.net/api/webtoons/"),
+          fetch("https://kaosmanga.net/api/novels/")
         ]);
 
         const webtoons = await webtoonRes.json();
@@ -154,7 +154,7 @@ export default function KesfetPage() {
                 <div className="relative aspect-[2/3] rounded-2xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-gray-500 transition-all duration-300">
                   <Link href={s.link}>
                     <img
-                      src={`http://127.0.0.1:8000/${s.cover_image}`}
+                      src={`https://kaosmanga.net/api/${s.cover_image}`}
                       alt={s.title}
                       className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
                     />

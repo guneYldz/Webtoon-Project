@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # 1. VERİTABANI (PostgreSQL)
   db:
     image: postgres:15
     container_name: webtoon_db
@@ -21,6 +22,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # 2. BACKEND (FastAPI)
   backend:
     build:
       context: ./Backend
@@ -30,6 +32,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # DÜZELTME: env_file artık environment bloğunun dışında ve doğru hizada
     env_file:
       - .env
     environment:
@@ -37,34 +40,43 @@ services:
       SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ./Backend:/app
+      - webtoon_covers:/app/static/covers
+      - webtoon_banners:/app/static/banners
+      - webtoon_images:/app/static/images
     ports:
       - "8000:8000"
     networks:
       - webtoon_network
 
+  # 3. FRONTEND (Next.js)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     container_name: webtoon_frontend
     restart: always
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=4096"
     ports:
       - "3000:3000"
     networks:
       - webtoon_network
-
+# 5. VERİTABANI YÖNETİM ARAYÜZÜ (pgAdmin 4)
   pgadmin:
     image: dpage/pgadmin4
     container_name: webtoon_pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: gunyz.62@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: 62Naruto62.
+      PGADMIN_DEFAULT_EMAIL: gunyz.62@gmail.com   # pgAdmin'e giriş yaparken kullanacağın e-posta
+      PGADMIN_DEFAULT_PASSWORD: 62Naruto62. # pgAdmin'e giriş şifren
     ports:
       - "5050:80"
     depends_on:
@@ -74,7 +86,11 @@ services:
 
 volumes:
   postgres_data:
+  webtoon_covers:
+  webtoon_banners:
+  webtoon_images:
 
 networks:
   webtoon_network:
     driver: bridge
+

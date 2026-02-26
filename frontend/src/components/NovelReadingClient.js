@@ -87,6 +87,20 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
 
     const formatContent = (text) => {
         if (!text) return null;
+
+        // İçerik zaten HTML etiketleri içeriyorsa (editörden geliyorsa) direkt render et
+        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(text);
+
+        if (hasHtmlTags) {
+            return (
+                <div
+                    className="novel-content mb-8 text-justify leading-loose"
+                    dangerouslySetInnerHTML={{ __html: text }}
+                />
+            );
+        }
+
+        // Düz metin ise satır satır parçala
         return text.split('\n').map((para, index) => {
             if (!para.trim()) return <br key={index} className="mb-4" />;
             return (
