@@ -85,7 +85,32 @@ async function getData() {
 
 export const metadata = {
   title: "Kaos Manga | Ana Sayfa",
-  description: "En yeni Webtoon ve Novelleri Kaos Manga ile Türkçe oku.",
+  description:
+    "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler, popüler romanlar ve sürekli güncellenen bölümlerle dolu platformumuzu keşfet.",
+  alternates: {
+    canonical: "https://kaosmanga.net",
+  },
+  openGraph: {
+    title: "Kaos Manga | Ana Sayfa",
+    description:
+      "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler, popüler romanlar ve sürekli güncellenen bölümlerle dolu platformumuzu keşfet.",
+    url: "https://kaosmanga.net",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Kaos Manga - Webtoon ve Novel Platformu",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Kaos Manga | Ana Sayfa",
+    description:
+      "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler ve popüler romanlar seni bekliyor.",
+    images: ["/og-image.png"],
+  },
 };
 
 export default async function Home() {
@@ -110,7 +135,7 @@ export default async function Home() {
                   <span className="w-2 h-8 bg-gradient-to-b from-blue-600 to-purple-600 rounded-full inline-block"></span>
                   Son Güncellenenler
                 </h2>
-                <Link href="/seriler" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
+                <Link href="/seriler" title="Tüm Webtoon ve Novel Serilerini Gör" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
               </div>
 
               {/* KART GRİD YAPISI */}
@@ -120,7 +145,7 @@ export default async function Home() {
 
                     {/* Kapak Görseli */}
                     <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-gray-600 transition-all duration-300">
-                      <Link href={`/${item.linkPath}/${item.slug || item.id}`} className="relative block w-full h-full">
+                      <Link href={`/${item.linkPath}/${item.slug || item.id}`} title={item.title || 'Seri'} className="relative block w-full h-full">
                         <Image
                           src={item.cover_image ? `${API}/${item.cover_image}` : '/placeholder.jpg'}
                           alt={item.title || 'İsimsiz'}
@@ -145,7 +170,7 @@ export default async function Home() {
                     {/* Bilgiler ve Son Bölümler */}
                     <div className="px-1 flex flex-col gap-2">
                       {/* Başlık */}
-                      <Link href={`/${item.linkPath}/${item.slug || item.id}`}>
+                      <Link href={`/${item.linkPath}/${item.slug || item.id}`} title={item.title || 'Seri'}>
                         <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-blue-400 transition duration-200">
                           {item.title}
                         </h3>
@@ -188,7 +213,7 @@ export default async function Home() {
               </h3>
               <div className="flex flex-col gap-6">
                 {popularList.map((w, index) => (
-                  <Link key={`${w.typeLabel}-${w.id}`} href={`/${w.linkPath}/${w.slug || w.id}`} className="flex gap-4 group items-center">
+                  <Link key={`${w.typeLabel}-${w.id}`} href={`/${w.linkPath}/${w.slug || w.id}`} title={w.title || 'Seri'} className="flex gap-4 group items-center">
                     <div className={`text-4xl font-black italic w-10 flex-shrink-0 text-center ${index < 3 ? 'text-transparent bg-clip-text bg-gradient-to-b from-blue-400 to-purple-600' : 'text-gray-800'}`}>
                       {index + 1}
                     </div>

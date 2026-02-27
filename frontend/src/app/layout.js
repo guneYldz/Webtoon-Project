@@ -3,12 +3,40 @@ import GoogleAnalytics from "@/components/GoogleAnalytics";
 import Navbar from "@/components/Navbar"; // 1. Navbar'ı çağırdık (Import)
 
 export const metadata = {
+  metadataBase: new URL("https://kaosmanga.net"),
   title: {
     default: "Kaos Manga | Webtoon ve Novel Oku",
     template: "%s | Kaos Manga",
   },
-  description: "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve ücretsiz oku.",
-  keywords: ["kaos manga", "webtoon", "novel", "türkçe manga", "shadow slave oku", "oku"],
+  description:
+    "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve tamamen ücretsiz oku. En yeni bölümler, trend seriler ve popüler romanlar seni bekliyor. Hemen keşfet!",
+  authors: [{ name: "Kaos Manga", url: "https://kaosmanga.net" }],
+  publisher: "Kaos Manga",
+  openGraph: {
+    type: "website",
+    locale: "tr_TR",
+    url: "https://kaosmanga.net",
+    siteName: "Kaos Manga",
+    title: "Kaos Manga | Webtoon ve Novel Oku",
+    description:
+      "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve tamamen ücretsiz oku. En yeni bölümler, trend seriler ve popüler romanlar seni bekliyor.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Kaos Manga - Webtoon ve Novel Platformu",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@kaosmanga",
+    title: "Kaos Manga | Webtoon ve Novel Oku",
+    description:
+      "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve tamamen ücretsiz oku. En yeni bölümler, trend seriler ve popüler romanlar seni bekliyor.",
+    images: ["/og-image.png"],
+  },
 };
 
 import { Inter, Cinzel } from "next/font/google";

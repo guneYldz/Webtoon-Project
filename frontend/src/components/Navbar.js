@@ -128,7 +128,7 @@ export default function Navbar() {
             </svg>
           </button>
 
-          <Link href="/" className="flex items-center gap-4 group">
+          <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-4 group">
             {/* Logo - Optimized size */}
             <div className="relative w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-105 transition duration-300">
               <Image
@@ -153,16 +153,16 @@ export default function Navbar() {
 
         {/* ORTA: LİNKLER */}
         <div className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-400">
-          <Link href="/" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Ana Sayfa
           </Link>
-          <Link href="/kesfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Keşfet
           </Link>
-          <Link href="/seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/seriler" title="Tüm Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Seriler
           </Link>
-          <Link href="/yeniler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Yeniler
           </Link>
         </div>
@@ -310,16 +310,16 @@ export default function Navbar() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/" title="Ana Sayfa" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               🏠 Ana Sayfa
             </Link>
-            <Link href="/kesfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/kesfet" title="Webtoon ve Novel Keşfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               🔍 Keşfet
             </Link>
-            <Link href="/seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/seriler" title="Tüm Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               📚 Seriler
             </Link>
-            <Link href="/yeniler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               ✨ Yeniler
             </Link>
           </div>
