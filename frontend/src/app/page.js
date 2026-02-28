@@ -186,6 +186,7 @@ export default async function Home() {
                             <Link
                               key={idx}
                               href={`/${item.linkPath}/${item.slug || item.id}/bolum/${chap.id}`}
+                              title={`${item.title} - ${item.typeLabel === 'NOVEL' ? 'Bölüm' : 'Bölüm'} ${chap.chapter_number || chap.episode_number}`}
                               className="flex items-center justify-between text-xs bg-[#1a1a1a] hover:bg-[#252525] border border-gray-800 rounded px-2 py-1.5 transition text-gray-300 hover:text-white hover:border-gray-600"
                             >
                               <span>
@@ -248,7 +249,7 @@ export default async function Home() {
           </div>
 
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
