@@ -11,6 +11,8 @@ body {
   /* Çok koyu gri (neredeyse siyah) */
   color: #e0e0e0;
   /* Yazılar açık gri */
+  font-size: 16px;
+  /* SEO: Okunabilirlik için minimum 16px tavsiye edilir */
 }
 
 /* Scrollbar (Kaydırma çubuğu) Güzelleştirme */

@@ -118,6 +118,9 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen font-sans bg-[#121212] pb-20">
+      {/* SEO H1 - Hidden from view but accessible to search engines */}
+      <h1 className="sr-only">Kaos Manga - En İyi Webtoon ve Novelleri Türkçe Oku</h1>
+
       <div className="container mx-auto max-w-7xl px-4 py-8">
 
         {/* HERO VİTRİN - Slider Bileşeni */}

@@ -12,6 +12,17 @@ export const metadata = {
     "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve tamamen ücretsiz oku. En yeni bölümler, trend seriler ve popüler romanlar seni bekliyor. Hemen keşfet!",
   authors: [{ name: "Kaos Manga", url: "https://kaosmanga.net" }],
   publisher: "Kaos Manga",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
   openGraph: {
     type: "website",
     locale: "tr_TR",
