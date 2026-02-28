@@ -64,7 +64,7 @@ export default function RecommendedSeries({ type = "novel" }) {
                             <h4 className="text-sm font-bold text-gray-200 line-clamp-1 group-hover:text-purple-400 transition">
                                 {item.title}
                             </h4>
-                            <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                            <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
                                 <span>⭐ {item.rating || "4.5"}</span>
                                 <span>👁️ {item.view_count || 0}</span>
                             </div>

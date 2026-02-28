@@ -69,13 +69,13 @@ export default function AdminDashboard() {
                 <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
                     <h3 className="text-gray-500 text-sm font-medium">Toplam Webtoon</h3>
                     <p className="text-3xl font-bold text-gray-900 mt-2">{stats.total_webtoons || 0}</p>
-                    <p className="text-xs text-green-600 mt-1">{stats.published_webtoons || 0} Yayında</p>
+                    <p className="text-sm text-green-600 mt-1">{stats.published_webtoons || 0} Yayında</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
                     <h3 className="text-gray-500 text-sm font-medium">Toplam Novel</h3>
                     <p className="text-3xl font-bold text-gray-900 mt-2">{stats.total_novels || 0}</p>
-                    <p className="text-xs text-green-600 mt-1">{stats.published_novels || 0} Yayında</p>
+                    <p className="text-sm text-green-600 mt-1">{stats.published_novels || 0} Yayında</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-lg shadow border border-gray-200">

@@ -54,7 +54,7 @@ export default function NovelReadingPage() {
 
   return (
     <div className="min-h-screen bg-[#121212] flex flex-col items-center font-sans">
-      
+
       {/* --- ALT GEZİNTİ ÇUBUĞU (NAVBAR) --- */}
       <div className={`fixed bottom-0 left-0 w-full z-50 transition-transform duration-500 ${showNavbar ? "translate-y-0" : "translate-y-full"}`}>
         <div className="flex justify-center w-full px-4 pb-4">
@@ -64,22 +64,22 @@ export default function NovelReadingPage() {
             </Link>
 
             <div className="text-center">
-              <h2 className="text-xs font-bold truncate max-w-[150px]">{data.title}</h2>
-              <p className="text-[10px] text-purple-500 font-bold uppercase">Bölüm {data.chapter_number}</p>
+              <h2 className="text-sm font-bold truncate max-w-[150px]">{data.title}</h2>
+              <p className="text-sm text-purple-500 font-bold uppercase">Bölüm {data.chapter_number}</p>
             </div>
 
             <div className="flex gap-2">
-              <button 
+              <button
                 onClick={() => data.prev_chapter && router.push(`/novel/${slug}/bolum/${data.prev_chapter}`)}
                 disabled={!data.prev_chapter}
                 className="p-2 rounded-lg bg-gray-800 disabled:opacity-20 hover:bg-gray-700 transition"
               >
                 ◀
               </button>
-              <button 
+              <button
                 onClick={() => data.next_chapter && router.push(`/novel/${slug}/bolum/${data.next_chapter}`)}
                 disabled={!data.next_chapter}
-                className="px-4 py-2 rounded-lg bg-purple-600 font-bold text-xs disabled:opacity-20 hover:bg-purple-500 transition shadow-lg shadow-purple-900/40"
+                className="px-4 py-2 rounded-lg bg-purple-600 font-bold text-sm disabled:opacity-20 hover:bg-purple-500 transition shadow-lg shadow-purple-900/40"
               >
                 Sonraki
               </button>
@@ -90,41 +90,41 @@ export default function NovelReadingPage() {
 
       {/* --- İÇERİK ALANI --- */}
       <div className="w-full max-w-3xl bg-[#161616] min-h-screen shadow-2xl px-6 md:px-16 pt-20 pb-40 border-x border-gray-900">
-        
+
         {/* Bölüm Başlığı */}
         <div className="mb-12 text-center border-b border-gray-800 pb-10">
-            <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight leading-tight italic">
-                {data.title}
-            </h1>
-            <p className="text-purple-500 font-bold tracking-widest uppercase text-xs">
-                {data.novel_title} — Bölüm {data.chapter_number}
-            </p>
+          <h1 className="text-3xl md:text-5xl font-black text-white mb-4 tracking-tight leading-tight italic">
+            {data.title}
+          </h1>
+          <p className="text-purple-500 font-bold tracking-widest uppercase text-sm">
+            {data.novel_title} — Bölüm {data.chapter_number}
+          </p>
         </div>
 
         {/* 📖 METİN İÇERİĞİ (Roman)
             Backend'den gelen 'content' alanını (HTML) burada gösteriyoruz.
         */}
-        <div 
+        <div
           className="novel-content text-gray-200 text-lg md:text-xl leading-[2] font-serif tracking-wide select-text text-justify"
           dangerouslySetInnerHTML={{ __html: data.content }}
         />
 
         {/* Bölüm Sonu Butonları */}
         <div className="mt-20 pt-10 border-t border-gray-800 flex flex-col items-center gap-6">
-            <div className="flex gap-4 w-full">
-                {data.next_chapter ? (
-                    <button 
-                        onClick={() => router.push(`/novel/${slug}/bolum/${data.next_chapter}`)}
-                        className="w-full py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition shadow-xl shadow-purple-900/20"
-                    >
-                        Sonraki Bölüme Geç →
-                    </button>
-                ) : (
-                    <Link href={`/novel/${slug}`} className="w-full py-4 bg-gray-800 text-center text-gray-400 font-bold rounded-xl transition">
-                        Seri Sayfasına Dön
-                    </Link>
-                )}
-            </div>
+          <div className="flex gap-4 w-full">
+            {data.next_chapter ? (
+              <button
+                onClick={() => router.push(`/novel/${slug}/bolum/${data.next_chapter}`)}
+                className="w-full py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition shadow-xl shadow-purple-900/20"
+              >
+                Sonraki Bölüme Geç →
+              </button>
+            ) : (
+              <Link href={`/novel/${slug}`} className="w-full py-4 bg-gray-800 text-center text-gray-400 font-bold rounded-xl transition">
+                Seri Sayfasına Dön
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 

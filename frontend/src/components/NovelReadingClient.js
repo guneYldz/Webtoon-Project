@@ -167,7 +167,7 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                         </div>
                     )}
                     <div className="flex-1 pb-2">
-                        <Link href={`/novel/${slug}`} className="inline-block mb-4 px-4 py-1.5 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-300 text-xs font-bold tracking-widest uppercase hover:bg-purple-600 hover:text-white transition">
+                        <Link href={`/novel/${slug}`} className="inline-block mb-4 px-4 py-1.5 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-300 text-sm font-bold tracking-widest uppercase hover:bg-purple-600 hover:text-white transition">
                             {chapter.novel_title || "Roman Serisi"}
                         </Link>
                         <h1 className={`${cinzel.className} text-3xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-2xl leading-tight mb-4`}>
@@ -255,15 +255,15 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                     <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-full px-6">
                         <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group">
                             <span className="text-xl group-hover:-translate-x-1 transition">←</span>
-                            <span className={`hidden sm:inline ${lato.className} text-xs font-bold tracking-widest uppercase`}>Seri</span>
+                            <span className={`hidden sm:inline ${lato.className} text-sm font-bold tracking-widest uppercase`}>Seri</span>
                         </Link>
                         <div className="flex flex-col items-center justify-center px-4">
-                            <h2 className={`text-xs font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>{chapter.title}</h2>
-                            <span className="text-[10px] text-purple-500 font-black tracking-widest">#{chapter.chapter_number}</span>
+                            <h2 className={`text-sm font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>{chapter.title}</h2>
+                            <span className="text-sm text-purple-500 font-black tracking-widest">#{chapter.chapter_number}</span>
                         </div>
                         <div className={`flex gap-3 ${lato.className}`}>
-                            <button onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)} disabled={!chapter.prev_chapter} className="px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-purple-400 transition">Önceki</button>
-                            <button onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)} disabled={!chapter.next_chapter} className="px-3 py-1.5 rounded-lg bg-purple-600 border border-purple-500 text-xs font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-purple-500 transition shadow-lg">Sonraki</button>
+                            <button onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)} disabled={!chapter.prev_chapter} className="px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-purple-400 transition">Önceki</button>
+                            <button onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)} disabled={!chapter.next_chapter} className="px-3 py-1.5 rounded-lg bg-purple-600 border border-purple-500 text-sm font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-purple-500 transition shadow-lg">Sonraki</button>
                         </div>
                     </div>
                 </div>

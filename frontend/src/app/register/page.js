@@ -99,7 +99,7 @@ export default function RegisterPage() {
 
           {/* Kullanıcı Adı Input */}
           <div>
-            <label className="block text-gray-300 text-xs font-bold uppercase tracking-wider mb-2 ml-1">Kullanıcı Adı</label>
+            <label className="block text-gray-300 text-sm font-bold uppercase tracking-wider mb-2 ml-1">Kullanıcı Adı</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 {/* User İkonu */}
@@ -120,7 +120,7 @@ export default function RegisterPage() {
 
           {/* Email Input */}
           <div>
-            <label className="block text-gray-300 text-xs font-bold uppercase tracking-wider mb-2 ml-1">E-posta Adresi</label>
+            <label className="block text-gray-300 text-sm font-bold uppercase tracking-wider mb-2 ml-1">E-posta Adresi</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 {/* Zarf İkonu */}
@@ -142,7 +142,7 @@ export default function RegisterPage() {
 
           {/* Şifre Input */}
           <div>
-            <label className="block text-gray-300 text-xs font-bold uppercase tracking-wider mb-2 ml-1">Şifre</label>
+            <label className="block text-gray-300 text-sm font-bold uppercase tracking-wider mb-2 ml-1">Şifre</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 {/* Kilit İkonu */}

@@ -211,7 +211,7 @@ export default function AdminLoginPage() {
 
                 {/* Deneme Sayısı Göstergesi */}
                 {!locked && attempts > 0 && (
-                    <div className="mt-4 text-center text-xs text-gray-500">
+                    <div className="mt-4 text-center text-sm text-gray-500">
                         {attempts}/5 deneme yapıldı
                     </div>
                 )}

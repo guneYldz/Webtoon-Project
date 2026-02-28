@@ -124,7 +124,7 @@ export default function ProfilePage() {
         </div>
 
         <h1 className="text-2xl font-black text-white text-center mb-1">{user?.username}</h1>
-        <p className="text-gray-500 text-xs text-center mb-6">{user?.email}</p>
+        <p className="text-gray-500 text-sm text-center mb-6">{user?.email}</p>
 
         {/* Butonlar */}
         <div className="space-y-3 mb-6">
@@ -132,7 +132,7 @@ export default function ProfilePage() {
             <button onClick={() => setShowPassModal(true)} className="w-full py-3 bg-[#1a1a1a] border border-white/10 rounded-xl text-sm font-bold hover:bg-[#222] transition">🔒 Şifre Değiştir</button>
         </div>
 
-        <button onClick={handleLogout} className="w-full py-4 rounded-xl bg-red-500/10 text-red-500 font-bold text-xs hover:bg-red-500 hover:text-white transition uppercase tracking-widest">Çıkış Yap</button>
+        <button onClick={handleLogout} className="w-full py-4 rounded-xl bg-red-500/10 text-red-500 font-bold text-sm hover:bg-red-500 hover:text-white transition uppercase tracking-widest">Çıkış Yap</button>
       </div>
 
       {/* --- EDİT MODAL --- */}

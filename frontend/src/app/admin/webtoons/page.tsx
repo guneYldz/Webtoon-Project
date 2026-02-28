@@ -178,25 +178,25 @@ export default function WebtoonsListPage() {
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     ID
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     Başlık
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     Durum
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     Öne Çıkan
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     Yayın
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     Görüntülenme
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500 uppercase">
                                     İşlemler
                                 </th>
                             </tr>
@@ -207,13 +207,13 @@ export default function WebtoonsListPage() {
                                     <td className="px-6 py-4 text-sm text-gray-900">{webtoon.id}</td>
                                     <td className="px-6 py-4">
                                         <div className="text-sm font-medium text-gray-900">{webtoon.title}</div>
-                                        <div className="text-xs text-gray-500 truncate max-w-xs">
+                                        <div className="text-sm text-gray-500 truncate max-w-xs">
                                             {webtoon.summary}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <span
-                                            className={`px-2 py-1 text-xs rounded-full ${webtoon.status === "ongoing"
+                                            className={`px-2 py-1 text-sm rounded-full ${webtoon.status === "ongoing"
                                                 ? "bg-green-100 text-green-800"
                                                 : "bg-gray-100 text-gray-800"
                                                 }`}

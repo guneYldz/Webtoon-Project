@@ -158,9 +158,9 @@ export default function CategoriesPage() {
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kategori Adı</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">İşlemler</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">ID</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Kategori Adı</th>
+                                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500 uppercase">İşlemler</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">

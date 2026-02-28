@@ -254,7 +254,7 @@ export default function BolumEkle() {
               />
 
               {/* Log Ekranı */}
-              <div className="mt-4 bg-black p-3 rounded h-40 overflow-y-auto text-xs font-mono text-green-300 border border-gray-700">
+              <div className="mt-4 bg-black p-3 rounded h-40 overflow-y-auto text-sm font-mono text-green-300 border border-gray-700">
                 {bulkLogs.length === 0 ? "İşlem bekleniyor..." : bulkLogs.map((log, i) => (
                   <div key={i}>{log}</div>
                 ))}

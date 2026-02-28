@@ -202,8 +202,8 @@ export default function Navbar() {
 
                   <div className="px-4 py-2 border-b border-gray-700 mb-1">
                     <div className="flex justify-between items-center mb-1">
-                      <p className="text-xs text-gray-500">Hesap:</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${user.role === 'admin' ? 'bg-red-900/50 text-red-200 border border-red-800' :
+                      <p className="text-sm text-gray-500">Hesap:</p>
+                      <span className={`text-sm px-1.5 py-0.5 rounded font-bold uppercase ${user.role === 'admin' ? 'bg-red-900/50 text-red-200 border border-red-800' :
                         user.role === 'editor' ? 'bg-yellow-900/50 text-yellow-200 border border-yellow-800' :
                           'bg-blue-900/50 text-blue-200 border border-blue-800'
                         }`}>
@@ -216,7 +216,7 @@ export default function Navbar() {
                   {/* 👇 GÜNCELLENEN YÖNETİM BUTONLARI 👇 */}
                   {(user.role === "admin" || user.role === "editor") && (
                     <>
-                      <div className="px-4 py-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-1">
+                      <div className="px-4 py-1 text-sm font-bold text-gray-500 uppercase tracking-wider mt-1">
                         Webtoon Yönetimi
                       </div>
                       <Link href="/admin/webtoon-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-sm text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
@@ -226,7 +226,7 @@ export default function Navbar() {
                         🎬 Bölüm Yükle
                       </Link>
 
-                      <div className="px-4 py-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-2 border-t border-gray-800 pt-2">
+                      <div className="px-4 py-1 text-sm font-bold text-gray-500 uppercase tracking-wider mt-2 border-t border-gray-800 pt-2">
                         Roman Yönetimi
                       </div>
                       <Link href="/admin/novel-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-sm text-purple-400 hover:bg-gray-800 hover:pl-6 transition-all">
@@ -339,7 +339,7 @@ export default function Navbar() {
                 </div>
                 <div className="flex flex-col overflow-hidden">
                   <span className="text-sm font-bold text-white truncate">{user.username}</span>
-                  <span className="text-xs text-gray-500 capitalize">{user.role || 'user'}</span>
+                  <span className="text-sm text-gray-500 capitalize">{user.role || 'user'}</span>
                 </div>
               </div>
             )}

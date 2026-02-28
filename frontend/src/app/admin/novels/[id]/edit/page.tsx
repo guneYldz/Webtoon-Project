@@ -225,7 +225,7 @@ export default function EditNovelPage({ params }: { params: { id: string } }) {
                                 alt="Mevcut Kapak"
                                 className="h-24 rounded border"
                             />
-                            <p className="text-xs text-gray-500 mt-1">Mevcut kapak</p>
+                            <p className="text-sm text-gray-500 mt-1">Mevcut kapak</p>
                         </div>
                     )}
                     <input
@@ -234,7 +234,7 @@ export default function EditNovelPage({ params }: { params: { id: string } }) {
                         onChange={(e) => setCoverImage(e.target.files?.[0] || null)}
                         className="w-full px-4 py-2 border rounded-lg"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-sm text-gray-500 mt-1">
                         Yeni resim yüklerseniz eskisi değiştirilir
                     </p>
                 </div>

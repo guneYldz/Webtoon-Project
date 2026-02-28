@@ -33,7 +33,7 @@ export default function ReadingHero({
 
                 {/* Navigasyon - DARK MODE İÇİN DÜZELTİLDİ */}
                 <div className="w-full bg-[#121212] py-2 px-4">
-                    <nav className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-widest flex gap-2 items-center justify-center">
+                    <nav className="text-sm md:text-sm text-gray-500 font-bold uppercase tracking-widest flex gap-2 items-center justify-center">
                         <Link href="/" className="hover:text-white transition">Anasayfa</Link>
                         <span>/</span>
                         <Link href={`/${linkPath}/${slug}`} className="hover:text-blue-400 transition text-gray-400">
@@ -73,7 +73,7 @@ export default function ReadingHero({
                 </div>
 
                 {/* İstatistikler */}
-                <div className="flex items-center justify-center gap-6 text-[10px] md:text-xs text-gray-400 font-mono bg-[#1a1a1a] px-6 py-2 rounded-full border border-gray-800 shadow-lg mt-2">
+                <div className="flex items-center justify-center gap-6 text-sm md:text-sm text-gray-400 font-mono bg-[#1a1a1a] px-6 py-2 rounded-full border border-gray-800 shadow-lg mt-2">
                     {date && (
                         <span className="flex items-center gap-2 hover:text-white transition">
                             📅 {new Date(date).toLocaleDateString('tr-TR')}

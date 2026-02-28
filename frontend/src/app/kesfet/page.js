@@ -111,7 +111,7 @@ export default function KesfetPage() {
                   <button
                     key={t}
                     onClick={() => setSelectedType(t)}
-                    className={`px-6 py-2 rounded-lg text-xs font-bold transition ${selectedType === t ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-white'}`}
+                    className={`px-6 py-2 rounded-lg text-sm font-bold transition ${selectedType === t ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-white'}`}
                   >
                     {t}
                   </button>
@@ -125,7 +125,7 @@ export default function KesfetPage() {
                 <button
                   key={genre}
                   onClick={() => setSelectedGenre(genre)}
-                  className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition border ${selectedGenre === genre
+                  className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition border ${selectedGenre === genre
                     ? "bg-white text-black border-white"
                     : "bg-[#252525] text-gray-400 border-gray-700 hover:border-gray-500"
                     }`}
@@ -143,7 +143,7 @@ export default function KesfetPage() {
 
         <div className="mb-6 flex justify-between items-center text-gray-400 text-sm">
           <span>Toplam <span className="text-white font-bold">{filteredSeries.length}</span> sonuç</span>
-          <span className="text-xs uppercase tracking-widest">{selectedType} Görünümü</span>
+          <span className="text-sm uppercase tracking-widest">{selectedType} Görünümü</span>
         </div>
 
         {filteredSeries.length > 0 ? (
@@ -162,7 +162,7 @@ export default function KesfetPage() {
 
                   {/* Tür Etiketi */}
                   <div className="absolute top-3 left-3">
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${s.type === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                    <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${s.type === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'}`}>
                       {s.type}
                     </span>
                   </div>
@@ -176,8 +176,8 @@ export default function KesfetPage() {
                     </h3>
                   </Link>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-[10px] text-gray-500">{s.author || (s.type === 'WEBTOON' ? 'Stüdyo' : 'Yazar')}</span>
-                    <span className="text-[10px] text-gray-600">👁️ {s.view_count || 0}</span>
+                    <span className="text-sm text-gray-500">{s.author || (s.type === 'WEBTOON' ? 'Stüdyo' : 'Yazar')}</span>
+                    <span className="text-sm text-gray-600">👁️ {s.view_count || 0}</span>
                   </div>
                 </div>
               </div>

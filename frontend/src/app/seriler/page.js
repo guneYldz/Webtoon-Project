@@ -60,7 +60,7 @@ export default function SerilerPage() {
           <div className="flex items-center gap-4 mb-8">
             <h2 className="text-2xl font-bold text-white uppercase tracking-wider">Webtoon Arşivi</h2>
             <div className="flex-1 h-px bg-gray-800"></div>
-            <span className="text-gray-500 text-xs font-mono">{webtoons.length} SERİ</span>
+            <span className="text-gray-500 text-sm font-mono">{webtoons.length} SERİ</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-10">
@@ -75,7 +75,7 @@ export default function SerilerPage() {
                     />
                   </Link>
                   <div className="absolute top-2 left-2">
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded text-white shadow-sm border border-black/10 ${w.status === 'ongoing' ? 'bg-blue-600' : 'bg-red-600'}`}>
+                    <span className={`text-sm font-bold px-1.5 py-0.5 rounded text-white shadow-sm border border-black/10 ${w.status === 'ongoing' ? 'bg-blue-600' : 'bg-red-600'}`}>
                       {w.status === 'ongoing' ? 'ONGOING' : 'TAMAMLANDI'}
                     </span>
                   </div>
@@ -85,10 +85,10 @@ export default function SerilerPage() {
                     <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-green-400 transition">{w.title}</h3>
                   </Link>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-gray-500 bg-[#1e1e1e] border border-gray-800 px-1.5 py-0.5 rounded">
+                    <span className="text-sm text-gray-500 bg-[#1e1e1e] border border-gray-800 px-1.5 py-0.5 rounded">
                       {(w.episodes?.length || 0)} Bölüm
                     </span>
-                    <span className="text-[10px] text-gray-500">👁️ {w.view_count || 0}</span>
+                    <span className="text-sm text-gray-500">👁️ {w.view_count || 0}</span>
                   </div>
                 </div>
               </div>
@@ -101,7 +101,7 @@ export default function SerilerPage() {
           <div className="flex items-center gap-4 mb-8">
             <h2 className="text-2xl font-bold text-white uppercase tracking-wider">Roman Arşivi</h2>
             <div className="flex-1 h-px bg-gray-800"></div>
-            <span className="text-gray-500 text-xs font-mono">{novels.length} SERİ</span>
+            <span className="text-gray-500 text-sm font-mono">{novels.length} SERİ</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-10">
@@ -116,7 +116,7 @@ export default function SerilerPage() {
                     />
                   </Link>
                   <div className="absolute top-2 left-2">
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white bg-purple-600">NOVEL</span>
+                    <span className="text-sm font-bold px-1.5 py-0.5 rounded text-white bg-purple-600">NOVEL</span>
                   </div>
                 </div>
                 <div>
@@ -124,7 +124,7 @@ export default function SerilerPage() {
                     <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-purple-400 transition">{n.title}</h3>
                   </Link>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] text-gray-400 italic">{n.author || 'Yazar Belirtilmedi'}</span>
+                    <span className="text-sm text-gray-400 italic">{n.author || 'Yazar Belirtilmedi'}</span>
                   </div>
                 </div>
               </div>

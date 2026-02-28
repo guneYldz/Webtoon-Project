@@ -103,7 +103,7 @@ export default function LoginPage() {
 
           {/* Email */}
           <div>
-            <label className="block text-gray-300 text-xs font-bold uppercase tracking-wider mb-2 ml-1">E-posta Adresi</label>
+            <label className="block text-gray-300 text-sm font-bold uppercase tracking-wider mb-2 ml-1">E-posta Adresi</label>
             <div className="relative">
               <input
                 type="email"
@@ -119,9 +119,9 @@ export default function LoginPage() {
           {/* Şifre */}
           <div>
             <div className="flex justify-between items-center mb-2 ml-1">
-              <label className="block text-gray-300 text-xs font-bold uppercase tracking-wider">Şifre</label>
+              <label className="block text-gray-300 text-sm font-bold uppercase tracking-wider">Şifre</label>
               {/* 👇 BURASI GÜNCELLENDİ: Sifremi Unuttum Linki */}
-              <Link href="/sifremi-unuttum" className="text-xs text-blue-400 hover:text-blue-300 transition">
+              <Link href="/sifremi-unuttum" className="text-sm text-blue-400 hover:text-blue-300 transition">
                 Şifremi unuttum?
               </Link>
             </div>

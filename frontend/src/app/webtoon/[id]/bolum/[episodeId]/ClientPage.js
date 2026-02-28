@@ -234,28 +234,28 @@ export default function ClientWebtoonReadingPage() {
 
                         <Link href={`/webtoon/${episode.webtoon_slug || params.id}`} className="text-gray-400 hover:text-blue-400 font-medium flex items-center gap-2 transition group">
                             <span className="text-xl group-hover:-translate-x-1 transition">←</span>
-                            <span className="hidden sm:inline text-xs font-bold tracking-widest uppercase">Seri</span>
+                            <span className="hidden sm:inline text-sm font-bold tracking-widest uppercase">Seri</span>
                         </Link>
 
                         <div className="flex flex-col items-center justify-center px-4">
-                            <h2 className="text-xs font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center tracking-wide">
+                            <h2 className="text-sm font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center tracking-wide">
                                 {episode.webtoon_title}
                             </h2>
-                            <span className="text-[10px] text-blue-500 font-black tracking-widest">BÖLÜM {episode.episode_number}</span>
+                            <span className="text-sm text-blue-500 font-black tracking-widest">BÖLÜM {episode.episode_number}</span>
                         </div>
 
                         <div className="flex gap-3">
                             <button
                                 onClick={() => episode.prev_episode_id && router.push(`/webtoon/${params.id}/bolum/${episode.prev_episode_id}`)}
                                 disabled={!episode.prev_episode_id}
-                                className="px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-blue-400 transition"
+                                className="px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-blue-400 transition"
                             >
                                 Önceki
                             </button>
                             <button
                                 onClick={() => episode.next_episode_id && router.push(`/webtoon/${params.id}/bolum/${episode.next_episode_id}`)}
                                 disabled={!episode.next_episode_id}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-xs font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-blue-500 transition shadow-lg"
+                                className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-sm font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-blue-500 transition shadow-lg"
                             >
                                 Sonraki
                             </button>

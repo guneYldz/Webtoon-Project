@@ -72,7 +72,7 @@ const FeaturedSlider = ({ webtoon }) => {
 
         <div className="flex flex-col gap-4 max-w-3xl">
           {/* ETİKET (Dinamik Renk) */}
-          <span className={`text-white text-xs font-bold px-3 py-1 rounded w-fit uppercase tracking-wider shadow-lg ${badgeClass}`}>
+          <span className={`text-white text-sm font-bold px-3 py-1 rounded w-fit uppercase tracking-wider shadow-lg ${badgeClass}`}>
             {labelText}
           </span>
 

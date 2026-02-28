@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
             {step === 1 ? (
                 <form onSubmit={handleRequestCode} className="space-y-4">
                     <div>
-                        <label className="text-xs text-gray-400 font-bold uppercase ml-1">E-posta Adresin</label>
+                        <label className="text-sm text-gray-400 font-bold uppercase ml-1">E-posta Adresin</label>
                         <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 bg-[#1a1a1a] rounded-xl border border-gray-700 text-white focus:border-purple-600 outline-none mt-1" placeholder="ornek@site.com" />
                     </div>
                     <button disabled={loading} className="w-full py-3 bg-purple-600 rounded-xl text-white font-bold hover:bg-purple-500 transition">{loading ? "Gönderiliyor..." : "Sıfırlama Kodu Gönder"}</button>
@@ -73,11 +73,11 @@ export default function ForgotPasswordPage() {
             ) : (
                 <form onSubmit={handleResetPassword} className="space-y-4">
                     <div>
-                        <label className="text-xs text-gray-400 font-bold uppercase ml-1">Sıfırlama Kodu (Terminalden Bak)</label>
+                        <label className="text-sm text-gray-400 font-bold uppercase ml-1">Sıfırlama Kodu (Terminalden Bak)</label>
                         <input type="text" required value={code} onChange={e => setCode(e.target.value)} className="w-full p-3 bg-[#1a1a1a] rounded-xl border border-gray-700 text-white focus:border-purple-600 outline-none mt-1" placeholder="Kodu buraya yapıştır" />
                     </div>
                     <div>
-                        <label className="text-xs text-gray-400 font-bold uppercase ml-1">Yeni Şifre</label>
+                        <label className="text-sm text-gray-400 font-bold uppercase ml-1">Yeni Şifre</label>
                         <input type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full p-3 bg-[#1a1a1a] rounded-xl border border-gray-700 text-white focus:border-purple-600 outline-none mt-1" placeholder="Yeni şifreniz" />
                     </div>
                     <button disabled={loading} className="w-full py-3 bg-green-600 rounded-xl text-white font-bold hover:bg-green-500 transition">{loading ? "Sıfırlanıyor..." : "Şifreyi Sıfırla"}</button>
@@ -85,7 +85,7 @@ export default function ForgotPasswordPage() {
             )}
 
             <div className="mt-6 text-center">
-                <Link href="/login" className="text-gray-500 text-xs hover:text-white transition">Giriş Ekranına Dön</Link>
+                <Link href="/login" className="text-gray-500 text-sm hover:text-white transition">Giriş Ekranına Dön</Link>
             </div>
         </div>
     </div>

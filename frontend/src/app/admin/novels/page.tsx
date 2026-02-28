@@ -139,13 +139,13 @@ export default function NovelsListPage() {
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Başlık</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yazar</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Durum</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Öne Çıkan</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yayın</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">İşlemler</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">ID</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Başlık</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Yazar</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Durum</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Öne Çıkan</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Yayın</th>
+                                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500 uppercase">İşlemler</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -154,11 +154,11 @@ export default function NovelsListPage() {
                                     <td className="px-6 py-4 text-sm text-gray-900">{novel.id}</td>
                                     <td className="px-6 py-4">
                                         <div className="text-sm font-medium text-gray-900">{novel.title}</div>
-                                        <div className="text-xs text-gray-500 truncate max-w-xs">{novel.summary}</div>
+                                        <div className="text-sm text-gray-500 truncate max-w-xs">{novel.summary}</div>
                                     </td>
                                     <td className="px-6 py-4 text-sm text-gray-500">{novel.author || "—"}</td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-xs rounded-full ${novel.status === "ongoing" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                                        <span className={`px-2 py-1 text-sm rounded-full ${novel.status === "ongoing" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
                                             {novel.status === "ongoing" ? "Devam Ediyor" : "Tamamlandı"}
                                         </span>
                                     </td>

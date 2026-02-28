@@ -67,13 +67,13 @@ export default function AdminLayout({
                     <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                         Admin Panel
                     </h1>
-                    <p className="text-xs text-gray-400 mt-1">Webtoon & Novel Manager</p>
+                    <p className="text-sm text-gray-400 mt-1">Webtoon & Novel Manager</p>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
                     <NavItem href="/admin" icon="📊" label="Dashboard" />
 
-                    <div className="pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <div className="pt-4 pb-1 text-sm font-semibold text-gray-500 uppercase tracking-wider">
                         İçerik Yönetimi
                     </div>
                     <NavItem href="/admin/webtoons" icon="🎨" label="Webtoonlar" />
@@ -84,7 +84,7 @@ export default function AdminLayout({
 
 
 
-                    <div className="pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <div className="pt-4 pb-1 text-sm font-semibold text-gray-500 uppercase tracking-wider">
                         Kullanıcılar
                     </div>
                     <NavItem href="/admin/users" icon="👥" label="Üyeler" />

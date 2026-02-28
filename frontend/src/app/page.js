@@ -161,7 +161,7 @@ export default async function Home() {
 
                       {/* Tür Etiketi */}
                       <div className="absolute top-2 left-2 z-10">
-                        <span className={`text-xs font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'
+                        <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'
                           }`}>
                           {item.typeLabel}
                         </span>
@@ -187,18 +187,18 @@ export default async function Home() {
                               key={idx}
                               href={`/${item.linkPath}/${item.slug || item.id}/bolum/${chap.id}`}
                               title={`${item.title} - ${item.typeLabel === 'NOVEL' ? 'Bölüm' : 'Bölüm'} ${chap.chapter_number || chap.episode_number}`}
-                              className="flex items-center justify-between text-xs bg-[#1a1a1a] hover:bg-[#252525] border border-gray-800 rounded px-2 py-1.5 transition text-gray-300 hover:text-white hover:border-gray-600"
+                              className="flex items-center justify-between text-sm bg-[#1a1a1a] hover:bg-[#252525] border border-gray-800 rounded px-2 py-1.5 transition text-gray-300 hover:text-white hover:border-gray-600"
                             >
                               <span>
                                 {item.typeLabel === 'NOVEL' ? 'Bölüm' : '#'} {chap.chapter_number || chap.episode_number}
                               </span>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-sm text-gray-500">
                                 Yeni
                               </span>
                             </Link>
                           ))
                         ) : (
-                          <span className="text-xs text-gray-600 italic">Henüz bölüm yok</span>
+                          <span className="text-sm text-gray-600 italic">Henüz bölüm yok</span>
                         )}
                       </div>
 
@@ -236,10 +236,10 @@ export default async function Home() {
                         {w.title}
                       </h4>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-[9px] uppercase font-bold tracking-tighter ${w.typeLabel === 'WEBTOON' ? 'text-blue-500' : 'text-purple-500'}`}>
+                        <span className={`text-sm uppercase font-bold tracking-tighter ${w.typeLabel === 'WEBTOON' ? 'text-blue-500' : 'text-purple-500'}`}>
                           {w.typeLabel}
                         </span>
-                        <span className="text-[9px] text-gray-600">👁️ {w.view_count || 0}</span>
+                        <span className="text-sm text-gray-600">👁️ {w.view_count || 0}</span>
                       </div>
                     </div>
                   </Link>

@@ -159,7 +159,7 @@ export default async function NovelDetail({ params }) {
                   </div>
                   <div>
                     <h4 className="font-bold text-gray-200 group-hover:text-white transition">{ch.title}</h4>
-                    <span className="text-[10px] text-gray-500 uppercase tracking-widest group-hover:text-purple-400">Okumak için tıkla</span>
+                    <span className="text-sm text-gray-500 uppercase tracking-widest group-hover:text-purple-400">Okumak için tıkla</span>
                   </div>
                 </div>
                 <div className="text-gray-600 group-hover:text-purple-500 transition">➜</div>

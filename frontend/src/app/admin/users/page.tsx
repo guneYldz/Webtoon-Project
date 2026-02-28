@@ -126,12 +126,12 @@ export default function UsersListPage() {
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kullanıcı Adı</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Durum</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">İşlemler</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">ID</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Kullanıcı Adı</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Email</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Rol</th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Durum</th>
+                                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500 uppercase">İşlemler</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -141,7 +141,7 @@ export default function UsersListPage() {
                                     <td className="px-6 py-4 text-sm font-medium text-gray-900">{user.username}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-xs rounded-full ${user.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                                        <span className={`px-2 py-1 text-sm rounded-full ${user.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
                                             {user.role}
                                         </span>
                                     </td>

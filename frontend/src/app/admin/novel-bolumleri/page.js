@@ -211,9 +211,9 @@ export default function NovelChaptersPage() {
                                             <td className="p-4 text-gray-800 font-medium">{chapter.title}</td>
                                             <td className="p-4">
                                                 {chapter.is_published ? (
-                                                    <span className="bg-green-100 text-green-700 py-1 px-2 rounded text-xs font-bold">Yayında</span>
+                                                    <span className="bg-green-100 text-green-700 py-1 px-2 rounded text-sm font-bold">Yayında</span>
                                                 ) : (
-                                                    <span className="bg-gray-100 text-gray-500 py-1 px-2 rounded text-xs font-bold">Taslak</span>
+                                                    <span className="bg-gray-100 text-gray-500 py-1 px-2 rounded text-sm font-bold">Taslak</span>
                                                 )}
                                             </td>
                                             <td className="p-4 text-gray-500 text-sm">👁️ {chapter.view_count || 0}</td>

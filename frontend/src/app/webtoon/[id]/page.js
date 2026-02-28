@@ -135,7 +135,7 @@ export default function WebtoonDetail() {
                     <h4 className="font-bold text-gray-200 text-lg group-hover:text-blue-400 transition">
                       {ep.title}
                     </h4>
-                    <span className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                    <span className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                       📅 {new Date(ep.created_at).toLocaleDateString("tr-TR")}
                     </span>
                   </div>
