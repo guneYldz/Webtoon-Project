@@ -161,7 +161,7 @@ export default async function Home() {
 
                       {/* Tür Etiketi */}
                       <div className="absolute top-2 left-2 z-10">
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'
+                        <span className={`text-xs font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'
                           }`}>
                           {item.typeLabel}
                         </span>
@@ -192,13 +192,13 @@ export default async function Home() {
                               <span>
                                 {item.typeLabel === 'NOVEL' ? 'Bölüm' : '#'} {chap.chapter_number || chap.episode_number}
                               </span>
-                              <span className="text-[9px] text-gray-500">
+                              <span className="text-xs text-gray-500">
                                 Yeni
                               </span>
                             </Link>
                           ))
                         ) : (
-                          <span className="text-[10px] text-gray-600 italic">Henüz bölüm yok</span>
+                          <span className="text-xs text-gray-600 italic">Henüz bölüm yok</span>
                         )}
                       </div>
 

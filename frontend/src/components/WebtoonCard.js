@@ -9,25 +9,25 @@ export default function WebtoonCard({ webtoon }) {
       {/* --- KAPAK RESMİ ALANI --- */}
       <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:shadow-blue-900/40 group-hover:border-blue-500/50 transition duration-300">
         <Link href={`/webtoon/${webtoon.id}`}>
-          <img 
-            src={`https://kaosmanga.net/api/${webtoon.cover_image}`} 
-            alt={webtoon.title} 
+          <img
+            src={`https://kaosmanga.net/api/${webtoon.cover_image}`}
+            alt={webtoon.title}
             className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
             loading="lazy"
           />
         </Link>
-        
+
         {/* Sol Üst Etiket (Durum) */}
         <div className="absolute top-2 left-2">
-            <span className={`text-[9px] font-bold px-2 py-1 rounded text-white shadow-md backdrop-blur-md ${webtoon.status === 'ongoing' ? 'bg-blue-600/90' : 'bg-red-600/90'}`}>
-              {webtoon.status === 'ongoing' ? 'DEVAM EDİYOR' : 'TAMAMLANDI'}
-            </span>
+          <span className={`text-xs font-bold px-2 py-1 rounded text-white shadow-md backdrop-blur-md ${webtoon.status === 'ongoing' ? 'bg-blue-600/90' : 'bg-red-600/90'}`}>
+            {webtoon.status === 'ongoing' ? 'DEVAM EDİYOR' : 'TAMAMLANDI'}
+          </span>
         </div>
 
         {/* Hover Efekti (Karanlık Perde) */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none"></div>
       </div>
-      
+
       {/* --- ALT BİLGİ ALANI --- */}
       <div className="px-1">
         <Link href={`/webtoon/${webtoon.id}`}>
@@ -35,14 +35,14 @@ export default function WebtoonCard({ webtoon }) {
             {webtoon.title}
           </h3>
         </Link>
-        
+
         <div className="flex justify-between items-center mt-1">
-            <span className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">
-                {webtoon.type || "MANGA"}
-            </span>
-            <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                👁️ {(webtoon.view_count || 0).toLocaleString()}
-            </span>
+          <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">
+            {webtoon.type || "MANGA"}
+          </span>
+          <span className="text-xs text-gray-500 flex items-center gap-1">
+            👁️ {(webtoon.view_count || 0).toLocaleString()}
+          </span>
         </div>
       </div>
     </div>
