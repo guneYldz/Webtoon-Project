@@ -13,8 +13,8 @@ export default function YenilerPage() {
     const fetchData = async () => {
       try {
         const [webtoonRes, novelRes] = await Promise.all([
-          fetch("https://kaosmanga.net/api/webtoons/"),
-          fetch("https://kaosmanga.net/api/novels/")
+          fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/webtoons/`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/novels/`)
         ]);
 
         const webtoonData = await webtoonRes.json();
@@ -64,7 +64,7 @@ export default function YenilerPage() {
                 <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-red-500/50 transition duration-300">
                   <Link href={`/webtoon/${w.id}`}>
                     <img
-                      src={`https://kaosmanga.net/api/${w.cover_image}`}
+                      src={`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/${w.cover_image}`}
                       alt={w.title}
                       className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
                     />
@@ -98,7 +98,7 @@ export default function YenilerPage() {
                 <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-purple-500/50 transition duration-300">
                   <Link href={`/novel/${n.slug}`}>
                     <img
-                      src={`https://kaosmanga.net/api/${n.cover_image}`}
+                      src={`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/${n.cover_image}`}
                       alt={n.title}
                       className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
                     />

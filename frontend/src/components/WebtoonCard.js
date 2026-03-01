@@ -19,7 +19,7 @@ export default function WebtoonCard({ webtoon }) {
 
         {/* Sol Üst Etiket (Durum) */}
         <div className="absolute top-2 left-2">
-          <span className={`text-sm font-bold px-2 py-1 rounded text-white shadow-md backdrop-blur-md ${webtoon.status === 'ongoing' ? 'bg-blue-600/90' : 'bg-red-600/90'}`}>
+          <span className={`text-base font-bold px-2 py-1 rounded text-white shadow-md backdrop-blur-md ${webtoon.status === 'ongoing' ? 'bg-blue-600/90' : 'bg-red-600/90'}`}>
             {webtoon.status === 'ongoing' ? 'DEVAM EDİYOR' : 'TAMAMLANDI'}
           </span>
         </div>
@@ -31,16 +31,16 @@ export default function WebtoonCard({ webtoon }) {
       {/* --- ALT BİLGİ ALANI --- */}
       <div className="px-1">
         <Link href={`/webtoon/${webtoon.id}`}>
-          <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-blue-400 transition">
+          <h3 className="font-bold text-base text-gray-100 truncate group-hover:text-blue-400 transition">
             {webtoon.title}
           </h3>
         </Link>
 
         <div className="flex justify-between items-center mt-1">
-          <span className="text-sm text-gray-500 uppercase tracking-wide font-medium">
+          <span className="text-base text-gray-500 uppercase tracking-wide font-medium">
             {webtoon.type || "MANGA"}
           </span>
-          <span className="text-sm text-gray-500 flex items-center gap-1">
+          <span className="text-base text-gray-500 flex items-center gap-1">
             👁️ {(webtoon.view_count || 0).toLocaleString()}
           </span>
         </div>

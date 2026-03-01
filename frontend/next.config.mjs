@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  compress: true,
+  compress: false, // Nginx gzip aktif oldugu icin devre disi
   transpilePackages: ['swiper'],
   images: {
     remotePatterns: [

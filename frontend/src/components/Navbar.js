@@ -152,7 +152,7 @@ export default function Navbar() {
         </div>
 
         {/* ORTA: LİNKLER */}
-        <div className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-400">
+        <div className="hidden md:flex items-center gap-6 text-base font-medium text-gray-400">
           <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Ana Sayfa
           </Link>
@@ -176,11 +176,11 @@ export default function Navbar() {
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 py-1.5 px-3 rounded-full border border-gray-700 transition duration-300 focus:outline-none"
               >
-                <span className="text-sm font-bold text-gray-200 hidden sm:block max-w-[150px] truncate">
+                <span className="text-base font-bold text-gray-200 hidden sm:block max-w-[150px] truncate">
                   {user.username}
                 </span>
 
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white text-sm font-bold shadow-md">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white text-base font-bold shadow-md">
                   {user.username ? user.username.charAt(0).toUpperCase() : "U"}
                 </div>
 
@@ -202,62 +202,62 @@ export default function Navbar() {
 
                   <div className="px-4 py-2 border-b border-gray-700 mb-1">
                     <div className="flex justify-between items-center mb-1">
-                      <p className="text-sm text-gray-500">Hesap:</p>
-                      <span className={`text-sm px-1.5 py-0.5 rounded font-bold uppercase ${user.role === 'admin' ? 'bg-red-900/50 text-red-200 border border-red-800' :
+                      <p className="text-base text-gray-500">Hesap:</p>
+                      <span className={`text-base px-1.5 py-0.5 rounded font-bold uppercase ${user.role === 'admin' ? 'bg-red-900/50 text-red-200 border border-red-800' :
                         user.role === 'editor' ? 'bg-yellow-900/50 text-yellow-200 border border-yellow-800' :
                           'bg-blue-900/50 text-blue-200 border border-blue-800'
                         }`}>
                         {user.role || 'user'}
                       </span>
                     </div>
-                    <p className="text-sm font-bold text-white truncate">{user.username}</p>
+                    <p className="text-base font-bold text-white truncate">{user.username}</p>
                   </div>
 
                   {/* 👇 GÜNCELLENEN YÖNETİM BUTONLARI 👇 */}
                   {(user.role === "admin" || user.role === "editor") && (
                     <>
-                      <div className="px-4 py-1 text-sm font-bold text-gray-500 uppercase tracking-wider mt-1">
+                      <div className="px-4 py-1 text-base font-bold text-gray-500 uppercase tracking-wider mt-1">
                         Webtoon Yönetimi
                       </div>
-                      <Link href="/admin/webtoon-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-sm text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
+                      <Link href="/admin/webtoon-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
                         📚 Seri Ekle
                       </Link>
-                      <Link href="/admin/bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-sm text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
+                      <Link href="/admin/bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
                         🎬 Bölüm Yükle
                       </Link>
 
-                      <div className="px-4 py-1 text-sm font-bold text-gray-500 uppercase tracking-wider mt-2 border-t border-gray-800 pt-2">
+                      <div className="px-4 py-1 text-base font-bold text-gray-500 uppercase tracking-wider mt-2 border-t border-gray-800 pt-2">
                         Roman Yönetimi
                       </div>
-                      <Link href="/admin/novel-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-sm text-purple-400 hover:bg-gray-800 hover:pl-6 transition-all">
+                      <Link href="/admin/novel-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-purple-400 hover:bg-gray-800 hover:pl-6 transition-all">
                         📖 Roman Ekle
                       </Link>
-                      <Link href="/admin/novel-bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-sm text-purple-400 hover:bg-gray-800 hover:pl-6 transition-all">
+                      <Link href="/admin/novel-bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-purple-400 hover:bg-gray-800 hover:pl-6 transition-all">
                         📝 Roman Bölümü Yükle
                       </Link>
                       <div className="border-t border-gray-700 my-1"></div>
                     </>
                   )}
 
-                  <Link href="/profil" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2">
+                  <Link href="/profil" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-base text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2">
                     👤 Profilim
                   </Link>
 
                   <Link
                     href="/favoriler"
-                    className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
+                    className="block px-4 py-2 text-base text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
                     onClick={() => setIsOpen(false)}
                   >
                     ❤️ Favorilerim
                   </Link>
 
-                  <Link href="/ayarlar" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition">
+                  <Link href="/ayarlar" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-base text-gray-300 hover:bg-gray-800 hover:text-white transition">
                     ⚙️ Ayarlar
                   </Link>
 
                   <div className="border-t border-gray-700 my-1"></div>
 
-                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300 transition text-left">
+                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-base text-red-400 hover:bg-red-900/20 hover:text-red-300 transition text-left">
                     🚪 Çıkış Yap
                   </button>
                 </div>,
@@ -269,7 +269,7 @@ export default function Navbar() {
               onClick={() => router.push("/login")}
               className="flex items-center gap-2 text-gray-400 group hover:text-white transition"
             >
-              <span className="text-sm font-medium hidden sm:block">Giriş Yap</span>
+              <span className="text-base font-medium hidden sm:block">Giriş Yap</span>
               <div className="w-9 h-9 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center group-hover:border-gray-500 group-hover:bg-gray-700 transition">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                   <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" />
@@ -338,8 +338,8 @@ export default function Navbar() {
                   {user.username ? user.username.charAt(0).toUpperCase() : "U"}
                 </div>
                 <div className="flex flex-col overflow-hidden">
-                  <span className="text-sm font-bold text-white truncate">{user.username}</span>
-                  <span className="text-sm text-gray-500 capitalize">{user.role || 'user'}</span>
+                  <span className="text-base font-bold text-white truncate">{user.username}</span>
+                  <span className="text-base text-gray-500 capitalize">{user.role || 'user'}</span>
                 </div>
               </div>
             )}
