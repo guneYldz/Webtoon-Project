@@ -152,6 +152,7 @@ export default async function NovelDetail({ params }) {
               <Link
                 key={ch.id}
                 href={`/novel/${slug}/bolum/${ch.chapter_number}`}
+                title={`${ch.title || `Bölüm ${ch.chapter_number}`} Oku`}
                 className="bg-[#1e1e1e] p-5 rounded-2xl border border-gray-800 hover:border-purple-500/50 hover:bg-[#252525] transition-all flex items-center justify-between group"
               >
                 <div className="flex items-center gap-4">

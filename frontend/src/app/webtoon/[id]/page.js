@@ -125,6 +125,7 @@ export default function WebtoonDetail() {
               <Link
                 key={ep.id}
                 href={`/webtoon/${id}/bolum/${ep.id}`}
+                title={`${ep.title || `Bölüm ${ep.episode_number}`} Oku`}
                 className="bg-[#1e1e1e] p-4 rounded-xl border border-gray-800 hover:border-blue-500/50 hover:bg-[#252525] transition flex items-center justify-between group shadow-sm"
               >
                 <div className="flex items-center gap-5">

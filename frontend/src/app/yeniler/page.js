@@ -62,7 +62,7 @@ export default function YenilerPage() {
             {webtoons.map((w, index) => (
               <div key={`webtoon-${w.id}`} className="group flex flex-col gap-2">
                 <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-red-500/50 transition duration-300">
-                  <Link href={`/webtoon/${w.id}`}>
+                  <Link href={`/webtoon/${w.id}`} title={`${w.title} Webtoonu`}>
                     <img
                       src={`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/${w.cover_image}`}
                       alt={w.title}
@@ -76,7 +76,7 @@ export default function YenilerPage() {
                   )}
                 </div>
                 <div>
-                  <Link href={`/webtoon/${w.id}`}>
+                  <Link href={`/webtoon/${w.id}`} title={`${w.title} Webtoonunu Oku`}>
                     <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-red-400 transition">{w.title}</h3>
                   </Link>
                   <p className="text-sm text-gray-500 mt-1">Webtoon • {new Date().toLocaleDateString('tr-TR')}</p>
@@ -96,7 +96,7 @@ export default function YenilerPage() {
             {novels.map((n, index) => (
               <div key={`novel-${n.id}`} className="group flex flex-col gap-2">
                 <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-purple-500/50 transition duration-300">
-                  <Link href={`/novel/${n.slug}`}>
+                  <Link href={`/novel/${n.slug}`} title={`${n.title} Romanı`}>
                     <img
                       src={`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/${n.cover_image}`}
                       alt={n.title}
@@ -110,7 +110,7 @@ export default function YenilerPage() {
                   )}
                 </div>
                 <div>
-                  <Link href={`/novel/${n.slug}`}>
+                  <Link href={`/novel/${n.slug}`} title={`${n.title} Romanını Oku`}>
                     <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-purple-400 transition">{n.title}</h3>
                   </Link>
                   <p className="text-sm text-gray-500 mt-1">Roman • {n.author || 'Belirtilmedi'}</p>

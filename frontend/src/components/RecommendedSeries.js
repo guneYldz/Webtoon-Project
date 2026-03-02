@@ -44,6 +44,7 @@ export default function RecommendedSeries({ type = "novel" }) {
                     <Link
                         key={item.id}
                         href={`/${type}/${item.slug}`}
+                        title={`${item.title} Serisine Git`}
                         className="group block bg-[#1a1a1a] rounded-lg overflow-hidden border border-gray-800 hover:border-purple-500/50 transition"
                     >
                         <div className="relative aspect-[2/3] w-full bg-gray-900">

@@ -8,7 +8,7 @@ export default function WebtoonCard({ webtoon }) {
     <div className="group flex flex-col gap-2">
       {/* --- KAPAK RESMİ ALANI --- */}
       <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:shadow-blue-900/40 group-hover:border-blue-500/50 transition duration-300">
-        <Link href={`/webtoon/${webtoon.id}`}>
+        <Link href={`/webtoon/${webtoon.id}`} title={`${webtoon.title} Okumak İçin Tıkla`}>
           <img
             src={`https://kaosmanga.net/api/${webtoon.cover_image}`}
             alt={webtoon.title}
@@ -30,7 +30,7 @@ export default function WebtoonCard({ webtoon }) {
 
       {/* --- ALT BİLGİ ALANI --- */}
       <div className="px-1">
-        <Link href={`/webtoon/${webtoon.id}`}>
+        <Link href={`/webtoon/${webtoon.id}`} title={`${webtoon.title} Serisine Git`}>
           <h3 className="font-bold text-base text-gray-100 truncate group-hover:text-blue-400 transition">
             {webtoon.title}
           </h3>
