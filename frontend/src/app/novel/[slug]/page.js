@@ -110,8 +110,9 @@ export default async function NovelDetail({ params }) {
                 <Link
                   href={`/novel/${slug}/bolum/${firstChapter.chapter_number}`}
                   className="px-8 py-3 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-500 shadow-[0_0_20px_rgba(147,51,234,0.3)] transition-all flex items-center gap-2"
+                  title={`${novel.title} Türkçe Oku`}
                 >
-                  📖 Hemen Oku
+                  📖 Türkçe Oku
                 </Link>
               )}
 

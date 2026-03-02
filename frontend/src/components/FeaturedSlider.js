@@ -101,9 +101,10 @@ const FeaturedSlider = ({ webtoon }) => {
             <Link
               href={`/${routeType}/${webtoon.slug || webtoon.id}`}
               className="bg-white text-black hover:bg-gray-200 px-8 py-3.5 rounded-full font-bold transition flex items-center gap-2 shadow-lg z-20 hover:scale-105 active:scale-95 duration-200"
+              title={`${webtoon.title} Türkçe Oku`}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
-              Hemen Oku
+              Türkçe Oku
             </Link>
 
             {/* FAVORİ BUTONU */}

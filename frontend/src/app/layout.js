@@ -2,6 +2,12 @@ import "./globals.css"; // ENABLED: Tailwind PostCSS Build
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import Navbar from "@/components/Navbar"; // 1. Navbar'ı çağırdık (Import)
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export const metadata = {
   metadataBase: new URL("https://kaosmanga.net"),
   title: {

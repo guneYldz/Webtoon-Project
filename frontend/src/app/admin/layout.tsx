@@ -13,6 +13,7 @@ export default function AdminLayout({
     const [authenticated, setAuthenticated] = useState(false);
     const [loading, setLoading] = useState(true);
     const [username, setUsername] = useState("");
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false); // 🔥 Mobil menü durumu
 
     useEffect(() => {
         // Token kontrolü - sadece client-side'da çalışır
@@ -60,9 +61,21 @@ export default function AdminLayout({
     }
 
     return (
-        <div className="flex h-screen bg-gray-100 font-sans text-gray-900">
+        <div className="flex h-screen bg-gray-100 font-sans text-gray-900 overflow-hidden">
+
+            {/* MOBİL ARKAKAPLAN (Overlay) */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/60 z-20 md:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
             {/* SIDEBAR */}
-            <aside className="w-64 bg-gray-900 text-white flex flex-col shadow-xl">
+            <aside
+                className={`w-64 bg-gray-900 text-white flex flex-col shadow-xl fixed inset-y-0 left-0 z-30 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                    }`}
+            >
                 <div className="p-6 border-b border-gray-800">
                     <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                         Admin Panel
@@ -109,16 +122,25 @@ export default function AdminLayout({
             </aside>
 
             {/* MAIN CONTENT */}
-            <main className="flex-1 overflow-auto max-h-screen">
-                <header className="bg-white shadow-sm h-16 flex items-center px-8 justify-between sticky top-0 z-10">
-                    <h2 className="text-xl font-semibold text-gray-800">Yönetim Paneli</h2>
+            <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+                <header className="bg-white shadow-sm h-16 min-h-[4rem] flex items-center px-4 md:px-8 justify-between sticky top-0 z-10 w-full">
+                    <div className="flex items-center gap-4">
+                        {/* 🍔 HAMBURGER BUTONU (Sadece Mobilde) */}
+                        <button
+                            className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                            onClick={() => setIsSidebarOpen(true)}
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        </button>
+                        <h2 className="text-xl font-semibold text-gray-800">Yönetim Paneli</h2>
+                    </div>
                     <div className="flex items-center gap-4">
                         <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
                             {username.charAt(0).toUpperCase()}
                         </div>
                     </div>
                 </header>
-                <div className="p-8">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50">
                     {children}
                 </div>
             </main>

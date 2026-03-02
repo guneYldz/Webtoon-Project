@@ -85,8 +85,9 @@ export default function WebtoonDetail() {
                 <Link
                   href={`/webtoon/${id}/bolum/${firstEpisode.id}`}
                   className="px-8 py-3 rounded-full bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all flex items-center gap-2"
+                  title={`${webtoon.title} Türkçe Oku`}
                 >
-                  📖 Hemen Oku
+                  📖 Türkçe Oku
                 </Link>
               )}
 

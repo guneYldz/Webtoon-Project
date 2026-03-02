@@ -47,7 +47,7 @@ export default function HomeSlider({ slides = [] }) {
         speed={1000}                     // 1000ms = 1 saniye (Yumuşak geçiş hızı)
         grabCursor={true}                // Mouse ile tutulabilir imleci
         autoplay={{
-          delay: 5000,                   // 5 saniyede bir değiş
+          delay: 2500,                   // 2.5 saniyede bir değiş
           disableOnInteraction: false,   // Kullanıcı dokununca durmasın, devam etsin
         }}
         pagination={{
