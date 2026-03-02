@@ -119,7 +119,7 @@ def get_all_novels(token):
 # ==========================================
 # 🕷️ SCRAPER
 # ==========================================
-def scrape_chapter(url):
+def scrape_chapter(url, current_ch_num): # Parametreye current_ch_num ekledik
     print(f"   🌍 Kaynak taranıyor: {url}")
     scraper = cloudscraper.create_scraper()
     try:
@@ -134,12 +134,25 @@ def scrape_chapter(url):
         if content:
             for bad in content.find_all(['script', 'style', 'iframe', 'a']):
                 bad.decompose()
-            return title_tag.get_text(strip=True) if title_tag else "Bölüm", content.get_text(separator="\n\n").strip()
+
+            # --- BAŞLIK TEMİZLİĞİ BAŞLIYOR ---
+            clean_title = f"Bölüm {current_ch_num}" # Varsayılan ve en temiz halimiz
+
+            if title_tag:
+                raw_title = title_tag.get_text(strip=True)
+                # Eğer orjinal başlıkta özel bir isim varsa (örn: Chapter 1 - The Beginning) o kısmı da alabiliriz.
+                # Ama en garanti ve sade olanı sadece "Bölüm X" olarak zorlamaktır.
+                # Eğer roman ismini içeriyorsa, onu kesinlikle atıyoruz.
+                if "-" in raw_title:
+                    extra_name = raw_title.split("-", 1)[1].strip()
+                    clean_title = f"Bölüm {current_ch_num} - {extra_name}"
+            # --- BAŞLIK TEMİZLİĞİ BİTTİ ---
+
+            return clean_title, content.get_text(separator="\n\n").strip()
         return None, None
     except Exception as e:
         print(f"   ❌ Scraping Hatası: {e}")
         return None, None
-
 # ==========================================
 # 🤖 ÇEVİRİ VE YÜKLEME
 # ==========================================
@@ -210,11 +223,9 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
         print(f"⏳ Tüm key'ler ({len(GOOGLE_API_KEYS)}) rate limit'e çarptı. {wait_secs}sn bekleniyor... (Döngü {cycle+1}/{max_cycles})")
         time.sleep(wait_secs)
 
-    print("❌ Tüm denemeler başarısız. İngilizce olarak kaydediliyor.")
-    payload = {"novel_id": novel['id'], "chapter_number": chapter_num, "title": eng_title, "content": eng_text}
-    headers = {"Authorization": f"Bearer {token}"}
-    res = requests.post(f"{API_URL}/novels/bolum-ekle", data=payload, headers=headers)
-    return "SUCCESS" if res.status_code in [200, 201] else "ERROR"
+    print("❌ Tüm denemeler başarısız. Tüm API hakları bitmiş olabilir. Bot 1 SAAT (3600 sn) uykuya geçiyor...")
+    time.sleep(3600)  # 1 saat bekler
+    return "ERROR"    # ERROR döndürüldüğü için döngü kırılır ve bölüm kaydedilmez
 
 # ==========================================
 # 🏭 ANA DÖNGÜ
@@ -227,7 +238,7 @@ if __name__ == "__main__":
         if token:
             novels = get_all_novels(token)
             print(f"📚 Veritabanından toplam {len(novels)} roman okundu.")
-            
+
             KAOS_DOMAINS = ["freewebnovel.com"]
             active_novels = [
                 n for n in novels
@@ -245,9 +256,9 @@ if __name__ == "__main__":
 
                 while True:
                     target_url = novel['source_url'].format(current_ch)
-                    eng_title, eng_text = scrape_chapter(target_url)
+                    eng_title, eng_text = scrape_chapter(target_url, current_ch)
 
-                    if not eng_text: 
+                    if not eng_text:
                         print(f"   ⚠️ {current_ch}. Bölüm bulunamadı veya çekilemedi, seriyi atlıyorum.")
                         break
 
