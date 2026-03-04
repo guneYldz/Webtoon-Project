@@ -46,6 +46,7 @@ BOT_USERNAME = os.getenv("BOT_USERNAME", "gunyz.62@gmail.com")
 BOT_PASSWORD = os.getenv("BOT_PASSWORD", "62dersim62")
 BEKLEME_SURESI = 15
 
+
 # SERİYE ÖZEL AYARLAR (Config Yapısı)
 NOVEL_CONFIGS = {
     "Shadow Slave": """
