@@ -18,7 +18,11 @@ GOOGLE_API_KEYS = [
         os.getenv("GOOGLE_API_KEY"),
         os.getenv("GOOGLE_API_KEY_2"),
         os.getenv("GOOGLE_API_KEY_3"),
-        os.getenv("GOOGLE_API_KEY_4")
+        os.getenv("GOOGLE_API_KEY_4"),
+        os.getenv("GOOGLE_API_KEY_5"),
+        os.getenv("GOOGLE_API_KEY_6"),
+        os.getenv("GOOGLE_API_KEY_7")
+
     ] if k
 ]
 
