@@ -823,10 +823,20 @@ class AutoNovelBot:
 
                         soup = BeautifulSoup(response.text, 'html.parser')
                         
-                        # Başlığı bul
+                        # Başlığı bul ve akıllı regex ile temizle
                         title_tag = soup.find('h1') or soup.find('h2') or soup.find('h3', class_='title')
                         if title_tag:
-                             title_text = title_tag.get_text(strip=True)
+                            raw_title = title_tag.get_text(strip=True)
+                            # 🧠 Regex: "Chapter 1 Nightmare Begins" veya "Chapter 1 - Nightmare Begins" formatlarını yakala
+                            t_match = re.search(rf'Chapter\s*{re.escape(str(chapter_num))}\s*[:-]?\s*(.+)', raw_title, re.IGNORECASE)
+                            if t_match:
+                                extra = t_match.group(1).strip()
+                                if len(extra) > 1:
+                                    title_text = f"Bölüm {chapter_num} - {extra}"
+                            elif "-" in raw_title:
+                                extra = raw_title.split("-", 1)[1].strip()
+                                if extra:
+                                    title_text = f"Bölüm {chapter_num} - {extra}"
 
                         # Standart İçerik containerlarını dene
                         if not content_found:
@@ -957,10 +967,20 @@ class AutoNovelBot:
                             # Metni JS ile al (innerText daha temiz)
                             text_content = self.driver.execute_script("return arguments[0].innerText;", found_element)
                             
-                            # Başlığı da Selenium ile al
+                            # Başlığı da Selenium ile al ve regex ile temizle
                             try:
                                 title_elem = self.driver.find_element(By.TAG_NAME, "h1")
-                                title_text = title_elem.text.strip()
+                                raw_title_sel = title_elem.text.strip()
+                                # 🧠 Regex: tire olsun ya da olmasın bölüm ismini yakala
+                                t_match = re.search(rf'Chapter\s*{re.escape(str(chapter_num))}\s*[:-]?\s*(.+)', raw_title_sel, re.IGNORECASE)
+                                if t_match:
+                                    extra = t_match.group(1).strip()
+                                    if len(extra) > 1:
+                                        title_text = f"Bölüm {chapter_num} - {extra}"
+                                elif "-" in raw_title_sel:
+                                    extra = raw_title_sel.split("-", 1)[1].strip()
+                                    if extra:
+                                        title_text = f"Bölüm {chapter_num} - {extra}"
                             except:
                                 pass
                                 
