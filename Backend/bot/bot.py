@@ -42,6 +42,9 @@ GOOGLE_API_KEYS = [
         os.getenv("GOOGLE_API_KEY_2"),
         os.getenv("GOOGLE_API_KEY_3"),
         os.getenv("GOOGLE_API_KEY_4"),
+        os.getenv("GOOGLE_API_KEY_5"),
+        os.getenv("GOOGLE_API_KEY_6"),
+        os.getenv("GOOGLE_API_KEY_7")
     ] if k  # None olanları filtrele
 ]
 
@@ -115,7 +118,21 @@ NOVEL_CONFIGS = {
 }
 
 # ==========================================
-# 🔍 EN SON BÖLÜMÜ ÖĞREN (DOĞRUDAN DB)
+# � HAYALET BÖLÜM (Ghost Chapter) Koruması
+# ==========================================
+# Freewebnovel gibi siteler olmayan bölümler için 404 vermek yerine
+# sahte bir sayfa gösterebilir. Bu kelimeler içerikteyse bölüm sahtedir.
+GHOST_CHAPTER_KEYWORDS = [
+    "coming soon", "chapter not found", "this chapter is locked",
+    "chapter is not available", "no chapter found", "page not found",
+    "does not exist", "chapter coming soon", "will be released",
+    "subscribe to read", "premium chapter", "locked chapter",
+]
+MIN_CHAPTER_LENGTH = 1500  # Gerçek bir roman bölümü en az ~300 kelime = ~1500 karakter
+
+
+# ==========================================
+# �🔍 EN SON BÖLÜMÜ ÖĞREN (DOĞRUDAN DB)
 # ==========================================
 def get_last_chapter_number(novel_id):
     try:
@@ -794,6 +811,16 @@ class AutoNovelBot:
                         return
                     
                     if response.status_code == 200:
+                        # 🛡️ KORUMA 1: Yönlendirme (Redirect) Algılayıcı
+                        final_url = response.url.rstrip('/')
+                        requested_url = chapter_url.rstrip('/')
+                        if final_url != requested_url:
+                            print(f"🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Yönlendirme)")
+                            print(f"   İstenen : {requested_url}")
+                            print(f"   Gidilen  : {final_url}")
+                            print(f"🛑 Bölüm {chapter_num} yok. Seri tamamlandı kabul ediliyor.")
+                            return True  # İçerik yok, ama kota hatası değil — döngüyü kır
+
                         soup = BeautifulSoup(response.text, 'html.parser')
                         
                         # Başlığı bul
@@ -822,11 +849,25 @@ class AutoNovelBot:
 
                                 text_content = content.get_text(separator="\n\n").strip()
                                 
-                                if len(text_content) > 100: # 100 karakterden kısaysa muhtemelen "Loading..." veya hata mesajıdır
-                                    content_found = True
-                                    print(f"✅ İçerik requests ile çekildi! ({len(text_content)} karakter)")
-                                else:
-                                    print("⚠️ İçerik çok kısa, Selenium deneniyor...")
+                                # 🛡️ KORUMA 2: Minimum Karakter Sayısı Kontrolü
+                                if len(text_content) < MIN_CHAPTER_LENGTH:
+                                    print(f"🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Çok Kısa İçerik: {len(text_content)} karakter)")
+                                    print(f"   Önizleme: '{text_content[:200]}'")
+                                    print(f"🛑 Bölüm {chapter_num} yok. Seri tamamlandı kabul ediliyor.")
+                                    return True
+
+                                # 🛡️ KORUMA 3: Sahte İçerik Anahtar Kelime Filtresi
+                                text_lower = text_content.lower()
+                                ghost_keyword = next((kw for kw in GHOST_CHAPTER_KEYWORDS if kw in text_lower), None)
+                                if ghost_keyword:
+                                    print(f"🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Sahte Kelime: '{ghost_keyword}')")
+                                    print(f"🛑 Bölüm {chapter_num} yok. Seri tamamlandı kabul ediliyor.")
+                                    return True
+
+                                content_found = True
+                                print(f"✅ İçerik requests ile çekildi! ({len(text_content)} karakter)")
+                            else:
+                                print("⚠️ İçerik bulunamadı, Selenium deneniyor...")
 
             except Exception as e:
                 print(f"⚠️ Requests başarısız: {e}")
@@ -898,9 +939,17 @@ class AutoNovelBot:
                                     best = candidates[0]
                                     print(f"🔍 BS4 ile en uzun blok bulundu: {best[1]} ({best[0]} karakter)")
                                     text_content = best[2]
-                                    if len(text_content) > 200:
-                                        content_found = True
-                                        print(f"✅ İçerik BS4 fallback ile çekildi! ({len(text_content)} karakter)")
+                                    # 🛡️ KORUMA 2+3: BS4 fallback için de aynı kontroller
+                                    if len(text_content) >= MIN_CHAPTER_LENGTH:
+                                        text_lower = text_content.lower()
+                                        ghost_kw = next((kw for kw in GHOST_CHAPTER_KEYWORDS if kw in text_lower), None)
+                                        if ghost_kw:
+                                            print(f"🚨 HAYALET BÖLÜM (BS4 Fallback - Sahte Kelime: '{ghost_kw}')")
+                                        else:
+                                            content_found = True
+                                            print(f"✅ İçerik BS4 fallback ile çekildi! ({len(text_content)} karakter)")
+                                    else:
+                                        print(f"🚨 HAYALET BÖLÜM (BS4 Fallback - Çok Kısa: {len(text_content)} karakter)")
                             except Exception as bs_e:
                                 print(f"⚠️ BS4 fallback hatası: {bs_e}")
                         
@@ -915,9 +964,17 @@ class AutoNovelBot:
                             except:
                                 pass
                                 
-                            if len(text_content) > 50:
-                                content_found = True
-                                print(f"✅ İçerik Selenium ile çekildi! ({len(text_content)} karakter)")
+                            # 🛡️ KORUMA 2+3: Selenium içeriği için de aynı kontroller
+                            if len(text_content) >= MIN_CHAPTER_LENGTH:
+                                text_lower = text_content.lower()
+                                ghost_kw = next((kw for kw in GHOST_CHAPTER_KEYWORDS if kw in text_lower), None)
+                                if ghost_kw:
+                                    print(f"🚨 HAYALET BÖLÜM (Selenium - Sahte Kelime: '{ghost_kw}')")
+                                else:
+                                    content_found = True
+                                    print(f"✅ İçerik Selenium ile çekildi! ({len(text_content)} karakter)")
+                            else:
+                                print(f"🚨 HAYALET BÖLÜM (Selenium - Çok Kısa: {len(text_content)} karakter)")
                         
                         if not content_found:
                             # Debug için sayfayı kaydet

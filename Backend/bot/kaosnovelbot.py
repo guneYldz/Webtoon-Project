@@ -123,12 +123,35 @@ def get_all_novels(token):
 # ==========================================
 # 🕷️ SCRAPER
 # ==========================================
+# 🚨 HAYALET BÖLÜM (Ghost Chapter) Koruması
+# Freewebnovel olmayan bölümlerde 404 vermek yerine sahte sayfa gösterebilir.
+# Bu anahtar kelimelerden biri içerikteyse bölüm sahte demektir.
+GHOST_CHAPTER_KEYWORDS = [
+    "coming soon", "chapter not found", "this chapter is locked",
+    "chapter is not available", "no chapter found", "page not found",
+    "does not exist", "chapter coming soon", "will be released",
+    "subscribe to read", "premium chapter", "locked chapter",
+]
+MIN_CHAPTER_LENGTH = 1500  # Gerçek bir roman bölümü en az ~300 kelime = ~1500 karakter
+
 def scrape_chapter(url, current_ch_num): # Parametreye current_ch_num ekledik
     print(f"   🌍 Kaynak taranıyor: {url}")
     scraper = cloudscraper.create_scraper()
     try:
+        # 🛡️ KORUMA 1: Yönlendirme (Redirect) Algılayıcı
+        # allow_redirects=True (varsayılan) ile istek atıyoruz ama final URL'i kontrol ediyoruz
         response = scraper.get(url, timeout=10)
         if response.status_code != 200: return None, None
+
+        # Final URL ile istenen URL'i karşılaştır
+        final_url = response.url.rstrip('/')
+        requested_url = url.rstrip('/')
+        if final_url != requested_url:
+            print(f"   🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Yönlendirme)")
+            print(f"      İstenen : {requested_url}")
+            print(f"      Gidilen  : {final_url}")
+            print(f"   🛑 Bölüm {current_ch_num} yok. Seri tamamlandı kabul ediliyor.")
+            return None, None
 
         soup = BeautifulSoup(response.text, 'html.parser')
         title_tag = soup.find('h1') or soup.find('span', class_='title__')
@@ -144,15 +167,30 @@ def scrape_chapter(url, current_ch_num): # Parametreye current_ch_num ekledik
 
             if title_tag:
                 raw_title = title_tag.get_text(strip=True)
-                # Eğer orjinal başlıkta özel bir isim varsa (örn: Chapter 1 - The Beginning) o kısmı da alabiliriz.
-                # Ama en garanti ve sade olanı sadece "Bölüm X" olarak zorlamaktır.
-                # Eğer roman ismini içeriyorsa, onu kesinlikle atıyoruz.
                 if "-" in raw_title:
                     extra_name = raw_title.split("-", 1)[1].strip()
                     clean_title = f"Bölüm {current_ch_num} - {extra_name}"
             # --- BAŞLIK TEMİZLİĞİ BİTTİ ---
 
-            return clean_title, content.get_text(separator="\n\n").strip()
+            raw_text = content.get_text(separator="\n\n").strip()
+
+            # 🛡️ KORUMA 2: Minimum Karakter Sayısı Kontrolü
+            if len(raw_text) < MIN_CHAPTER_LENGTH:
+                print(f"   🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Çok Kısa İçerik)")
+                print(f"      İçerik uzunluğu: {len(raw_text)} karakter (minimum: {MIN_CHAPTER_LENGTH})")
+                print(f"      İçerik önizleme: '{raw_text[:200]}'")
+                print(f"   🛑 Bölüm {current_ch_num} yok. Seri tamamlandı kabul ediliyor.")
+                return None, None
+
+            # 🛡️ KORUMA 3: Sahte İçerik Anahtar Kelime Filtresi
+            raw_text_lower = raw_text.lower()
+            for keyword in GHOST_CHAPTER_KEYWORDS:
+                if keyword in raw_text_lower:
+                    print(f"   🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Sahte İçerik Kelimesi: '{keyword}')")
+                    print(f"   🛑 Bölüm {current_ch_num} yok. Seri tamamlandı kabul ediliyor.")
+                    return None, None
+
+            return clean_title, raw_text
         return None, None
     except Exception as e:
         print(f"   ❌ Scraping Hatası: {e}")
