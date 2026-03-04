@@ -349,7 +349,45 @@ ROMANIN TÜRÜNE ÖZEL TALİMATLAR:
             ceviri_metin = ceviri_metin[len(giris):].strip()
 
     # ==================================================
-    # KAYDET
+    # 2. PAŞ: EDEBİYAT EDİTÖRÜ (Sadece metin — başlık kilitli)
+    # tr_title zaten güvende, buna HİÇ dokunmuyoruz
+    # ==================================================
+    print(f"   ✨ Edebiyat editörü devrede (2. paş)...")
+    polish_prompt = f"""
+Sen titiz bir Türk edebiyat editörüsün. Aşağıdaki roman çevirisini, anlamını veya paragraf sayısını DEĞİŞTİRMEDEN yeniden yaz.
+
+YAPACAKLARIN:
+1. Mekanik, ruhsuz veya "çeviri gibi" hissettiren cümleleri doğal, akıcı Türkçeye dönüştür.
+2. Kopuk, yarım veya bağlaçla başlayan kısa cümleleri bir öncekiyle birleştir.
+3. İngilizce cümle yapısından kaynaklanan kelime sırası bozukluklarını düzelt.
+4. Karakterin sesini, tonunu ve duygusunu koru — anlamı asla değiştirme.
+5. Gereksiz tekrarları at, ama yeni cümle veya fikir EKLEME.
+
+SERİYE ÖZEL TALIMATLAR (bunu da uygula):
+{config}
+
+YAPAMAYACAKLARIN:
+- "İşte", "Elbette", "Düzeltilmiş metin:" gibi AI çıkış cümleleri YAZMA.
+- Paragraf SILME veya BİRLEŞTİRME — her paragraf ayrı kalmalı.
+- Yorum veya açıklama EKLEME.
+
+ÇEVİRİ METNİ:
+{ceviri_metin[:8000]}
+"""
+    ceviri_polish = call_gemini(polish_prompt, label="Editör")
+    if ceviri_polish:
+        # Giriş cümlesi varsa temizle
+        for giris in ["İşte", "Elbette", "Düzeltilmiş", "Aşağıda", "Tabii"]:
+            if ceviri_polish.lstrip().startswith(giris):
+                ceviri_polish = "\n".join(ceviri_polish.split("\n")[1:]).strip()
+                break
+        ceviri_metin = ceviri_polish
+        print(f"   ✅ Editör tamamladı.")
+    else:
+        print("   ⚠️ Editör pası başarısız, ham çeviri kullanılıyor.")
+
+    # ==================================================
+    # KAYDET  (tr_title Pass 1'den kilitli, asla değişmedi)
     # ==================================================
     payload = {"novel_id": novel['id'], "chapter_number": chapter_num, "title": tr_title, "content": ceviri_metin}
     headers = {"Authorization": f"Bearer {token}"}
