@@ -216,12 +216,154 @@ def scrape_chapter(url, current_ch_num): # Parametreye current_ch_num ekledik
 # 🤖 ÇEVİRİ VE YÜKLEME
 # ==========================================
 
-# 🔧 İKİNCİ PAİL KONTROLÜ
-# True = Her bölüm 2 API çağrısı harcar ama kalite artar
-# False = Tek geçiş, daha hızlı
-ENABLE_POLISH_PASS = True
-
 def call_gemini(prompt_text, label=""):
+    """
+    Gemini'yi çağır. 429/rate limit üzerinde key rotasyonu uygular.
+    Başarılıysa metin döndürür, tüm denemeler biterse None döndürür.
+    """
+    global client
+    max_cycles = 3
+    for cycle in range(max_cycles):
+        for _ in range(len(GOOGLE_API_KEYS)):
+            try:
+                client = get_gemini_client()
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt_text
+                )
+                return response.text.strip()
+            except Exception as e:
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    print(f"⚠️ Rate limit ({label}) - Key #{_current_key_index + 1} doldu, sonraki key'e geçiliyor...")
+                    rotate_key()
+                else:
+                    print(f"   ❌ API Hatası ({label}): {e}")
+                    return None
+        print(f"⏳ Tüm key'ler rate limit'e çarptı. 65sn bekleniyor... (Döngü {cycle+1}/{max_cycles})")
+        time.sleep(65)
+    print("❌ Tüm API denemeleri başarısız.")
+    return None
+
+
+def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
+    global client
+
+    if not client:
+        print("❌ HATA: Gemini client başlatılamadı!")
+        return "ERROR"
+
+    novel_key = "default"
+    if "Shadow Slave" in novel['title']: novel_key = "Shadow Slave"
+    elif "Ghost Story" in novel['title']: novel_key = "Ghost Story"
+
+    config = NOVEL_CONFIGS[novel_key]
+
+    # Başlıktaki özel ismi çıkar (örn: "Bölüm 1 - Nightmare Begins" → "Nightmare Begins")
+    # Tire yoksa (düz "Bölüm 1") eng_isim boş kalır — o zaman başlık çevirisi istemeyiz
+    eng_isim = ""
+    if " - " in eng_title:
+        eng_isim = eng_title.split(" - ", 1)[1].strip()
+
+    print(f"   🤖 AI ({novel_key}) Tek Seferde Çeviriyor... (Key: {GOOGLE_API_KEYS[_current_key_index][:5]}...)")
+
+    # ==================================================
+    # TEK PAŞ: BAŞLIK + METİN BİR ARADA (Mega Prompt)
+    # Marker tabanlı çıktı formatı: parse güvenilirliği için
+    # ==================================================
+    if eng_isim:
+        baslik_talimati = f"""
+BÖLÜM İSMİ ÇEVİRİSİ:
+- Şu İngilizce bölüm ismini Türkçeye çevir: "{eng_isim}"
+- Çeviriyi şu formatta yaz (tırnak veya noktalama eklemeden):
+  BAŞLIK: <Türkçe isim>
+"""
+    else:
+        baslik_talimati = "BÖLÜM İSMİ: Bu bölümün özel bir ismi yok, BAŞLIK satırı yazma."
+
+    translation_prompt = f"""
+Sen usta bir roman çevirmenisin. Tek seferde hem bölüm ismini hem de metni Türkçeye çevir.
+
+{baslik_talimati}
+
+ROMAN METNİ ÇEVİRİSİ KURALLARI (ZORUNLU):
+1. ASLA "Elbette", "İşte çeviri", "Tabii ki" gibi AI giriş cümleleri YAZMA.
+2. SADECE çevrilmiş roman metnini döndür — açıklama, not veya yorum EKLEME.
+3. Paragraf düzenini KORU: Orijinaldeki her paragraf ayrı paragraf olarak kalmalı.
+4. Kopuk, anlamsız veya yarım kalan cümle BIRAKMA — gerekirse önceki/sonraki cümleyle birleştir.
+5. "Ve...", "Ama..." ile başlayan tek başına duran kısa cümleleri önceki cümleye ekle.
+6. Bire bir sözcük çevirisi YAPMA; anlamı, duyguyu ve romanın akışını Türkçeye taşı.
+7. Her cümle akışkan, doğal, kitap okur gibi hissettirmeli.
+
+ROMANIN TÜRÜNE ÖZEL TALİMATLAR:
+{config}
+
+ÇEVİRİLECEK METİN:
+{eng_text[:8000]}
+"""
+
+    ceviri_ham = call_gemini(translation_prompt, label="Mega Çeviri")
+    if ceviri_ham is None:
+        print("❌ Çeviri başarısız. Bot 1 saat uyuyor...")
+        time.sleep(3600)
+        return "ERROR"
+
+    # ==================================================
+    # ÇIKTIYI AYRIŞTIR: BAŞLIK + METİN
+    # ==================================================
+    tr_title = f"Bölüm {chapter_num}"  # varsayılan
+
+    if eng_isim:
+        # "BAŞLIK: Kabus Başlıyor" satırını ara (Gemini'nin nereye yazdığına bakmaksızın)
+        baslik_match = re.search(r'BAŞLIK\s*:\s*(.+)', ceviri_ham, re.IGNORECASE)
+        if baslik_match:
+            tr_isim = baslik_match.group(1).strip().strip('"\'')
+            # Başlık mantıklı uzunluktaysa kullan, değilse İngilizce orijinali koy
+            if 1 < len(tr_isim) < 100:
+                tr_title = f"Bölüm {chapter_num} - {tr_isim}"
+                print(f"   🎯 Türkçe başlık: '{tr_title}'")
+            else:
+                tr_title = f"Bölüm {chapter_num} - {eng_isim}"
+                print(f"   ⚠️ Başlık parse hatası, İngilizce kullanıldı: '{tr_title}'")
+            # BAŞLIK satırını metinden çıkar
+            ceviri_metin = re.sub(r'BAŞLIK\s*:\s*.+\n?', '', ceviri_ham, flags=re.IGNORECASE).strip()
+        else:
+            # Marker bulunamadı — ilk satırı başlık say, kalanı metin
+            print("   ⚠️ BAŞLIK marker bulunamadı, ilk satır deneniyor...")
+            satirlar = ceviri_ham.split('\n', 1)
+            ilk_satir = satirlar[0].strip()
+            # İlk satır kısa ve AI giriş cümlesi değilse başlık kabul et
+            ai_giris = any(ilk_satir.lower().startswith(k) for k in ["işte", "elbette", "tabii", "çeviri", "aşağıda"])
+            if not ai_giris and len(ilk_satir) < 80:
+                tr_title = f"Bölüm {chapter_num} - {ilk_satir}"
+                ceviri_metin = satirlar[1].strip() if len(satirlar) > 1 else ceviri_ham
+            else:
+                tr_title = f"Bölüm {chapter_num} - {eng_isim}"  # güvenli fallback
+                ceviri_metin = ceviri_ham
+    else:
+        # Özel isim yoktu, tüm yanıt metindir
+        ceviri_metin = ceviri_ham
+
+    # Kalan AI giriş cümlelerini temizle
+    for giris in ["İşte çeviri:\n", "Elbette!\n", "Tabii ki:\n", "Aşağıda:\n"]:
+        if ceviri_metin.startswith(giris):
+            ceviri_metin = ceviri_metin[len(giris):].strip()
+
+    # ==================================================
+    # KAYDET
+    # ==================================================
+    payload = {"novel_id": novel['id'], "chapter_number": chapter_num, "title": tr_title, "content": ceviri_metin}
+    headers = {"Authorization": f"Bearer {token}"}
+    res = requests.post(f"{API_URL}/novels/bolum-ekle", data=payload, headers=headers)
+
+    if res.status_code in [200, 201]:
+        print(f"   🎉 Bölüm {chapter_num} BAŞARIYLA KAYDEDİLDİ! (Başlık: {tr_title})")
+        return "SUCCESS"
+    elif res.status_code == 400 and "mevcut" in res.text:
+        return "SKIP"
+    else:
+        print(f"   ❌ Kayıt Hatası: {res.status_code} - {res.text}")
+        return "ERROR"
+
     """
     Gemini'yi çağır. 429/rate limit üzerinde key rotasyonu uygular.
     Başarılıysa metin döndürür, tüm denemeler bişşerse None döndürür.
