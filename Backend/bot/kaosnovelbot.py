@@ -163,23 +163,30 @@ def scrape_chapter(url, current_ch_num): # Parametreye current_ch_num ekledik
             for bad in content.find_all(['script', 'style', 'iframe', 'a']):
                 bad.decompose()
 
-            # --- BAŞLIK TEMİZLİĞİ BAŞLIYOR ---
-            clean_title = f"Bölüm {current_ch_num}"  # Varsayılan: sadece bölüm numarası
+            # --- BAŞLIK TEMİZLİĞİ BAŞLIYOR (Terminatör Radar) ---
+            clean_title = f"Bölüm {current_ch_num}"  # Varsayılan halimiz
 
-            if title_tag:
-                raw_title = title_tag.get_text(strip=True)
+            # Sitenin başlık barındırabilecek TÜM etiketlerini acımadan tarıyoruz
+            for tag in soup.find_all(['title', 'h1', 'h2', 'h3', 'h4', 'span', 'div']):
+                text = tag.get_text(separator=" ", strip=True)
 
-                # 🧠 Akıllı Regex: "Chapter 1 Nightmare Begins" VEYA "Chapter 1 - Nightmare Begins" formatlarını yakala
-                match = re.search(rf'Chapter\s*{re.escape(str(current_ch_num))}\s*[:-]?\s*(.+)', raw_title, re.IGNORECASE)
+                # "Chapter 1 Nightmare Begins" veya "Chapter 1 - Nightmare Begins" formatını ara
+                match = re.search(rf'Chapter\s*{re.escape(str(current_ch_num))}\s*[:-]?\s*(.+)', text, re.IGNORECASE)
 
                 if match:
                     extra_name = match.group(1).strip()
-                    if len(extra_name) > 1:  # 1-2 harften uzunsa gerçek bir isimdir
+
+                    # Reklam ve site adı kalıntılarını temizle
+                    extra_name = re.sub(r'(?i)\s*online for free.*$', '', extra_name).strip()
+                    extra_name = re.sub(r'(?i)\s*-?\s*freewebnovel.*$', '', extra_name).strip()
+                    extra_name = re.sub(r'(?i)\s*-?\s*read online.*$', '', extra_name).strip()
+                    extra_name = re.sub(r'(?i)\s*\|\s*.*$', '', extra_name).strip()  # "Title | SiteName" kalıpları
+
+                    # Bulunan isim mantıklı bir uzunluktaysa (ne çok kısa, ne de destan gibi uzun)
+                    if 1 < len(extra_name) < 80:
                         clean_title = f"Bölüm {current_ch_num} - {extra_name}"
-                elif "-" in raw_title:  # Regex tutmazsa eski yönteme düş
-                    extra_name = raw_title.split("-", 1)[1].strip()
-                    if extra_name:
-                        clean_title = f"Bölüm {current_ch_num} - {extra_name}"
+                        print(f"   🎯 Başlık bulundu: '{clean_title}'")
+                        break  # Hedefi vurduk, taramayı durdur!
             # --- BAŞLIK TEMİZLİĞİ BİTTİ ---
 
             raw_text = content.get_text(separator="\n\n").strip()
