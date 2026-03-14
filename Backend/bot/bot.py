@@ -130,6 +130,25 @@ GHOST_CHAPTER_KEYWORDS = [
 ]
 MIN_CHAPTER_LENGTH = 1500  # Gerçek bir roman bölümü en az ~300 kelime = ~1500 karakter
 
+# ==========================================
+# ✅ DÜZELTME: Global requests.Session Singleton
+# Her bölümde requests.get() yerine session.get() kullanılır.
+# Bu sayede TCP bağlantıları yeniden kullanılır ve
+# 'Too many open files' (OSError 24) hatası önlenir.
+# ==========================================
+_req_session = requests.Session()
+_req_session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+
+def _reset_req_session():
+    """SSL veya bağlantı hatası sonrası eski session'ı kapat, yenisini aç."""
+    global _req_session
+    try:
+        _req_session.close()  # Açık bağlantıları temizle
+    except Exception:
+        pass
+    _req_session = requests.Session()
+    _req_session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+    print("   🔄 requests.Session yeniden başlatıldı.")
 
 # ==========================================
 # �🔍 EN SON BÖLÜMÜ ÖĞREN (DOĞRUDAN DB)
@@ -781,7 +800,7 @@ class AutoNovelBot:
                         chapter_id = chapter_id_match.group(1)
                         api_url = f"https://novelight.net/book/ajax/read-chapter/{chapter_id}"
                         print(f"📡 Novelight API çağrılıyor... ({chapter_id})")
-                        api_resp = requests.get(api_url, headers=headers, timeout=10)
+                        api_resp = _req_session.get(api_url, headers=headers, timeout=10)
                         if api_resp.status_code == 200:
                             data = api_resp.json()
                             if 'content' in data:
@@ -799,7 +818,7 @@ class AutoNovelBot:
            
             try:
                 if not content_found:
-                    response = requests.get(chapter_url, headers=headers, cookies=sel_cookies, timeout=15)
+                    response = _req_session.get(chapter_url, headers=headers, cookies=sel_cookies, timeout=15)
                 
                     # Cloudflare veya Koruma kontrolü (403/503)
                     if response.status_code in [403, 503]:

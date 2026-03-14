@@ -136,13 +136,46 @@ GHOST_CHAPTER_KEYWORDS = [
 ]
 MIN_CHAPTER_LENGTH = 1500  # Gerçek bir roman bölümü en az ~300 kelime = ~1500 karakter
 
-def scrape_chapter(url, current_ch_num): # Parametreye current_ch_num ekledik
-    print(f"   🌍 Kaynak taranıyor: {url}")
-    scraper = cloudscraper.create_scraper()
+# ✅ DÜZELTME: Scraper GLOBAL SINGLETON olarak yaratılır.
+# Her bölümde yeni scraper açmak 'Too many open files' hatasına yol açar.
+# cloudscraper 'with' bloğunu (context manager) DESTEKLEMEZ — AttributeError verir.
+_scraper = cloudscraper.create_scraper()
+
+def _reset_scraper():
+    """SSL veya bağlantı hatası sonrası eski scraper'ı kapat, yenisini aç."""
+    global _scraper
     try:
-        # 🛡️ KORUMA 1: Yönlendirme (Redirect) Algılayıcı
-        # allow_redirects=True (varsayılan) ile istek atıyoruz ama final URL'i kontrol ediyoruz
-        response = scraper.get(url, timeout=10)
+        _scraper.close()  # Açık bağlantıları temizle
+    except Exception:
+        pass
+    _scraper = cloudscraper.create_scraper()
+    print("   🔄 Scraper yeniden başlatıldı.")
+
+def scrape_chapter(url, current_ch_num):
+    print(f"   🌍 Kaynak taranıyor: {url}")
+    # Global singleton scraper kullanılıyor — her çağrıda YENİ scraper AÇILMAZ
+    global _scraper
+    MAX_RETRIES = 3
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            # 🛡️ KORUMA 1: Yönlendirme (Redirect) Algılayıcı
+            response = _scraper.get(url, timeout=15)
+            break  # Başarılıysa döngüden çık
+        except Exception as e:
+            err_str = str(e)
+            is_ssl_or_file_error = "SSLError" in err_str or "Too many open files" in err_str or "Max retries" in err_str
+            if is_ssl_or_file_error and attempt < MAX_RETRIES:
+                print(f"   ⚠️ Bağlantı hatası (Deneme {attempt}/{MAX_RETRIES}), scraper sıfırlanıyor ve 10sn bekleniyor...")
+                _reset_scraper()
+                time.sleep(10)
+            else:
+                print(f"   ❌ Scraping Hatası: {e}")
+                return None, None
+    else:
+        # MAX_RETRIES deneme de başarısız olduysa
+        return None, None
+
+    try:
         if response.status_code != 200: return None, None
 
         # Final URL ile istenen URL'i karşılaştır
@@ -211,7 +244,7 @@ def scrape_chapter(url, current_ch_num): # Parametreye current_ch_num ekledik
             return clean_title, raw_text
         return None, None
     except Exception as e:
-        print(f"   ❌ Scraping Hatası: {e}")
+        print(f"   ❌ Parse Hatası: {e}")
         return None, None
 # ==========================================
 # 🤖 ÇEVİRİ VE YÜKLEME
