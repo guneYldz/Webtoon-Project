@@ -218,6 +218,7 @@ class Novel(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     is_featured = Column(Boolean, default=False)
     is_published = Column(Boolean, default=False)
+    view_count = Column(Integer, default=0)
     favorites = relationship("Favorite", back_populates="novel")
     chapters = relationship("NovelChapter", back_populates="novel", cascade="all, delete-orphan")
     banner_image = Column(String, nullable=True)

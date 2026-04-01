@@ -27,6 +27,17 @@ from routers import auth, webtoon, episode, comments, favorites, likes, novel, a
 # 1. Tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
 
+# 2. Eksik kolonları güvenli biçimde ekle (ALTER TABLE IF NOT EXISTS)
+from sqlalchemy import text as sql_text
+with engine.connect() as _conn:
+    try:
+        _conn.execute(sql_text(
+            "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0"
+        ))
+        _conn.commit()
+    except Exception:
+        pass  # Kolon zaten varsa sessizce geç
+
 app = FastAPI(
     title="Kaos Manga API",
     root_path="/api",
@@ -271,7 +282,7 @@ def get_vitrin(db: Session = Depends(get_db)):
         vitrin_listesi.append({
             "id": n.id, "title": n.title, "slug": n.slug,
             "banner_image": n.cover_image, "cover_image": n.cover_image,
-            "summary": n.summary, "view_count": 0,
+            "summary": n.summary, "view_count": getattr(n, 'view_count', 0) or 0,
             "status": n.status or "ongoing", "type": "novel", "typeLabel": "NOVEL", "bg_color": "purple"
         })
     random.shuffle(vitrin_listesi)

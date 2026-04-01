@@ -182,11 +182,11 @@ def scrape_chapter(url, current_ch_num):
         final_url = response.url.rstrip('/')
         requested_url = url.rstrip('/')
         if final_url != requested_url:
-            print(f"   🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Yönlendirme)")
+            print(f"   🚨 SERİ SONU TESPİT EDİLDİ! (Yönlendirme — kesin bitiş)")
             print(f"      İstenen : {requested_url}")
             print(f"      Gidilen  : {final_url}")
-            print(f"   🛑 Bölüm {current_ch_num} yok. Seri tamamlandı kabul ediliyor.")
-            return None, None
+            # "SERIES_END" sinyali → ana döngü hemen break yapar
+            return "SERIES_END", None
 
         soup = BeautifulSoup(response.text, 'html.parser')
         title_tag = soup.find('h1') or soup.find('span', class_='title__')
@@ -227,19 +227,22 @@ def scrape_chapter(url, current_ch_num):
 
             # 🛡️ KORUMA 2: Minimum Karakter Sayısı Kontrolü
             if len(raw_text) < MIN_CHAPTER_LENGTH:
-                print(f"   🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Çok Kısa İçerik)")
-                print(f"      İçerik uzunluğu: {len(raw_text)} karakter (minimum: {MIN_CHAPTER_LENGTH})")
+                print(f"   👻 HAYALET BÖLÜM! (Çok Kısa İçerik: {len(raw_text)} karakter) — Bölüm {current_ch_num} atlanıyor.")
                 print(f"      İçerik önizleme: '{raw_text[:200]}'")
-                print(f"   🛑 Bölüm {current_ch_num} yok. Seri tamamlandı kabul ediliyor.")
-                return None, None
+                # "GHOST" sinyali → ana döngü bu bölümü atlayıp devam eder
+                return "GHOST", None
 
             # 🛡️ KORUMA 3: Sahte İçerik Anahtar Kelime Filtresi
-            raw_text_lower = raw_text.lower()
+            # Sadece metnin İLK 500 karakterine bakıyoruz.
+            # Gerçek "coming soon" sayfaları bu metni hemen başta içerir.
+            # 1095 gibi gerçek bölümlerde sidebar/reklam köşesinde geçen
+            # keyword'ler artık bölümü hayalet saymaz.
+            raw_head_lower = raw_text[:500].lower()
             for keyword in GHOST_CHAPTER_KEYWORDS:
-                if keyword in raw_text_lower:
-                    print(f"   🚨 HAYALET BÖLÜM TESPİT EDİLDİ! (Sahte İçerik Kelimesi: '{keyword}')")
-                    print(f"   🛑 Bölüm {current_ch_num} yok. Seri tamamlandı kabul ediliyor.")
-                    return None, None
+                if keyword in raw_head_lower:
+                    print(f"   👻 HAYALET BÖLÜM! (İlk 500 karakterde sahte kelime: '{keyword}') — Bölüm {current_ch_num} atlanıyor.")
+                    # "GHOST" sinyali → ana döngü bu bölümü atlayıp devam eder
+                    return "GHOST", None
 
             return clean_title, raw_text
         return None, None
@@ -463,19 +466,51 @@ if __name__ == "__main__":
                 last_ch = get_last_chapter_number(token, novel['id'], novel['slug'])
                 current_ch = int(last_ch) + 1
 
+                # Art arda kaç hayalet/başarısız bölüm gördük?
+                # MAX_CONSECUTIVE_FAILS'e ulaşırsak seriyi bitmiş sayarız.
+                MAX_CONSECUTIVE_FAILS = 3
+                consecutive_fails = 0
+
                 while True:
                     target_url = novel['source_url'].format(current_ch)
                     eng_title, eng_text = scrape_chapter(target_url, current_ch)
 
-                    if not eng_text:
-                        print(f"   ⚠️ {current_ch}. Bölüm bulunamadı veya çekilemedi, seriyi atlıyorum.")
+                    # ── Kesin Seri Sonu (redirect) ──────────────────────────
+                    if eng_title == "SERIES_END":
+                        print(f"   🏁 Seri gerçekten bitti (redirect). Döngü durduruluyor.")
                         break
+
+                    # ── Hayalet Bölüm → Atla, Devam Et ────────────────────
+                    if eng_title == "GHOST":
+                        consecutive_fails += 1
+                        print(f"   ⏭️  Hayalet bölüm atlandı ({consecutive_fails}/{MAX_CONSECUTIVE_FAILS}). Sonraki bölüme geçiliyor...")
+                        if consecutive_fails >= MAX_CONSECUTIVE_FAILS:
+                            print(f"   🛑 {MAX_CONSECUTIVE_FAILS} art arda hayalet bölüm — seri muhtemelen bitti.")
+                            break
+                        current_ch += 1
+                        time.sleep(3)
+                        continue
+
+                    # ── Scraping tamamen başarısız (ağ hatası vb.) ──────────
+                    if not eng_text:
+                        consecutive_fails += 1
+                        print(f"   ⚠️ {current_ch}. bölüm çekilemedi ({consecutive_fails}/{MAX_CONSECUTIVE_FAILS}).")
+                        if consecutive_fails >= MAX_CONSECUTIVE_FAILS:
+                            print(f"   🛑 {MAX_CONSECUTIVE_FAILS} art arda hata — seri atlanıyor.")
+                            break
+                        current_ch += 1
+                        time.sleep(5)
+                        continue
+
+                    # ── Başarılı bölüm → sayacı sıfırla ───────────────────
+                    consecutive_fails = 0
 
                     status = translate_and_upload(token, novel, current_ch, eng_title, eng_text)
                     if status in ["SUCCESS", "SKIP"]:
                         current_ch += 1
                         time.sleep(5)
-                    else: break
+                    else:
+                        break
 
         print(f"\n💤 Bekleme modu ({BEKLEME_SURESI}sn)...")
         time.sleep(BEKLEME_SURESI)

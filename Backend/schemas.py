@@ -101,6 +101,7 @@ class NovelCard(BaseModel):
     slug: Optional[str] = None
     cover_image: Optional[str] = None
     status: str
+    view_count: int = 0
     source_url: Optional[str] = None 
     is_published: bool = False
     created_at: Optional[datetime] = None
