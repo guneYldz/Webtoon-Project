@@ -14,7 +14,7 @@ services:
     networks:
       - webtoon_network
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U webtoon_admin -d webtoon_db" ]
       interval: 5s
