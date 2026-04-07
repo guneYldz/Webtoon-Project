@@ -368,11 +368,16 @@ class AutoBot:
                 for attempt in range(10):
                     # JS üzerinden Selenium WebElement referanslarını doğrudan PYTHON'a gönder!
                     img_elements = self.driver.execute_script("""
-                        return Array.from(document.querySelectorAll('img')).filter(img => {
-                            let src = img.src || img.getAttribute('data-src') || '';
-                            let isTile = src.includes('img_part.php');
-                            let isLoaded = img.complete && img.naturalWidth > 50;
-                            return isTile && isLoaded && img.getBoundingClientRect().height > 0;
+                        return Array.from(document.querySelectorAll('img, canvas')).filter(el => {
+                            let isLoaded = false;
+                            if (el.tagName.toLowerCase() === 'img') {
+                                let src = el.src || el.getAttribute('data-src') || '';
+                                let isTile = src.includes('mangatr') || src.includes('img_part') || src.startsWith('blob:') || src.startsWith('data:image/');
+                                isLoaded = isTile && el.complete && el.naturalWidth > 150 && el.naturalHeight > 100;
+                            } else if (el.tagName.toLowerCase() === 'canvas') {
+                                isLoaded = el.width > 150 && el.height > 100;
+                            }
+                            return isLoaded && el.getBoundingClientRect().height > 0;
                         });
                     """)
                     if img_elements:
