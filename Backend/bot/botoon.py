@@ -362,49 +362,29 @@ class AutoBot:
             browser_cookies = self._get_browser_cookies()
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
-            seen_urls = set()
-
             for page_num in range(1, total_pages + 1):
-                # DOM'da veya performance loglarında img_part.php yüklenene kadar bekle (max 20sn)
-                tile_urls = []
+                # DOM'da elementlerin yüklenmesini bekle (max 20sn)
+                img_elements = []
                 for attempt in range(10):
-                    tile_urls = self.driver.execute_script("""
-                        let urls = new Set();
-                        // 1) DOM'dan kontrol et (lazy-load data-src dahil)
-                        document.querySelectorAll('img').forEach(img => {
+                    # JS üzerinden Selenium WebElement referanslarını doğrudan PYTHON'a gönder!
+                    img_elements = self.driver.execute_script("""
+                        return Array.from(document.querySelectorAll('img')).filter(img => {
                             let src = img.src || img.getAttribute('data-src') || '';
-                            if (src.includes('img_part.php')) {
-                                urls.add(src);
-                            }
+                            let isTile = src.includes('img_part.php');
+                            let isLoaded = img.complete && img.naturalWidth > 50;
+                            return isTile && isLoaded && img.getBoundingClientRect().height > 0;
                         });
-                        
-                        // 2) Performance API'dan kontrol et (Daha garantili)
-                        performance.getEntriesByType('resource').forEach(e => {
-                            if (e.name.includes('img_part.php')) {
-                                urls.add(e.name);
-                            }
-                        });
-                        
-                        return Array.from(urls);
                     """)
-                    
-                    # Daha önce görülmemiş URL'leri filtrele
-                    tile_urls = [u for u in tile_urls if u not in seen_urls]
-                    if tile_urls:
+                    if img_elements:
                         break
                     time.sleep(2)
 
-                print(f"      🔲 Sayfa {page_num}/{total_pages}: {len(tile_urls)} tile")
-                seen_urls.update(tile_urls)
+                print(f"      🔲 Sayfa {page_num}/{total_pages}: {len(img_elements)} tile")
 
-                if tile_urls:
+                if img_elements:
                     tile_images = []
-                    for t_url in tile_urls:
+                    for img_element in img_elements:
                         try:
-                            # 100% GARANTİLİ YÖNTEM: Elementi bul ve direkt tarayıcının ekranda gördüğünün resmini çek!
-                            # Bu yöntem requests'in anti-bot korumasına takılmasını tamamen engeller
-                            img_element = self.driver.find_element(By.CSS_SELECTOR, f"img[src='{t_url}']")
-                            
                             # İhtiyaten elementin görünür olmasını sağla
                             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", img_element)
                             time.sleep(0.5)
