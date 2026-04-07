@@ -312,86 +312,119 @@ class AutoBot:
         return cookies
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
-        """manga-tr.com okuma sayfasından görselleri indir."""
+        """manga-tr.com okuma sayfasından görselleri indir.
+        Site sayfalı yapı kullanıyor: her sayfada N tile (img_part.php) var.
+        Tile'ları dikey olarak birleştirip tek manga sayfası kaydediyoruz.
+        """
         try:
             self.driver.get(url)
-            time.sleep(3)
-
-            # Yavaşça scroll yap — lazy load tetikle
-            self.driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(1)
-            scroll_height = self.driver.execute_script("return document.body.scrollHeight;")
-            current = 0
-            while current < scroll_height:
-                self.driver.execute_script(f"window.scrollTo(0, {current});")
-                time.sleep(0.5)
-                current += 300
-                scroll_height = self.driver.execute_script("return document.body.scrollHeight;")
-
-            # Scroll bitti, resimlerin yüklenmesi için bekle
-            self.driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(4)
 
-            # Önce performance API ile yüklenen mangatr.site URL'lerini al
-            # Bu en güvenilir yöntem — sadece gerçek manga CDN'inden gelenler
-            image_urls = self.driver.execute_script("""
-                let entries = performance.getEntriesByType('resource');
-                let imgs = entries
-                    .filter(e => e.name.includes('mangatr.site') || e.name.includes('img_part'))
-                    .map(e => e.name)
-                    .filter(n => n.startsWith('http'));
-                return [...new Set(imgs)];
+            # Toplam sayfa sayısını tespit et ("1/5" formatından)
+            total_pages = self.driver.execute_script("""
+                // Sayfa göstergesi: "1 / 5" veya "1/5"
+                let text = document.body.innerText;
+                let m = text.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+                if (m) return parseInt(m[2]);
+                // Alternatif: header'daki select/input
+                let inp = document.querySelector('#readerTopbar input, .reader-select-wrap input');
+                if (inp && inp.max) return parseInt(inp.max);
+                return 1;
             """)
+            print(f"      📄 Toplam {total_pages} sayfa.")
 
-            # Bulunamazsa DOM'dan dene — SADECE mangatr.site kaynakları
-            # ve tam yüklenmiş (complete=true, naturalWidth>0) olanlar
-            if not image_urls:
-                image_urls = self.driver.execute_script("""
-                    let seen = new Set();
-                    let urls = [];
-                    document.querySelectorAll('img').forEach(img => {
-                        let src = img.src || img.getAttribute('data-src') || '';
-                        if (!src.startsWith('http')) return;
-                        if (seen.has(src)) return;
-
-                        // SADECE manga CDN — emoji, ikon, buton hiç kabul edilmez
-                        let isMangaCDN = src.includes('mangatr.site') || src.includes('img_part');
-                        if (!isMangaCDN) return;
-
-                        // Tam yüklenmiş mi?
-                        let loaded = img.complete && img.naturalWidth > 100;
-                        if (loaded) {
-                            seen.add(src);
-                            urls.push(src);
-                        }
-                    });
-                    return urls;
-                """)
-
-            if not image_urls:
-                print("      ⚠️ RESİM BULUNAMADI!")
-                return
-
-            print(f"      🖼️ {len(image_urls)} resim bulundu.")
-
-            # Tarayıcı cookie'lerini al — img_part.php için oturum gerekli
             browser_cookies = self._get_browser_cookies()
-            current_url = self.driver.current_url
-
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
-            for idx, src in enumerate(image_urls):
-                fname = f"{series_slug}-bolum-{chap_num}-sahne-{idx+1}.webp"
-                saved = process_and_save_image(
-                    src, episode_folder, fname,
-                    cookies=browser_cookies, referer=current_url
-                )
-                if saved:
-                    saved_paths.append(saved)
+
+            # Her sayfa için ayrı tile seti, birleştirip kaydet
+            for page_num in range(1, total_pages + 1):
+                # Sayfa yüklenene kadar bekle
+                time.sleep(3)
+                current_url = self.driver.current_url
+
+                # Bu sayfa için img_part.php URL'lerini al
+                # window.__seen ile önceki sayfaların URL'lerini hariç tut
+                tile_urls = self.driver.execute_script("""
+                    if (!window.__seenTiles) window.__seenTiles = new Set();
+                    let entries = performance.getEntriesByType('resource');
+                    let newTiles = [];
+                    entries.forEach(e => {
+                        let n = e.name;
+                        // SADECE resmi manga CDN img_part.php
+                        if (n.includes('image.mangatr.site/img_part.php') && !window.__seenTiles.has(n)) {
+                            window.__seenTiles.add(n);
+                            newTiles.push(n);
+                        }
+                    });
+                    return newTiles;
+                """)
+
+                print(f"      🔲 Sayfa {page_num}/{total_pages}: {len(tile_urls)} tile")
+
+                if tile_urls:
+                    # Tile'ları indir
+                    tile_images = []
+                    for t_url in tile_urls:
+                        try:
+                            headers = {
+                                'User-Agent': 'Mozilla/5.0',
+                                'Referer': current_url,
+                            }
+                            resp = requests.get(
+                                t_url, headers=headers,
+                                cookies=browser_cookies,
+                                stream=True, timeout=20
+                            )
+                            if resp.status_code == 200 and len(resp.content) > 1000:
+                                img = Image.open(BytesIO(resp.content))
+                                if img.mode in ("RGBA", "P"):
+                                    img = img.convert("RGB")
+                                tile_images.append(img)
+                        except Exception:
+                            continue
+
+                    if tile_images:
+                        # Tile'ları dikey olarak birleştir
+                        total_w = max(i.width for i in tile_images)
+                        total_h = sum(i.height for i in tile_images)
+                        merged = Image.new("RGB", (total_w, total_h), (255, 255, 255))
+                        y_offset = 0
+                        for ti in tile_images:
+                            merged.paste(ti, (0, y_offset))
+                            y_offset += ti.height
+
+                        # Birleştirilmiş sayfayı kaydet
+                        if not os.path.exists(episode_folder):
+                            os.makedirs(episode_folder)
+                        fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
+                        full_path = os.path.join(episode_folder, fname)
+                        merged.save(full_path, "WEBP", quality=85)
+                        relative = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
+                        saved_paths.append(relative)
+                        print(f"      ✅ Sayfa {page_num} birleştirildi: {fname}")
+
+                # Sonraki sayfaya geç (son sayfa değilse)
+                if page_num < total_pages:
+                    clicked = self.driver.execute_script("""
+                        // Sağ ok tuşunu simüle et (reader genellikle ok tuşlarını dinler)
+                        let evt = new KeyboardEvent('keydown', {key: 'ArrowRight', keyCode: 39, bubbles: true});
+                        document.dispatchEvent(evt);
+
+                        // Ayrıca "Sonraki" butonunu tıkla
+                        let btn = document.querySelector(
+                            'a[title="Sonraki Sayfa"], .next-page, button.reader-next, ' +
+                            '.reader-nav-btn[title*="onraki"], a.reader-nav-btn:last-of-type'
+                        );
+                        if (btn) { btn.click(); return 'clicked'; }
+                        return 'key_only';
+                    """)
 
             if not saved_paths:
-                print("      ⚠️ Hiçbir resim kaydedilemedi, bölüm atlanıyor.")
+                print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
                 return
+
+            print(f"      🖼️ {len(saved_paths)} sayfa tamamlandı.")
 
             with engine.connect() as conn:
                 check = conn.execute(
@@ -409,7 +442,6 @@ class AutoBot:
                         "t": f"Bölüm {chap_num}",
                     })
                     episode_id = result.fetchone()[0]
-                    # Her resmi episode_images tablosuna ayrı satır olarak kaydet
                     for order, path in enumerate(saved_paths, start=1):
                         conn.execute(text("""
                             INSERT INTO episode_images (episode_id, image_url, page_order)
@@ -420,6 +452,7 @@ class AutoBot:
 
         except Exception as e:
             print(f"      ❌ İndirme hatası: {e}")
+
 
     # -------------------------------------------------------
     # Genel (generic) seri kontrolü — eski mantık
