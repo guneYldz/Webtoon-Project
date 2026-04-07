@@ -336,7 +336,8 @@ class AutoBot:
                 scroll_height = self.driver.execute_script("return document.body.scrollHeight;")
             time.sleep(3)
 
-            # Görselleri topla — geniş selector listesi
+            # Manga görsellerini topla — SADECE mangatr.site domain'inden
+            # (UI ikonları, butonlar vb. filtrelenir)
             image_urls = self.driver.execute_script("""
                 let seen = new Set();
                 let urls = [];
@@ -346,28 +347,34 @@ class AutoBot:
                         || img.getAttribute('data-url')
                         || img.getAttribute('data-lazy-src')
                         || '';
-                    if (src && src.startsWith('http') && !seen.has(src)) {
-                        // Küçük ikonları ve logolar hariç tut
-                        let skip = ['logo', 'icon', 'avatar', 'banner', 'badge', 'spinner', 'loading'];
-                        let lower = src.toLowerCase();
-                        if (!skip.some(s => lower.includes(s))) {
-                            seen.add(src);
-                            urls.push(src);
-                        }
+                    if (!src || !src.startsWith('http')) return;
+                    if (seen.has(src)) return;
+
+                    // Sadece manga CDN domain'i kabul et
+                    let isMangaImg = src.includes('mangatr.site')
+                        || src.includes('img_part')
+                        || src.includes('manga-tr.com/images')
+                        || src.includes('manga-tr.com/img');
+
+                    // Boyut filtresi: küçük ikonları dışla (min 200x200 rendered px)
+                    let bigEnough = (img.naturalWidth >= 200 || img.width >= 200)
+                        && (img.naturalHeight >= 200 || img.height >= 200);
+
+                    if (isMangaImg || bigEnough) {
+                        seen.add(src);
+                        urls.push(src);
                     }
                 });
                 return urls;
             """)
 
-            # Bulunamazsa network kaynaklarına bak
+            # Bulunamazsa network kaynaklarına bak — sadece mangatr.site
             if not image_urls:
                 image_urls = self.driver.execute_script("""
                     let entries = performance.getEntriesByType('resource');
                     let imgs = entries
-                        .filter(e => e.initiatorType === 'img'
-                            || e.name.match(/\\.(jpg|jpeg|png|webp|gif)/i)
-                            || e.name.includes('img_part')
-                            || e.name.includes('mangatr'))
+                        .filter(e => e.name.includes('mangatr.site')
+                            || e.name.includes('img_part'))
                         .map(e => e.name)
                         .filter(n => n.startsWith('http'));
                     return [...new Set(imgs)];
