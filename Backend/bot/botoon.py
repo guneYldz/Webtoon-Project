@@ -105,13 +105,17 @@ def get_chrome_version():
     return None
 
 
-def process_and_save_image(img_url, folder_path, file_name):
+def process_and_save_image(img_url, folder_path, file_name, cookies=None, referer=None):
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            'Referer': 'https://manga-tr.com/',
+            'Referer': referer or 'https://manga-tr.com/',
         }
-        response = requests.get(img_url, headers=headers, stream=True, timeout=20)
+        response = requests.get(
+            img_url, headers=headers,
+            cookies=cookies or {},
+            stream=True, timeout=20
+        )
         if response.status_code == 200:
             if len(response.content) < 1000:
                 return None
@@ -241,36 +245,41 @@ class AutoBot:
             print(f"❌ Seri işlenirken hata: {e}")
 
     def _get_manga_tr_chapters(self, series_url):
-        """manga-tr.com bölüm listesini tüm sayfalardan topla."""
+        """manga-tr.com bölüm listesini AJAX sayfalama ile tüm sayfalardan topla."""
         chapters = []
-        page = 1
 
-        # Kaç sayfa var?
-        # URL önce yüklenmiş durumda, sadece sayfa numaralarını çekeceğiz
-        base_url = series_url.rstrip("/")
+        # Sayfa zaten yüklü (check_manga_tr'den geliyoruz)
+        # Toplam sayfa sayısını data-page attribute'larından al
+        total_pages = self.driver.execute_script("""
+            let btns = document.querySelectorAll('ul.pagination1 a[data-page], .pagination a[data-page]');
+            let max = 0;
+            btns.forEach(a => {
+                let p = parseInt(a.getAttribute('data-page'));
+                if (!isNaN(p) && p > max) max = p;
+            });
+            return max || 1;
+        """)
+        print(f"    📑 Toplam {total_pages} sayfa tespit edildi.")
 
-        while True:
-            if page == 1:
-                page_url = base_url
-            else:
-                # manga-tr sayfa yapısı: ?sayfa=2 veya #page=2 veya /page/2/
-                # URL yapısına göre dene
-                page_url = f"{base_url}?sayfa={page}"
+        for page in range(1, total_pages + 1):
+            if page > 1:
+                # AJAX ile sayfa yükleme — data-page butonuna tıkla
+                clicked = self.driver.execute_script(f"""
+                    let btn = document.querySelector('ul.pagination1 a[data-page="{page}"], .pagination a[data-page="{page}"]');
+                    if (btn) {{ btn.click(); return true; }}
+                    return false;
+                """)
+                if not clicked:
+                    print(f"    ⚠️ Sayfa {page} butonu bulunamadı, durduruluyor.")
+                    break
+                time.sleep(2)  # AJAX yanıtını bekle
 
-            try:
-                self.driver.get(page_url)
-                time.sleep(3)
-            except Exception as e:
-                print(f"    ⚠️ Sayfa {page} yüklenemedi: {e}")
-                break
-
-            # Bölüm linklerini topla
+            # Bu sayfadaki bölüm linklerini topla
             chapter_links = self.driver.execute_script("""
                 let links = document.querySelectorAll('a[href]');
                 let chapters = [];
                 links.forEach(a => {
                     let href = a.href;
-                    // manga-tr chapter URL formatı: id-XXXXX-read-slug-chapter-NUM.html
                     let match = href.match(/id-\\d+-read-[\\w-]+-chapter-([\\d.]+)\\.html/);
                     if (match) {
                         chapters.push({ num: match[1], url: href });
@@ -281,55 +290,36 @@ class AutoBot:
 
             if not chapter_links:
                 if page == 1:
-                    print("    ⚠️ Bölüm listesi bulunamadı! Alternatif selector deneniyor...")
-                    # Alternatif: tüm linkleri logla
-                    all_links = self.driver.execute_script("""
-                        return Array.from(document.querySelectorAll('a[href]'))
-                            .map(a => a.href)
-                            .filter(h => h.includes('read') || h.includes('bolum') || h.includes('chapter'))
-                            .slice(0, 10);
-                    """)
-                    print(f"    🔎 Bulunan read linkleri: {all_links}")
+                    print("    ⚠️ Bölüm listesi bulunamadı!")
                 break
 
-            # Yinelenen URL'leri filtrele
             existing_urls = {ch["url"] for ch in chapters}
             new_links = [ch for ch in chapter_links if ch["url"] not in existing_urls]
-
-            if not new_links:
-                # Yeni bölüm gelmedi, sayfalama bitti
-                break
-
             chapters.extend(new_links)
-            print(f"    📄 Sayfa {page}: {len(new_links)} bölüm bulundu (toplam: {len(chapters)})")
-
-            # Sonraki sayfa butonu var mı?
-            has_next = self.driver.execute_script("""
-                // Sayfalama: .next, [rel=next], aria-label="Sonraki" gibi
-                let next = document.querySelector('a.next, a[rel="next"], .pagination .next a, li.next a');
-                return next ? next.href : null;
-            """)
-
-            if not has_next:
-                break
-
-            page += 1
-            if page > 50:  # güvenlik sınırı
-                break
+            print(f"    📄 Sayfa {page}/{total_pages}: {len(new_links)} bölüm (toplam: {len(chapters)})")
 
         print(f"    📚 Toplam {len(chapters)} bölüm bulundu.")
         return chapters
+
+    def _get_browser_cookies(self):
+        """Selenium oturumundaki cookie'leri requests formatına çevir."""
+        cookies = {}
+        try:
+            for c in self.driver.get_cookies():
+                cookies[c['name']] = c['value']
+        except Exception:
+            pass
+        return cookies
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com okuma sayfasından görselleri indir."""
         try:
             self.driver.get(url)
 
-            # Dinamik resimler için img_part.php çağrılarını bekle
-            # Önce #readerarea veya benzeri konteynerin dolmasını bekle
+            # Resimlerin yüklenmesini bekle
             try:
                 WebDriverWait(self.driver, 20).until(
-                    lambda d: len(d.find_elements(By.CSS_SELECTOR, "img[src], img[data-src]")) > 0
+                    lambda d: len(d.find_elements(By.CSS_SELECTOR, "img[src]")) > 0
                 )
             except Exception:
                 pass
@@ -337,56 +327,47 @@ class AutoBot:
             # Yavaşça scroll yap — lazy load için
             self.driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(2)
-
             scroll_height = self.driver.execute_script("return document.body.scrollHeight;")
-            step = 300
             current = 0
             while current < scroll_height:
                 self.driver.execute_script(f"window.scrollTo(0, {current});")
-                time.sleep(0.3)
-                current += step
+                time.sleep(0.4)
+                current += 400
                 scroll_height = self.driver.execute_script("return document.body.scrollHeight;")
-
             time.sleep(3)
 
             # Görselleri topla — geniş selector listesi
             image_urls = self.driver.execute_script("""
-                let selectors = [
-                    '#readerarea img',
-                    '.reading-content img',
-                    '.chapter-content img',
-                    '.entry-content img',
-                    '.reader-content img',
-                    '#content img',
-                    '.manga-reader img',
-                    'img[src*="mangatr.site"]',
-                    'img[src*="img_part"]',
-                    'img[data-src*="mangatr.site"]',
-                    'img[data-src]',
-                ];
                 let seen = new Set();
                 let urls = [];
-                selectors.forEach(sel => {
-                    document.querySelectorAll(sel).forEach(img => {
-                        let src = img.src || img.getAttribute('data-src') || img.getAttribute('data-url') || '';
-                        if (src && src.startsWith('http') && !seen.has(src)) {
+                document.querySelectorAll('img').forEach(img => {
+                    let src = img.src
+                        || img.getAttribute('data-src')
+                        || img.getAttribute('data-url')
+                        || img.getAttribute('data-lazy-src')
+                        || '';
+                    if (src && src.startsWith('http') && !seen.has(src)) {
+                        // Küçük ikonları ve logolar hariç tut
+                        let skip = ['logo', 'icon', 'avatar', 'banner', 'badge', 'spinner', 'loading'];
+                        let lower = src.toLowerCase();
+                        if (!skip.some(s => lower.includes(s))) {
                             seen.add(src);
                             urls.push(src);
                         }
-                    });
+                    }
                 });
                 return urls;
             """)
 
-            # manga-tr: img_part.php proxy üzerinden geliyor
-            # Network isteklerinden resim URL'lerini de çekmeyi dene
+            # Bulunamazsa network kaynaklarına bak
             if not image_urls:
-                print("      ⚠️ Standart img tag'leri bulunamadı, network kaynaklarına bakılıyor...")
                 image_urls = self.driver.execute_script("""
-                    // performance.getEntriesByType ile yüklenen kaynakları al
                     let entries = performance.getEntriesByType('resource');
                     let imgs = entries
-                        .filter(e => e.initiatorType === 'img' || e.name.match(/\\.(jpg|jpeg|png|webp|gif)/i) || e.name.includes('img_part'))
+                        .filter(e => e.initiatorType === 'img'
+                            || e.name.match(/\\.(jpg|jpeg|png|webp|gif)/i)
+                            || e.name.includes('img_part')
+                            || e.name.includes('mangatr'))
                         .map(e => e.name)
                         .filter(n => n.startsWith('http'));
                     return [...new Set(imgs)];
@@ -398,11 +379,18 @@ class AutoBot:
 
             print(f"      🖼️ {len(image_urls)} resim bulundu.")
 
+            # Tarayıcı cookie'lerini al — img_part.php için oturum gerekli
+            browser_cookies = self._get_browser_cookies()
+            current_url = self.driver.current_url
+
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
             for idx, src in enumerate(image_urls):
                 fname = f"{series_slug}-bolum-{chap_num}-sahne-{idx+1}.webp"
-                saved = process_and_save_image(src, episode_folder, fname)
+                saved = process_and_save_image(
+                    src, episode_folder, fname,
+                    cookies=browser_cookies, referer=current_url
+                )
                 if saved:
                     saved_paths.append(saved)
 
