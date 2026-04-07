@@ -22,21 +22,27 @@ BACKEND_DIR = os.path.dirname(CURRENT_DIR)
 
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
+import platform as _platform
 
-# DB bağlantısı:
-#   BOT_DB_CONNECTION → Docker dışında çalışırken (localhost:5433)
-#   DB_CONNECTION     → Docker içinde çalışırken (db:5432)
-_raw_db = (
-    os.getenv("BOT_DB_CONNECTION")
-    or os.getenv("DB_CONNECTION", "postgresql://webtoon_admin:Hn4moZSWvtV6Qswj@localhost:5433/webtoon_db")
-)
-# Docker içi 'db' hostname'ini localhost:5433 ile değiştir (bare-metal fallback)
-if "@db:" in _raw_db:
-    import platform
-    if platform.system() == "Linux":
-        _raw_db = _raw_db.replace("@db:5432", "@localhost:5433")
-        print(f"⚠️  DB hostname 'db' → 'localhost:5433' olarak değiştirildi (bare-metal modu)")
+# DB bağlantısı — .env dosyasından okunur (şifreler kodda OLMAMALI)
+# BOT_DB_CONNECTION → Bot sunucuda direkt çalışırken (localhost:5433)
+# DB_CONNECTION     → Docker içinde çalışırken (db:5432)
+_raw_db = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION", "")
+
+if not _raw_db:
+    raise RuntimeError(
+        "❌ Veritabanı bağlantısı bulunamadı!\n"
+        "   .env dosyasına şunu ekle:\n"
+        "   BOT_DB_CONNECTION=postgresql://kullanici:sifre@localhost:5433/webtoon_db"
+    )
+
+# Linux'ta Docker dışı çalışırken 'db' hostname'ini localhost:5433'e çevir
+if _platform.system() == "Linux" and "@db:" in _raw_db:
+    _raw_db = re.sub(r"@db:(\d+)", "@localhost:5433", _raw_db)
+    print("⚠️  DB hostname 'db' → 'localhost:5433' olarak otomatik düzeltildi")
+
 DB_CONNECTION = _raw_db
+print(f"🔌 DB Bağlantısı: {DB_CONNECTION.split('@')[-1]}")
 
 
 BASE_PATH = os.path.join(BACKEND_DIR, "static")
