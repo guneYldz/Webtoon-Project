@@ -340,8 +340,8 @@ class AutoBot:
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com okuma sayfasından görselleri indir.
-        Site sayfalı yapı kullanıyor: her sayfada N tile (img_part.php) var.
-        Tile'ları dikey olarak birleştirip tek manga sayfası kaydediyoruz.
+        - Reader sayfalı: her sayfada img_part.php tile'ları var
+        - DOM'dan tam yüklenmiş img'leri bekle → requests.get() ile indir → stitch
         """
         try:
             self.driver.get(url)
@@ -349,12 +349,9 @@ class AutoBot:
 
             # Toplam sayfa sayısını tespit et ("1/5" formatından)
             total_pages = self.driver.execute_script("""
-                // Sayfa göstergesi: "1 / 5" veya "1/5"
-                let text = document.body.innerText;
-                let m = text.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+                let m = document.body.innerText.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
                 if (m) return parseInt(m[2]);
-                // Alternatif: header'daki select/input
-                let inp = document.querySelector('#readerTopbar input, .reader-select-wrap input');
+                let inp = document.querySelector('input[type="number"]');
                 if (inp && inp.max) return parseInt(inp.max);
                 return 1;
             """)
@@ -363,81 +360,79 @@ class AutoBot:
             browser_cookies = self._get_browser_cookies()
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
+            seen_urls = set()
 
-            # Her sayfa için ayrı tile seti, birleştirip kaydet
             for page_num in range(1, total_pages + 1):
-                # Sayfa yüklenene kadar bekle
-                time.sleep(3)
-                current_url = self.driver.current_url
-
-                # Bu sayfa için img_part.php URL'lerini al
-                # window.__seen ile önceki sayfaların URL'lerini hariç tut
-                tile_urls = self.driver.execute_script("""
-                    if (!window.__seenTiles) window.__seenTiles = new Set();
-                    let entries = performance.getEntriesByType('resource');
-                    let newTiles = [];
-                    entries.forEach(e => {
-                        let n = e.name;
-                        // SADECE resmi manga CDN img_part.php
-                        if (n.includes('image.mangatr.site/img_part.php') && !window.__seenTiles.has(n)) {
-                            window.__seenTiles.add(n);
-                            newTiles.push(n);
-                        }
-                    });
-                    return newTiles;
-                """)
+                # DOM'da img_part.php tam yüklenene kadar bekle (max 20sn)
+                tile_urls = []
+                for attempt in range(10):
+                    tile_urls = self.driver.execute_script("""
+                        let imgs = document.querySelectorAll('img[src*="img_part.php"]');
+                        return Array.from(imgs)
+                            .filter(img => img.complete && img.naturalWidth > 50)
+                            .map(img => img.src);
+                    """)
+                    # Daha önce görülmemiş URL'leri filtrele
+                    tile_urls = [u for u in tile_urls if u not in seen_urls]
+                    if tile_urls:
+                        break
+                    time.sleep(2)
 
                 print(f"      🔲 Sayfa {page_num}/{total_pages}: {len(tile_urls)} tile")
+                seen_urls.update(tile_urls)
 
                 if tile_urls:
-                    # Tile'ları tarayıcı üzerinden indir (requests değil — JS decrypt için)
                     tile_images = []
                     for t_url in tile_urls:
-                        data = self._fetch_image_via_browser(t_url)
-                        if data and len(data) > 500:
-                            try:
-                                img = Image.open(BytesIO(data))
+                        try:
+                            resp = requests.get(
+                                t_url,
+                                headers={
+                                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                                    'Referer': url,
+                                },
+                                cookies=browser_cookies,
+                                timeout=30
+                            )
+                            if resp.status_code == 200 and len(resp.content) > 500:
+                                img = Image.open(BytesIO(resp.content))
                                 if img.mode in ("RGBA", "P"):
                                     img = img.convert("RGB")
                                 tile_images.append(img)
-                            except Exception as ex:
-                                print(f"        ⚠️ Görsel açılamadı: {ex}")
+                        except Exception:
+                            continue
 
                     if tile_images:
-                        # Tile'ları dikey olarak birleştir
+                        # Tile'ları dikey birleştir → tek manga sayfası
                         total_w = max(i.width for i in tile_images)
                         total_h = sum(i.height for i in tile_images)
                         merged = Image.new("RGB", (total_w, total_h), (255, 255, 255))
-                        y_offset = 0
+                        y_off = 0
                         for ti in tile_images:
-                            merged.paste(ti, (0, y_offset))
-                            y_offset += ti.height
+                            merged.paste(ti, (0, y_off))
+                            y_off += ti.height
 
-                        # Birleştirilmiş sayfayı kaydet
                         if not os.path.exists(episode_folder):
                             os.makedirs(episode_folder)
+
                         fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
                         full_path = os.path.join(episode_folder, fname)
                         merged.save(full_path, "WEBP", quality=85)
                         relative = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
                         saved_paths.append(relative)
-                        print(f"      ✅ Sayfa {page_num} birleştirildi: {fname}")
+                        print(f"      ✅ Sayfa {page_num} kaydedildi: {fname}")
 
-                # Sonraki sayfaya geç (son sayfa değilse)
+                # Sonraki sayfaya geç
                 if page_num < total_pages:
-                    clicked = self.driver.execute_script("""
-                        // Sağ ok tuşunu simüle et (reader genellikle ok tuşlarını dinler)
-                        let evt = new KeyboardEvent('keydown', {key: 'ArrowRight', keyCode: 39, bubbles: true});
-                        document.dispatchEvent(evt);
-
-                        // Ayrıca "Sonraki" butonunu tıkla
+                    self.driver.execute_script("""
                         let btn = document.querySelector(
-                            'a[title="Sonraki Sayfa"], .next-page, button.reader-next, ' +
-                            '.reader-nav-btn[title*="onraki"], a.reader-nav-btn:last-of-type'
+                            'a[title="Sonraki Sayfa"], .next-page, .reader-nav-btn:last-of-type'
                         );
-                        if (btn) { btn.click(); return 'clicked'; }
-                        return 'key_only';
+                        if (btn) { btn.click(); return; }
+                        document.dispatchEvent(new KeyboardEvent('keydown',
+                            {key:'ArrowRight', keyCode:39, bubbles:true}));
                     """)
+                    time.sleep(3)
 
             if not saved_paths:
                 print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
@@ -455,11 +450,7 @@ class AutoBot:
                         INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, is_published, created_at)
                         VALUES (:w, :e, :t, 0, TRUE, NOW())
                         RETURNING id
-                    """), {
-                        "w": webtoon_id,
-                        "e": chap_num,
-                        "t": f"Bölüm {chap_num}",
-                    })
+                    """), {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
                     episode_id = result.fetchone()[0]
                     for order, path in enumerate(saved_paths, start=1):
                         conn.execute(text("""
