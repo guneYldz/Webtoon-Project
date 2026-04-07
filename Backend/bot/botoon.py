@@ -400,30 +400,23 @@ class AutoBot:
                 if tile_urls:
                     tile_images = []
                     for t_url in tile_urls:
-                        # Anti-bot'u yenmek için tarayıcının aynısını taklit et
-                        req_headers = {
-                            'User-Agent': user_agent,
-                            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-                            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-                            'Referer': 'https://manga-tr.com/',
-                            'Sec-Fetch-Dest': 'image',
-                            'Sec-Fetch-Mode': 'no-cors',
-                            'Sec-Fetch-Site': 'cross-site'
-                        }
                         try:
-                            resp = requests.get(
-                                t_url,
-                                headers=req_headers,
-                                cookies=browser_cookies,
-                                timeout=30
-                            )
-                            # Placeholder resmi kontrol et (çok küçükse muhtemelen placeholder)
-                            if resp.status_code == 200 and len(resp.content) > 1500:
-                                img = Image.open(BytesIO(resp.content))
-                                if img.mode in ("RGBA", "P"):
-                                    img = img.convert("RGB")
-                                tile_images.append(img)
-                        except Exception:
+                            # 100% GARANTİLİ YÖNTEM: Elementi bul ve direkt tarayıcının ekranda gördüğünün resmini çek!
+                            # Bu yöntem requests'in anti-bot korumasına takılmasını tamamen engeller
+                            img_element = self.driver.find_element(By.CSS_SELECTOR, f"img[src='{t_url}']")
+                            
+                            # İhtiyaten elementin görünür olmasını sağla
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", img_element)
+                            time.sleep(0.5)
+
+                            png_bytes = img_element.screenshot_as_png
+                            img = Image.open(BytesIO(png_bytes))
+                            
+                            if img.mode in ("RGBA", "P"):
+                                img = img.convert("RGB")
+                            tile_images.append(img)
+                        except Exception as e:
+                            print(f"        ⚠️ Element resmi alınamadı: {e}")
                             continue
 
                     if tile_images:
