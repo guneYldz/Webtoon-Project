@@ -357,6 +357,8 @@ class AutoBot:
             """)
             print(f"      📄 Toplam {total_pages} sayfa.")
 
+            # Browser'ın gerçek User-Agent'ını al
+            user_agent = self.driver.execute_script("return navigator.userAgent;")
             browser_cookies = self._get_browser_cookies()
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
@@ -398,17 +400,25 @@ class AutoBot:
                 if tile_urls:
                     tile_images = []
                     for t_url in tile_urls:
+                        # Anti-bot'u yenmek için tarayıcının aynısını taklit et
+                        req_headers = {
+                            'User-Agent': user_agent,
+                            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                            'Referer': 'https://manga-tr.com/',
+                            'Sec-Fetch-Dest': 'image',
+                            'Sec-Fetch-Mode': 'no-cors',
+                            'Sec-Fetch-Site': 'cross-site'
+                        }
                         try:
                             resp = requests.get(
                                 t_url,
-                                headers={
-                                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-                                    'Referer': url,
-                                },
+                                headers=req_headers,
                                 cookies=browser_cookies,
                                 timeout=30
                             )
-                            if resp.status_code == 200 and len(resp.content) > 500:
+                            # Placeholder resmi kontrol et (çok küçükse muhtemelen placeholder)
+                            if resp.status_code == 200 and len(resp.content) > 1500:
                                 img = Image.open(BytesIO(resp.content))
                                 if img.mode in ("RGBA", "P"):
                                     img = img.convert("RGB")
