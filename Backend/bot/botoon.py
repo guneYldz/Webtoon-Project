@@ -311,6 +311,33 @@ class AutoBot:
             pass
         return cookies
 
+    def _fetch_image_via_browser(self, img_url):
+        """Tarayıcı üzerinden resim indir — JavaScript fetch() ile (credentials dahil).
+        requests.get() yerine bu kullanılır çünkü img_part.php oturuma bağli.
+        """
+        try:
+            result = self.driver.execute_async_script("""
+                var done = arguments[0];
+                var url  = arguments[1];
+                fetch(url, {credentials: 'include'})
+                    .then(function(r) { return r.arrayBuffer(); })
+                    .then(function(buf) {
+                        var bytes = new Uint8Array(buf);
+                        var binary = '';
+                        for (var i = 0; i < bytes.byteLength; i++) {
+                            binary += String.fromCharCode(bytes[i]);
+                        }
+                        done({ok: true, data: btoa(binary)});
+                    })
+                    .catch(function(e) { done({ok: false, error: e.toString()}); });
+            """, img_url)
+            if result and result.get('ok'):
+                import base64
+                return base64.b64decode(result['data'])
+        except Exception as e:
+            print(f"        ⚠️ fetch hatası: {e}")
+        return None
+
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com okuma sayfasından görselleri indir.
         Site sayfalı yapı kullanıyor: her sayfada N tile (img_part.php) var.
@@ -363,26 +390,18 @@ class AutoBot:
                 print(f"      🔲 Sayfa {page_num}/{total_pages}: {len(tile_urls)} tile")
 
                 if tile_urls:
-                    # Tile'ları indir
+                    # Tile'ları tarayıcı üzerinden indir (requests değil — JS decrypt için)
                     tile_images = []
                     for t_url in tile_urls:
-                        try:
-                            headers = {
-                                'User-Agent': 'Mozilla/5.0',
-                                'Referer': current_url,
-                            }
-                            resp = requests.get(
-                                t_url, headers=headers,
-                                cookies=browser_cookies,
-                                stream=True, timeout=20
-                            )
-                            if resp.status_code == 200 and len(resp.content) > 1000:
-                                img = Image.open(BytesIO(resp.content))
+                        data = self._fetch_image_via_browser(t_url)
+                        if data and len(data) > 500:
+                            try:
+                                img = Image.open(BytesIO(data))
                                 if img.mode in ("RGBA", "P"):
                                     img = img.convert("RGB")
                                 tile_images.append(img)
-                        except Exception:
-                            continue
+                            except Exception as ex:
+                                print(f"        ⚠️ Görsel açılamadı: {ex}")
 
                     if tile_images:
                         # Tile'ları dikey olarak birleştir
