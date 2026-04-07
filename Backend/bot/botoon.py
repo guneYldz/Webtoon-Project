@@ -363,15 +363,29 @@ class AutoBot:
             seen_urls = set()
 
             for page_num in range(1, total_pages + 1):
-                # DOM'da img_part.php tam yüklenene kadar bekle (max 20sn)
+                # DOM'da veya performance loglarında img_part.php yüklenene kadar bekle (max 20sn)
                 tile_urls = []
                 for attempt in range(10):
                     tile_urls = self.driver.execute_script("""
-                        let imgs = document.querySelectorAll('img[src*="img_part.php"]');
-                        return Array.from(imgs)
-                            .filter(img => img.complete && img.naturalWidth > 50)
-                            .map(img => img.src);
+                        let urls = new Set();
+                        // 1) DOM'dan kontrol et (lazy-load data-src dahil)
+                        document.querySelectorAll('img').forEach(img => {
+                            let src = img.src || img.getAttribute('data-src') || '';
+                            if (src.includes('img_part.php')) {
+                                urls.add(src);
+                            }
+                        });
+                        
+                        // 2) Performance API'dan kontrol et (Daha garantili)
+                        performance.getEntriesByType('resource').forEach(e => {
+                            if (e.name.includes('img_part.php')) {
+                                urls.add(e.name);
+                            }
+                        });
+                        
+                        return Array.from(urls);
                     """)
+                    
                     # Daha önce görülmemiş URL'leri filtrele
                     tile_urls = [u for u in tile_urls if u not in seen_urls]
                     if tile_urls:
