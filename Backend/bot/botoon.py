@@ -315,69 +315,57 @@ class AutoBot:
         """manga-tr.com okuma sayfasından görselleri indir."""
         try:
             self.driver.get(url)
+            time.sleep(3)
 
-            # Resimlerin yüklenmesini bekle
-            try:
-                WebDriverWait(self.driver, 20).until(
-                    lambda d: len(d.find_elements(By.CSS_SELECTOR, "img[src]")) > 0
-                )
-            except Exception:
-                pass
-
-            # Yavaşça scroll yap — lazy load için
+            # Yavaşça scroll yap — lazy load tetikle
             self.driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(2)
+            time.sleep(1)
             scroll_height = self.driver.execute_script("return document.body.scrollHeight;")
             current = 0
             while current < scroll_height:
                 self.driver.execute_script(f"window.scrollTo(0, {current});")
-                time.sleep(0.4)
-                current += 400
+                time.sleep(0.5)
+                current += 300
                 scroll_height = self.driver.execute_script("return document.body.scrollHeight;")
-            time.sleep(3)
 
-            # Manga görsellerini topla — SADECE mangatr.site domain'inden
-            # (UI ikonları, butonlar vb. filtrelenir)
+            # Scroll bitti, resimlerin yüklenmesi için bekle
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(4)
+
+            # Önce performance API ile yüklenen mangatr.site URL'lerini al
+            # Bu en güvenilir yöntem — sadece gerçek manga CDN'inden gelenler
             image_urls = self.driver.execute_script("""
-                let seen = new Set();
-                let urls = [];
-                document.querySelectorAll('img').forEach(img => {
-                    let src = img.src
-                        || img.getAttribute('data-src')
-                        || img.getAttribute('data-url')
-                        || img.getAttribute('data-lazy-src')
-                        || '';
-                    if (!src || !src.startsWith('http')) return;
-                    if (seen.has(src)) return;
-
-                    // Sadece manga CDN domain'i kabul et
-                    let isMangaImg = src.includes('mangatr.site')
-                        || src.includes('img_part')
-                        || src.includes('manga-tr.com/images')
-                        || src.includes('manga-tr.com/img');
-
-                    // Boyut filtresi: küçük ikonları dışla (min 200x200 rendered px)
-                    let bigEnough = (img.naturalWidth >= 200 || img.width >= 200)
-                        && (img.naturalHeight >= 200 || img.height >= 200);
-
-                    if (isMangaImg || bigEnough) {
-                        seen.add(src);
-                        urls.push(src);
-                    }
-                });
-                return urls;
+                let entries = performance.getEntriesByType('resource');
+                let imgs = entries
+                    .filter(e => e.name.includes('mangatr.site') || e.name.includes('img_part'))
+                    .map(e => e.name)
+                    .filter(n => n.startsWith('http'));
+                return [...new Set(imgs)];
             """)
 
-            # Bulunamazsa network kaynaklarına bak — sadece mangatr.site
+            # Bulunamazsa DOM'dan dene — SADECE mangatr.site kaynakları
+            # ve tam yüklenmiş (complete=true, naturalWidth>0) olanlar
             if not image_urls:
                 image_urls = self.driver.execute_script("""
-                    let entries = performance.getEntriesByType('resource');
-                    let imgs = entries
-                        .filter(e => e.name.includes('mangatr.site')
-                            || e.name.includes('img_part'))
-                        .map(e => e.name)
-                        .filter(n => n.startsWith('http'));
-                    return [...new Set(imgs)];
+                    let seen = new Set();
+                    let urls = [];
+                    document.querySelectorAll('img').forEach(img => {
+                        let src = img.src || img.getAttribute('data-src') || '';
+                        if (!src.startsWith('http')) return;
+                        if (seen.has(src)) return;
+
+                        // SADECE manga CDN — emoji, ikon, buton hiç kabul edilmez
+                        let isMangaCDN = src.includes('mangatr.site') || src.includes('img_part');
+                        if (!isMangaCDN) return;
+
+                        // Tam yüklenmiş mi?
+                        let loaded = img.complete && img.naturalWidth > 100;
+                        if (loaded) {
+                            seen.add(src);
+                            urls.push(src);
+                        }
+                    });
+                    return urls;
                 """)
 
             if not image_urls:
