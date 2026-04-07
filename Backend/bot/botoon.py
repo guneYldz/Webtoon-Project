@@ -404,15 +404,22 @@ class AutoBot:
                     {"w": webtoon_id, "e": chap_num}
                 ).fetchone()
                 if not check:
-                    conn.execute(text("""
-                        INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, image_paths, view_count, is_published, created_at)
-                        VALUES (:w, :e, :t, :imgs, 0, TRUE, NOW())
+                    result = conn.execute(text("""
+                        INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, is_published, created_at)
+                        VALUES (:w, :e, :t, 0, TRUE, NOW())
+                        RETURNING id
                     """), {
                         "w": webtoon_id,
                         "e": chap_num,
                         "t": f"Bölüm {chap_num}",
-                        "imgs": json.dumps(saved_paths)
                     })
+                    episode_id = result.fetchone()[0]
+                    # Her resmi episode_images tablosuna ayrı satır olarak kaydet
+                    for order, path in enumerate(saved_paths, start=1):
+                        conn.execute(text("""
+                            INSERT INTO episode_images (episode_id, image_url, page_order)
+                            VALUES (:eid, :url, :ord)
+                        """), {"eid": episode_id, "url": path, "ord": order})
                     conn.commit()
                     print(f"      ✅ DB'ye kaydedildi: {len(saved_paths)} sayfa")
 
@@ -588,15 +595,21 @@ class AutoBot:
                     {"w": webtoon_id, "e": chap_num}
                 ).fetchone()
                 if not check:
-                    conn.execute(text("""
-                        INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, image_paths, view_count, is_published, created_at)
-                        VALUES (:w, :e, :t, :imgs, 0, TRUE, NOW())
+                    result = conn.execute(text("""
+                        INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, is_published, created_at)
+                        VALUES (:w, :e, :t, 0, TRUE, NOW())
+                        RETURNING id
                     """), {
                         "w": webtoon_id,
                         "e": chap_num,
                         "t": f"Bölüm {chap_num}",
-                        "imgs": json.dumps(saved_paths)
                     })
+                    episode_id = result.fetchone()[0]
+                    for order, path in enumerate(saved_paths, start=1):
+                        conn.execute(text("""
+                            INSERT INTO episode_images (episode_id, image_url, page_order)
+                            VALUES (:eid, :url, :ord)
+                        """), {"eid": episode_id, "url": path, "ord": order})
                     conn.commit()
                     print(f"      ✅ DB'ye kaydedildi: {len(saved_paths)} sayfa")
 
