@@ -340,101 +340,99 @@ class AutoBot:
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com okuma sayfasından görselleri indir.
-        - Reader sayfalı: her sayfada img_part.php tile'ları var
-        - DOM'dan tam yüklenmiş img'leri bekle → requests.get() ile indir → stitch
+        Site long-strip (webtoon tarzı) okuyucu kullanıyor:
+        Tüm görseller tek sayfada, lazy-load ile yükleniyor.
+        Sayfayı tamamen scroll et → tüm görselleri topla → her birini ayrı sayfa olarak kaydet.
         """
         try:
             self.driver.get(url)
-            time.sleep(4)
+            time.sleep(5)
 
-            # Toplam sayfa sayısını tespit et ("1/5" formatından)
-            total_pages = self.driver.execute_script("""
-                let m = document.body.innerText.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
-                if (m) return parseInt(m[2]);
-                let inp = document.querySelector('input[type="number"]');
-                if (inp && inp.max) return parseInt(inp.max);
-                return 1;
+            # ── 1. Sayfayı tamamen scroll ederek lazy-load'ları tetikle ──────────
+            print("      🖱️ Lazy-load için sayfa scroll ediliyor...")
+            scroll_height = self.driver.execute_script("return document.body.scrollHeight")
+            scroll_step = 600
+            current_pos = 0
+            while current_pos < scroll_height:
+                self.driver.execute_script(f"window.scrollTo(0, {current_pos});")
+                time.sleep(0.4)
+                current_pos += scroll_step
+                # Scroll ettikçe sayfa uzayabilir, güncelle
+                scroll_height = self.driver.execute_script("return document.body.scrollHeight")
+            # En alta git ve biraz bekle
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+            # Tekrar en üste çık
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(1)
+
+            # ── 2. DOM'dan tüm resim URL'lerini topla ────────────────────────────
+            image_urls = self.driver.execute_script("""
+                let seen = new Set();
+                let result = [];
+                let candidates = document.querySelectorAll('img');
+                candidates.forEach(function(img) {
+                    let src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src')
+                              || img.getAttribute('data-original') || img.src || '';
+                    src = src.trim();
+                    // Boş, blob, data URI ve küçük ikonları atla
+                    if (!src || src.startsWith('blob:') || src.startsWith('data:')) return;
+                    if (img.naturalWidth < 100 || img.naturalHeight < 50) return;
+                    // Aynı URL'yi tekrar ekleme
+                    if (seen.has(src)) return;
+                    // Kapak / avatar gibi UI görselleri değil, gerçek manga sayfaları
+                    // (genişlik/yükseklik oranı mantıklıysa kabul et)
+                    let ratio = img.naturalHeight / (img.naturalWidth || 1);
+                    if (ratio < 0.3) return;   // yatay banner görseller
+                    seen.add(src);
+                    result.push(src);
+                });
+                return result;
             """)
-            print(f"      📄 Toplam {total_pages} sayfa.")
 
-            # Browser'ın gerçek User-Agent'ını al
-            user_agent = self.driver.execute_script("return navigator.userAgent;")
+            if not image_urls:
+                print("      ⚠️ DOM'da resim URL'i bulunamadı, screenshot fallback deneniyor...")
+                image_urls = []
+
+            print(f"      🖼️ {len(image_urls)} resim URL'i bulundu.")
+
             browser_cookies = self._get_browser_cookies()
+            user_agent = self.driver.execute_script("return navigator.userAgent;")
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
-            for page_num in range(1, total_pages + 1):
-                # DOM'da elementlerin yüklenmesini bekle (max 20sn)
-                img_elements = []
-                for attempt in range(10):
-                    # JS üzerinden Selenium WebElement referanslarını doğrudan PYTHON'a gönder!
-                    img_elements = self.driver.execute_script("""
-                        return Array.from(document.querySelectorAll('img, canvas')).filter(el => {
-                            let isLoaded = false;
-                            if (el.tagName.toLowerCase() === 'img') {
-                                let src = el.src || el.getAttribute('data-src') || '';
-                                let isTile = src.includes('mangatr') || src.includes('img_part') || src.startsWith('blob:') || src.startsWith('data:image/');
-                                isLoaded = isTile && el.complete && el.naturalWidth > 150 && el.naturalHeight > 100;
-                            } else if (el.tagName.toLowerCase() === 'canvas') {
-                                isLoaded = el.width > 150 && el.height > 100;
-                            }
-                            return isLoaded && el.getBoundingClientRect().height > 0;
-                        });
-                    """)
-                    if img_elements:
-                        break
-                    time.sleep(2)
 
-                print(f"      🔲 Sayfa {page_num}/{total_pages}: {len(img_elements)} tile")
+            for idx, img_url in enumerate(image_urls, start=1):
+                fname = f"{series_slug}-bolum-{chap_num}-sayfa-{idx}.webp"
+                print(f"      ⬇️  [{idx}/{len(image_urls)}] {img_url[:80]}...")
 
-                if img_elements:
-                    tile_images = []
-                    for img_element in img_elements:
+                # Önce requests ile dene
+                saved = process_and_save_image(
+                    img_url, episode_folder, fname,
+                    cookies=browser_cookies,
+                    referer=url
+                )
+
+                # Başarısızsa tarayıcı fetch ile dene
+                if not saved:
+                    raw_bytes = self._fetch_image_via_browser(img_url)
+                    if raw_bytes and len(raw_bytes) > 1000:
                         try:
-                            # İhtiyaten elementin görünür olmasını sağla
-                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", img_element)
-                            time.sleep(0.5)
-
-                            png_bytes = img_element.screenshot_as_png
-                            img = Image.open(BytesIO(png_bytes))
-                            
-                            if img.mode in ("RGBA", "P"):
-                                img = img.convert("RGB")
-                            tile_images.append(img)
+                            image = Image.open(BytesIO(raw_bytes))
+                            image.verify()
+                            image = Image.open(BytesIO(raw_bytes))
+                            if image.mode in ("RGBA", "P"):
+                                image = image.convert("RGB")
+                            if not os.path.exists(episode_folder):
+                                os.makedirs(episode_folder)
+                            full_path = os.path.join(episode_folder, fname)
+                            image.save(full_path, "WEBP", quality=85)
+                            saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
+                            print(f"      ✅ (fetch) Kaydedildi: {fname}")
                         except Exception as e:
-                            print(f"        ⚠️ Element resmi alınamadı: {e}")
-                            continue
+                            print(f"      ⚠️ fetch sonucu işlenemedi: {e}")
 
-                    if tile_images:
-                        # Tile'ları dikey birleştir → tek manga sayfası
-                        total_w = max(i.width for i in tile_images)
-                        total_h = sum(i.height for i in tile_images)
-                        merged = Image.new("RGB", (total_w, total_h), (255, 255, 255))
-                        y_off = 0
-                        for ti in tile_images:
-                            merged.paste(ti, (0, y_off))
-                            y_off += ti.height
-
-                        if not os.path.exists(episode_folder):
-                            os.makedirs(episode_folder)
-
-                        fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
-                        full_path = os.path.join(episode_folder, fname)
-                        merged.save(full_path, "WEBP", quality=85)
-                        relative = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                        saved_paths.append(relative)
-                        print(f"      ✅ Sayfa {page_num} kaydedildi: {fname}")
-
-                # Sonraki sayfaya geç
-                if page_num < total_pages:
-                    self.driver.execute_script("""
-                        let btn = document.querySelector(
-                            'a[title="Sonraki Sayfa"], .next-page, .reader-nav-btn:last-of-type'
-                        );
-                        if (btn) { btn.click(); return; }
-                        document.dispatchEvent(new KeyboardEvent('keydown',
-                            {key:'ArrowRight', keyCode:39, bubbles:true}));
-                    """)
-                    time.sleep(3)
+                if saved:
+                    saved_paths.append(saved)
 
             if not saved_paths:
                 print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
