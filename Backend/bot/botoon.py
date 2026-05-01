@@ -245,43 +245,36 @@ class AutoBot:
             print(f"❌ Seri işlenirken hata: {e}")
 
     def _get_manga_tr_chapters(self, series_url):
-        """manga-tr.com bölüm listesini AJAX sayfalama ile tüm sayfalardan topla."""
+        """manga-tr.com bölüm listesini tüm sayfalardan topla."""
         chapters = []
 
-        # Sayfa zaten yüklü (check_manga_tr'den geliyoruz)
-        # Toplam sayfa sayısını data-page attribute'larından al
+        # ── 1. Toplam sayfa sayısını tespit et ─────────────────────────────────
+        # Önce data-page attribute'una bak, yoksa buton text içeriğine bak
         total_pages = self.driver.execute_script("""
-            let btns = document.querySelectorAll('ul.pagination1 a[data-page], .pagination a[data-page]');
             let max = 0;
-            btns.forEach(a => {
-                let p = parseInt(a.getAttribute('data-page'));
-                if (!isNaN(p) && p > max) max = p;
+            // Yöntem 1: data-page attribute
+            document.querySelectorAll('ul.pagination1 a, .pagination a, .page-link').forEach(a => {
+                let dp = parseInt(a.getAttribute('data-page'));
+                if (!isNaN(dp) && dp > max) max = dp;
+                // Yöntem 2: buton yazısı rakam ise
+                let txt = parseInt(a.textContent.trim());
+                if (!isNaN(txt) && txt > max) max = txt;
             });
-            return max || 1;
+            return max > 0 ? max : 1;
         """)
         print(f"    📑 Toplam {total_pages} sayfa tespit edildi.")
 
-        for page in range(1, total_pages + 1):
-            if page > 1:
-                # AJAX ile sayfa yükleme — data-page butonuna tıkla
-                clicked = self.driver.execute_script(f"""
-                    let btn = document.querySelector('ul.pagination1 a[data-page="{page}"], .pagination a[data-page="{page}"]');
-                    if (btn) {{ btn.click(); return true; }}
-                    return false;
-                """)
-                if not clicked:
-                    print(f"    ⚠️ Sayfa {page} butonu bulunamadı, durduruluyor.")
-                    break
-                time.sleep(2)  # AJAX yanıtını bekle
-
-            # Bu sayfadaki bölüm linklerini topla
+        page = 1
+        while True:
+            # Bu sayfadaki bölüm linklerini topla (duplicate'leri atla)
             chapter_links = self.driver.execute_script("""
-                let links = document.querySelectorAll('a[href]');
+                let seen = new Set();
                 let chapters = [];
-                links.forEach(a => {
+                document.querySelectorAll('a[href]').forEach(a => {
                     let href = a.href;
                     let match = href.match(/id-\\d+-read-[\\w-]+-chapter-([\\d.]+)\\.html/);
-                    if (match) {
+                    if (match && !seen.has(href)) {
+                        seen.add(href);
                         chapters.push({ num: match[1], url: href });
                     }
                 });
@@ -296,8 +289,39 @@ class AutoBot:
             existing_urls = {ch["url"] for ch in chapters}
             new_links = [ch for ch in chapter_links if ch["url"] not in existing_urls]
             chapters.extend(new_links)
-            print(f"    📄 Sayfa {page}/{total_pages}: {len(new_links)} bölüm (toplam: {len(chapters)})")
+            print(f"    📄 Sayfa {page}: {len(new_links)} yeni bölüm (toplam: {len(chapters)})")
 
+            if page >= total_pages:
+                break
+
+            # ── Sonraki sayfaya geç ─────────────────────────────────────────────
+            next_page = page + 1
+            clicked = self.driver.execute_script(f"""
+                // Yöntem 1: data-page={next_page} attribute
+                let btn = document.querySelector(
+                    'ul.pagination1 a[data-page="{next_page}"], .pagination a[data-page="{next_page}"]'
+                );
+                if (btn) {{ btn.click(); return true; }}
+                // Yöntem 2: Text içeriği rakam olan buton
+                let allBtns = document.querySelectorAll('ul.pagination1 a, .pagination a, .page-link');
+                for (let b of allBtns) {{
+                    if (b.textContent.trim() === '{next_page}') {{ b.click(); return true; }}
+                }}
+                // Yöntem 3: "Sonraki" / "Next" butonu
+                for (let b of allBtns) {{
+                    let t = b.textContent.toLowerCase().trim();
+                    if (t === 'sonraki' || t === 'next' || t === '>') {{ b.click(); return true; }}
+                }}
+                return false;
+            """)
+            if not clicked:
+                print(f"    ⚠️ Sayfa {next_page} butonu bulunamadı, durduruluyor.")
+                break
+            time.sleep(2)
+            page += 1
+
+        # Bölümleri sayısal sıraya koy (1, 2, 3 ... en son bölüm)
+        chapters.sort(key=lambda x: float(x['num']))
         print(f"    📚 Toplam {len(chapters)} bölüm bulundu.")
         return chapters
 
@@ -339,100 +363,167 @@ class AutoBot:
         return None
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
-        """manga-tr.com okuma sayfasından görselleri indir.
-        Site long-strip (webtoon tarzı) okuyucu kullanıyor:
-        Tüm görseller tek sayfada, lazy-load ile yükleniyor.
-        Sayfayı tamamen scroll et → tüm görselleri topla → her birini ayrı sayfa olarak kaydet.
+        """manga-tr.com sayfa-sayfa okuyucusundan görselleri indir.
+        - Reader sayfa-sayfa çalışıyor (input[type=number] ile navigasyon)
+        - Her sayfada 1 manga görseli var
+        - URL tabanlı kara liste ile emoji/yorum görselleri atlanıyor
         """
+        # Kara liste — bu desenleri içeren URL'ler kesinlikle manga sayfası değil
+        BLACKLIST = [
+            '/yorum/', 'tenor.com', 'giphy.com', 'emoji', 'favicon',
+            'avatar', 'logo', 'icon', 'banner', 'ads', 'pixel',
+            'facebook', 'twitter', 'instagram', 'google',
+        ]
+
+        def is_manga_image(src):
+            if not src or src.startswith('data:') or src.startswith('blob:'):
+                return False
+            src_lower = src.lower()
+            for bad in BLACKLIST:
+                if bad in src_lower:
+                    return False
+            return True
+
         try:
             self.driver.get(url)
             time.sleep(5)
 
-            # ── 1. Sayfayı tamamen scroll ederek lazy-load'ları tetikle ──────────
-            print("      🖱️ Lazy-load için sayfa scroll ediliyor...")
-            scroll_height = self.driver.execute_script("return document.body.scrollHeight")
-            scroll_step = 600
-            current_pos = 0
-            while current_pos < scroll_height:
-                self.driver.execute_script(f"window.scrollTo(0, {current_pos});")
-                time.sleep(0.4)
-                current_pos += scroll_step
-                # Scroll ettikçe sayfa uzayabilir, güncelle
-                scroll_height = self.driver.execute_script("return document.body.scrollHeight")
-            # En alta git ve biraz bekle
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-            # Tekrar en üste çık
-            self.driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(1)
-
-            # ── 2. DOM'dan tüm resim URL'lerini topla ────────────────────────────
-            image_urls = self.driver.execute_script("""
-                let seen = new Set();
-                let result = [];
-                let candidates = document.querySelectorAll('img');
-                candidates.forEach(function(img) {
-                    let src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src')
-                              || img.getAttribute('data-original') || img.src || '';
-                    src = src.trim();
-                    // Boş, blob, data URI ve küçük ikonları atla
-                    if (!src || src.startsWith('blob:') || src.startsWith('data:')) return;
-                    if (img.naturalWidth < 100 || img.naturalHeight < 50) return;
-                    // Aynı URL'yi tekrar ekleme
-                    if (seen.has(src)) return;
-                    // Kapak / avatar gibi UI görselleri değil, gerçek manga sayfaları
-                    // (genişlik/yükseklik oranı mantıklıysa kabul et)
-                    let ratio = img.naturalHeight / (img.naturalWidth || 1);
-                    if (ratio < 0.3) return;   // yatay banner görseller
-                    seen.add(src);
-                    result.push(src);
-                });
-                return result;
+            # ── 1. Toplam sayfa sayısını tespit et ───────────────────────────────
+            total_pages = self.driver.execute_script("""
+                // input[type=number] max attribute
+                let inp = document.querySelector('input[type="number"]');
+                if (inp && inp.max && parseInt(inp.max) > 1) return parseInt(inp.max);
+                // "X/Y" veya "X / Y" formatı
+                let m = document.body.innerText.match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+                if (m && parseInt(m[2]) > 1) return parseInt(m[2]);
+                // select option max
+                let sel = document.querySelector('select');
+                if (sel && sel.options.length > 1) return sel.options.length;
+                return 1;
             """)
-
-            if not image_urls:
-                print("      ⚠️ DOM'da resim URL'i bulunamadı, screenshot fallback deneniyor...")
-                image_urls = []
-
-            print(f"      🖼️ {len(image_urls)} resim URL'i bulundu.")
+            print(f"      📄 Toplam {total_pages} sayfa.")
 
             browser_cookies = self._get_browser_cookies()
-            user_agent = self.driver.execute_script("return navigator.userAgent;")
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
 
-            for idx, img_url in enumerate(image_urls, start=1):
-                fname = f"{series_slug}-bolum-{chap_num}-sayfa-{idx}.webp"
-                print(f"      ⬇️  [{idx}/{len(image_urls)}] {img_url[:80]}...")
+            for page_num in range(1, total_pages + 1):
+                # Her sayfa için görselin yüklenmesini bekle
+                time.sleep(2)
 
-                # Önce requests ile dene
-                saved = process_and_save_image(
-                    img_url, episode_folder, fname,
-                    cookies=browser_cookies,
-                    referer=url
-                )
+                # ── 2. Bu sayfanın manga görselini bul ───────────────────────────
+                img_url = self.driver.execute_script("""
+                    // Kara liste — JS tarafında da filtrele
+                    const BLACKLIST = ['/yorum/', 'tenor.com', 'giphy.com', 'emoji',
+                                       'favicon', 'avatar', 'logo', 'icon', 'banner',
+                                       'ads', 'pixel', 'facebook', 'twitter'];
+                    function isOk(src) {
+                        if (!src || src.startsWith('data:') || src.startsWith('blob:')) return false;
+                        let s = src.toLowerCase();
+                        return !BLACKLIST.some(b => s.includes(b));
+                    }
 
-                # Başarısızsa tarayıcı fetch ile dene
+                    // En büyük geçerli resmi bul (boyut önceliği)
+                    let best = null, bestArea = 0;
+                    document.querySelectorAll('img').forEach(img => {
+                        let src = img.getAttribute('data-src') || img.getAttribute('data-original')
+                                  || img.src || '';
+                        src = src.trim();
+                        if (!isOk(src)) return;
+                        let area = img.naturalWidth * img.naturalHeight;
+                        // naturalWidth=0 ise HTML attribute'u kullan
+                        if (area === 0) {
+                            let w = parseInt(img.getAttribute('width') || '0');
+                            let h = parseInt(img.getAttribute('height') || '0');
+                            area = w * h;
+                        }
+                        if (area > bestArea) { bestArea = area; best = src; }
+                    });
+                    return best;
+                """)
+
+                fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
+                saved = None
+
+                if img_url and is_manga_image(img_url):
+                    print(f"      ⬇️  Sayfa {page_num}/{total_pages}: {img_url[:80]}...")
+                    saved = process_and_save_image(
+                        img_url, episode_folder, fname,
+                        cookies=browser_cookies, referer=url
+                    )
+                    if not saved:
+                        # Browser fetch fallback
+                        raw_bytes = self._fetch_image_via_browser(img_url)
+                        if raw_bytes and len(raw_bytes) > 1000:
+                            try:
+                                image = Image.open(BytesIO(raw_bytes))
+                                image.verify()
+                                image = Image.open(BytesIO(raw_bytes))
+                                if image.mode in ("RGBA", "P"):
+                                    image = image.convert("RGB")
+                                if not os.path.exists(episode_folder):
+                                    os.makedirs(episode_folder)
+                                full_path = os.path.join(episode_folder, fname)
+                                image.save(full_path, "WEBP", quality=85)
+                                saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
+                                print(f"      ✅ (fetch) Kaydedildi: {fname}")
+                            except Exception as e:
+                                print(f"      ⚠️ fetch sonucu işlenemedi: {e}")
+
+                # Son çare: reader container'ı screenshot al
                 if not saved:
-                    raw_bytes = self._fetch_image_via_browser(img_url)
-                    if raw_bytes and len(raw_bytes) > 1000:
-                        try:
-                            image = Image.open(BytesIO(raw_bytes))
-                            image.verify()
-                            image = Image.open(BytesIO(raw_bytes))
-                            if image.mode in ("RGBA", "P"):
-                                image = image.convert("RGB")
-                            if not os.path.exists(episode_folder):
-                                os.makedirs(episode_folder)
-                            full_path = os.path.join(episode_folder, fname)
-                            image.save(full_path, "WEBP", quality=85)
-                            saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                            print(f"      ✅ (fetch) Kaydedildi: {fname}")
-                        except Exception as e:
-                            print(f"      ⚠️ fetch sonucu işlenemedi: {e}")
+                    print(f"      📸 Sayfa {page_num}: Screenshot deneniyor...")
+                    try:
+                        reader_el = None
+                        for sel in [
+                            '.reader-img', '#reader', '.chapter-img',
+                            '.reading-content', '.wp-manga-chapter-img',
+                            '#readerarea', '.page-break img'
+                        ]:
+                            try:
+                                reader_el = self.driver.find_element(By.CSS_SELECTOR, sel)
+                                break
+                            except Exception:
+                                continue
+                        png_bytes = reader_el.screenshot_as_png if reader_el else self.driver.get_screenshot_as_png()
+                        img = Image.open(BytesIO(png_bytes))
+                        if img.mode in ("RGBA", "P"):
+                            img = img.convert("RGB")
+                        if not os.path.exists(episode_folder):
+                            os.makedirs(episode_folder)
+                        full_path = os.path.join(episode_folder, fname)
+                        img.save(full_path, "WEBP", quality=85)
+                        saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
+                        print(f"      ✅ Screenshot kaydedildi: {fname}")
+                    except Exception as e:
+                        print(f"      ⚠️ Screenshot hatası: {e}")
 
                 if saved:
                     saved_paths.append(saved)
+
+                # ── 3. Sonraki sayfaya geç ───────────────────────────────────────
+                if page_num < total_pages:
+                    nav_result = self.driver.execute_script(f"""
+                        // Yöntem 1: input değerini artır
+                        let inp = document.querySelector('input[type="number"]');
+                        if (inp) {{
+                            inp.value = {page_num + 1};
+                            inp.dispatchEvent(new Event('change', {{bubbles:true}}));
+                            inp.dispatchEvent(new Event('input', {{bubbles:true}}));
+                            inp.dispatchEvent(new KeyboardEvent('keydown', {{key:'Enter', keyCode:13, bubbles:true}}));
+                        }}
+                        // Yöntem 2: → butonuna tıkla
+                        let nextBtn = document.querySelector(
+                            'a[title="Sonraki Sayfa"], .next-page, button.next,
+                             a.next, [class*="next-btn"], [class*="btn-next"]'
+                        );
+                        if (nextBtn) {{ nextBtn.click(); return 'btn'; }}
+                        // Yöntem 3: ArrowRight tuşu
+                        document.dispatchEvent(new KeyboardEvent('keydown', {{key:'ArrowRight', keyCode:39, bubbles:true}}));
+                        return inp ? 'input' : 'key';
+                    """)
+                    print(f"      ➡️  Sonraki sayfa ({nav_result}), bekleniyor...")
+                    time.sleep(3)
 
             if not saved_paths:
                 print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
