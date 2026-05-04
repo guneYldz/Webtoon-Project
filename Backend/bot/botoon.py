@@ -362,147 +362,247 @@ class AutoBot:
             print(f"        ⚠️ fetch hatası: {e}")
         return None
 
-    def _build_page_url(self, chapter_url, page_num):
-        """manga-tr.com sayfa URL'si oluştur.
-        Sayfa 1: ...chapter-N.html  (orijinal URL)
-        Sayfa 2+: ...chapter-N-page-X.html
-        """
-        if page_num == 1:
-            return chapter_url
-        base = chapter_url.rstrip("/")
-        if base.endswith(".html"):
-            base = base[:-5]
-        return f"{base}-page-{page_num}.html"
-
-    def _extract_canvas_image(self):
-        """Canvas elementinden base64 PNG verisi çek.
-        Site canvas-based render kullanıyor — toDataURL() en güvenilir yöntem.
+    def _switch_to_page_mode(self):
+        """Reader'ı 'Sayfadan Sayfaya' moduna geçir.
+        Site varsayılan olarak 'Tümü' veya 'Webtoon' modunda açılıyor.
+        'Sayfadan Sayfaya' modunda her sayfada 1 görsel var ve select dropdown ile gezilebiliyor.
         """
         try:
-            data_url = self.driver.execute_script(
-                "var c = document.querySelector('canvas');\n"
-                "if (!c) return null;\n"
-                "try { return c.toDataURL('image/png'); } catch(e) { return null; }\n"
+            # Önce ayarlar menüsünü aç (sağ üstteki dişli ikon)
+            self.driver.execute_script(
+                "var gear = document.querySelector('.reader-settings-btn, [class*=\"settings\"], .fa-cog');"
+                "if (gear) gear.click();"
             )
-            if data_url and data_url.startswith("data:image"):
-                import base64
-                header, b64 = data_url.split(",", 1)
-                return base64.b64decode(b64)
+            time.sleep(1)
+
+            # 'Sayfadan Sayfaya' butonunu bul ve tıkla
+            clicked = self.driver.execute_script(
+                "var btns = Array.from(document.querySelectorAll('button, a, div'));"
+                "var target = btns.find(function(b) {"
+                "  var t = b.textContent.trim();"
+                "  return t === 'Sayfadan Sayfaya' || t.toLowerCase().includes('sayfa');"
+                "});"
+                "if (target) { target.click(); return true; }"
+                "return false;"
+            )
+            if clicked:
+                time.sleep(2)
+                print("      📖 'Sayfadan Sayfaya' modu aktif edildi.")
+                return True
         except Exception as e:
-            print(f"        ⚠️ Canvas toDataURL hatası: {e}")
-        return None
+            print(f"      ⚠️ Mod değiştirme hatası: {e}")
+        return False
 
-    def _is_canvas_blank(self, raw_bytes):
-        """Canvas verisinin boş/tek renk olup olmadığını kontrol et."""
+    def _get_page_image_urls_all_mode(self):
+        """'Tümü' modunda açık sayfadaki tüm manga img URL'lerini topla.
+        Blacklist ile UI ikonları vs. filtrelenir.
+        """
+        BLACKLIST = [
+            '/yorum/', 'tenor.com', 'giphy.com', 'emoji', 'favicon',
+            'avatar', 'logo', 'icon', 'banner', 'ads', 'pixel',
+            'facebook', 'twitter', 'instagram', 'google',
+        ]
         try:
-            img = Image.open(BytesIO(raw_bytes)).convert("RGB")
-            # Kenardan 5 piksel al — hepsi aynıysa boş
-            pixels = list(img.getdata())
-            first = pixels[0]
-            return all(p == first for p in pixels[:200])
-        except Exception:
-            return True
-
-    def _get_total_pages_manga_tr(self):
-        """Açık olan reader sayfasındaki toplam sayfa sayısını tespit et."""
-        try:
-            # Yöntem 1: input[type=number] max attribute
-            total = self.driver.execute_script(
-                'var inp = document.querySelector(\'input[type="number"]\');'
-                'if (inp && inp.max && parseInt(inp.max) > 1) return parseInt(inp.max);'
-                'return 0;'
+            urls = self.driver.execute_script(
+                "var BL = ['/yorum/','tenor.com','giphy.com','emoji','favicon',"
+                "          'avatar','logo','icon','banner','ads','pixel','facebook','twitter'];"
+                "function ok(src) {"
+                "  if (!src || src.startsWith('data:') || src.startsWith('blob:')) return false;"
+                "  var s = src.toLowerCase();"
+                "  return !BL.some(function(b){return s.indexOf(b)!==-1;});"
+                "}"
+                "var seen = {}; var result = [];"
+                "document.querySelectorAll('img').forEach(function(img) {"
+                "  var src = img.getAttribute('data-src') || img.getAttribute('data-original') || img.src || '';"
+                "  src = src.trim();"
+                "  var area = (img.naturalWidth || parseInt(img.getAttribute('width')||'0'))"
+                "           * (img.naturalHeight || parseInt(img.getAttribute('height')||'0'));"
+                "  if (ok(src) && !seen[src] && area > 10000) {"
+                "    seen[src] = true; result.push(src);"
+                "  }"
+                "});"
+                "return result;"
             )
-            if total and total > 1:
-                return total
-        except Exception:
-            pass
-
-        try:
-            # Yöntem 2: "X / Y" veya select seçeneklerinden
-            total = self.driver.execute_script(
-                'var m = document.body.innerText.match(/(\\d+)\\s*\/\\s*(\\d+)/);'
-                'if (m && parseInt(m[2]) > 1) return parseInt(m[2]);'
-                'var sel = document.querySelector(\'select\');'
-                'if (sel && sel.options.length > 1) return sel.options.length;'
-                'return 1;'
-            )
-            return total if total else 1
-        except Exception:
-            return 1
+            return [u for u in (urls or []) if not any(b in u.lower() for b in BLACKLIST)]
+        except Exception as e:
+            print(f"      ⚠️ img URL toplama hatası: {e}")
+            return []
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com bölümünü indir.
-        - Site canvas-based webtoon reader kullanıyor
-        - Her sayfa URL'si ayrı: chapter-N-page-X.html
-        - Canvas toDataURL() ile piksel verisi çekilir
-        - Boş/bozuk canvas'ta tam sayfa screenshot fallback
-        """
-        try:
-            # ── 1. Sayfa 1'i yükle, toplam sayfayı öğren ────────────────────────
-            self.driver.get(url)
-            time.sleep(6)
 
-            total_pages = self._get_total_pages_manga_tr()
-            print(f"      📄 Toplam {total_pages} sayfa.")
+        Strateji:
+        1. Sayfaya git, 'Sayfadan Sayfaya' moduna geç
+        2. <select> dropdown ile kaç sayfa olduğunu öğren
+        3. Her sayfa için dropdown value'yu set et → 'change' event → img src çek → indir
+        4. Fallback: 'Tümü' modunda tüm img'leri topla
+        """
+        BLACKLIST = [
+            '/yorum/', 'tenor.com', 'giphy.com', 'emoji', 'favicon',
+            'avatar', 'logo', 'icon', 'banner', 'ads', 'pixel',
+            'facebook', 'twitter', 'instagram', 'google',
+        ]
+
+        def is_ok(src):
+            if not src or src.startswith('data:') or src.startswith('blob:'):
+                return False
+            return not any(b in src.lower() for b in BLACKLIST)
+
+        try:
+            # ── 1. Bölümü yükle ──────────────────────────────────────────────────
+            self.driver.get(url)
+            time.sleep(5)
 
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
 
-            for page_num in range(1, total_pages + 1):
-                fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
-                saved = None
+            # ── 2. 'Sayfadan Sayfaya' moduna geç ────────────────────────────────
+            self._switch_to_page_mode()
+            time.sleep(2)
 
-                # ── 2. Sayfaya git (URL tabanlı — site kendi pozisyonuna scroll eder) ──
-                page_url = self._build_page_url(url, page_num)
-                print(f"      🌐 [{page_num}/{total_pages}] {page_url}")
-                self.driver.get(page_url)
+            # ── 3. Select dropdown'dan toplam sayfa sayısını oku ─────────────────
+            total_pages = self.driver.execute_script(
+                "var sel = document.querySelector('select');"
+                "if (sel && sel.options.length > 1) return sel.options.length;"
+                "return 0;"
+            ) or 0
 
-                # Canvas render + scroll bitmesi için bekle
-                time.sleep(5)
+            if total_pages < 1:
+                # Mod geçişi olmadıysa, input[type=number] dene
+                total_pages = self.driver.execute_script(
+                    "var inp = document.querySelector('input[type=\"number\"]');"
+                    "if (inp && inp.max) return parseInt(inp.max);"
+                    "return 0;"
+                ) or 0
 
-                # ── 3. Canvas'tan piksel verisi çek (en güvenilir yöntem) ──────────
-                print(f"      🖼️  Canvas verisi çekiliyor...")
-                raw_bytes = self._extract_canvas_image()
+            if total_pages < 1:
+                print("      ⚠️ 'Sayfadan Sayfaya' modu çalışmadı — 'Tümü' modu ile fallback...")
+                # ── FALLBACK: Tümü modunda tüm img'leri topla ───────────────────
+                # Sayfayı aşağı kaydır ki lazy-load img'ler yüklensin
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(3)
+                self.driver.execute_script("window.scrollTo(0, 0);")
+                time.sleep(2)
+                img_urls = self._get_page_image_urls_all_mode()
+                print(f"      📄 'Tümü' modu: {len(img_urls)} görsel bulundu.")
+                browser_cookies = self._get_browser_cookies()
+                for idx, img_url in enumerate(img_urls, start=1):
+                    fname = f"{series_slug}-bolum-{chap_num}-sayfa-{idx}.webp"
+                    print(f"      ⬇️  [{idx}/{len(img_urls)}] {img_url[:80]}")
+                    saved = process_and_save_image(
+                        img_url, episode_folder, fname,
+                        cookies=browser_cookies, referer=url
+                    )
+                    if not saved:
+                        raw = self._fetch_image_via_browser(img_url)
+                        if raw and len(raw) > 1000:
+                            try:
+                                im = Image.open(BytesIO(raw))
+                                if im.mode in ("RGBA", "P"):
+                                    im = im.convert("RGB")
+                                if not os.path.exists(episode_folder):
+                                    os.makedirs(episode_folder)
+                                fp = os.path.join(episode_folder, fname)
+                                im.save(fp, "WEBP", quality=85)
+                                saved = os.path.relpath(fp, BACKEND_DIR).replace("\\", "/")
+                                print(f"      ✅ (fetch) Kaydedildi: {fname}")
+                            except Exception as fe:
+                                print(f"      ⚠️ fetch işlenemedi: {fe}")
+                    if saved:
+                        saved_paths.append(saved)
 
-                if raw_bytes and not self._is_canvas_blank(raw_bytes):
-                    try:
-                        image = Image.open(BytesIO(raw_bytes))
-                        if image.mode in ("RGBA", "P"):
-                            image = image.convert("RGB")
-                        if not os.path.exists(episode_folder):
-                            os.makedirs(episode_folder)
-                        full_path = os.path.join(episode_folder, fname)
-                        image.save(full_path, "WEBP", quality=85)
-                        saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                        print(f"      ✅ Canvas kaydedildi: {fname}")
-                    except Exception as ce:
-                        print(f"      ⚠️ Canvas işleme hatası: {ce}")
+            else:
+                # ── 'Sayfadan Sayfaya' modu: select ile her sayfayı gez ──────────
+                print(f"      📄 Toplam {total_pages} sayfa (select dropdown).")
+                browser_cookies = self._get_browser_cookies()
 
-                # ── 4. Canvas boşsa veya yoksa — tam sayfa screenshot ────────────
-                if not saved:
-                    print(f"      📸 Screenshot fallback deneniyor...")
-                    try:
-                        png_bytes = self.driver.get_screenshot_as_png()
-                        img = Image.open(BytesIO(png_bytes))
-                        if img.mode in ("RGBA", "P"):
-                            img = img.convert("RGB")
-                        if not os.path.exists(episode_folder):
-                            os.makedirs(episode_folder)
-                        full_path = os.path.join(episode_folder, fname)
-                        img.save(full_path, "WEBP", quality=85)
-                        saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                        print(f"      ✅ Screenshot kaydedildi: {fname}")
-                    except Exception as se:
-                        print(f"      ⚠️ Screenshot hatası: {se}")
+                for page_num in range(1, total_pages + 1):
+                    fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
+                    saved = None
 
-                if saved:
-                    saved_paths.append(saved)
+                    # Select value'yu değiştir ve change event tetikle
+                    changed = self.driver.execute_script(
+                        "var sel = document.querySelector('select');"
+                        "if (!sel) return false;"
+                        "sel.value = '" + str(page_num) + "';"
+                        "sel.dispatchEvent(new Event('change', {bubbles:true}));"
+                        "return true;"
+                    )
+                    if not changed:
+                        print(f"      ⚠️ Sayfa {page_num}: select bulunamadı")
+                        continue
+                    time.sleep(3)  # Görsel yüklenmesi bekle
 
+                    # En büyük geçerli img'yi bul
+                    img_url = self.driver.execute_script(
+                        "var BL = ['/yorum/','tenor.com','giphy.com','emoji','favicon',"
+                        "          'avatar','logo','icon','banner','ads','pixel','facebook','twitter'];"
+                        "function ok(src) {"
+                        "  if (!src || src.startsWith('data:') || src.startsWith('blob:')) return false;"
+                        "  return !BL.some(function(b){return src.toLowerCase().indexOf(b)!==-1;});"
+                        "}"
+                        "var best=null, bestArea=0;"
+                        "document.querySelectorAll('img').forEach(function(img){"
+                        "  var src=img.getAttribute('data-src')||img.getAttribute('data-original')||img.src||'';"
+                        "  src=src.trim();"
+                        "  if(!ok(src)) return;"
+                        "  var area=(img.naturalWidth||0)*(img.naturalHeight||0);"
+                        "  if(area===0){"
+                        "    area=(parseInt(img.getAttribute('width')||'0'))*(parseInt(img.getAttribute('height')||'0'));"
+                        "  }"
+                        "  if(area>bestArea){bestArea=area;best=src;}"
+                        "});"
+                        "return best;"
+                    )
+
+                    if img_url and is_ok(img_url):
+                        print(f"      ⬇️  [{page_num}/{total_pages}] {img_url[:80]}")
+                        saved = process_and_save_image(
+                            img_url, episode_folder, fname,
+                            cookies=browser_cookies, referer=url
+                        )
+                        if not saved:
+                            raw = self._fetch_image_via_browser(img_url)
+                            if raw and len(raw) > 1000:
+                                try:
+                                    im = Image.open(BytesIO(raw))
+                                    if im.mode in ("RGBA", "P"):
+                                        im = im.convert("RGB")
+                                    if not os.path.exists(episode_folder):
+                                        os.makedirs(episode_folder)
+                                    fp = os.path.join(episode_folder, fname)
+                                    im.save(fp, "WEBP", quality=85)
+                                    saved = os.path.relpath(fp, BACKEND_DIR).replace("\\", "/")
+                                    print(f"      ✅ (fetch) Kaydedildi: {fname}")
+                                except Exception as fe:
+                                    print(f"      ⚠️ fetch işlenemedi: {fe}")
+
+                    # Son çare: screenshot
+                    if not saved:
+                        print(f"      📸 Screenshot fallback: sayfa {page_num}")
+                        try:
+                            png = self.driver.get_screenshot_as_png()
+                            im = Image.open(BytesIO(png))
+                            if im.mode in ("RGBA", "P"):
+                                im = im.convert("RGB")
+                            if not os.path.exists(episode_folder):
+                                os.makedirs(episode_folder)
+                            fp = os.path.join(episode_folder, fname)
+                            im.save(fp, "WEBP", quality=85)
+                            saved = os.path.relpath(fp, BACKEND_DIR).replace("\\", "/")
+                            print(f"      ✅ Screenshot kaydedildi: {fname}")
+                        except Exception as se:
+                            print(f"      ⚠️ Screenshot hatası: {se}")
+
+                    if saved:
+                        saved_paths.append(saved)
+
+            # ── 4. DB'ye kaydet ───────────────────────────────────────────────────
             if not saved_paths:
                 print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
                 return
 
-            print(f"      🖼️ {len(saved_paths)}/{total_pages} sayfa tamamlandı.")
+            print(f"      🖼️ {len(saved_paths)} sayfa tamamlandı.")
 
             with engine.connect() as conn:
                 check = conn.execute(
