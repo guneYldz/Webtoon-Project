@@ -369,11 +369,39 @@ class AutoBot:
         """
         if page_num == 1:
             return chapter_url
-        # .html uzantısını kaldır, -page-X.html ekle
         base = chapter_url.rstrip("/")
         if base.endswith(".html"):
-            base = base[:-5]  # ".html" kaldır
+            base = base[:-5]
         return f"{base}-page-{page_num}.html"
+
+    def _extract_canvas_image(self):
+        """Canvas elementinden base64 PNG verisi çek.
+        Site canvas-based render kullanıyor — toDataURL() en güvenilir yöntem.
+        """
+        try:
+            data_url = self.driver.execute_script(
+                "var c = document.querySelector('canvas');\n"
+                "if (!c) return null;\n"
+                "try { return c.toDataURL('image/png'); } catch(e) { return null; }\n"
+            )
+            if data_url and data_url.startswith("data:image"):
+                import base64
+                header, b64 = data_url.split(",", 1)
+                return base64.b64decode(b64)
+        except Exception as e:
+            print(f"        ⚠️ Canvas toDataURL hatası: {e}")
+        return None
+
+    def _is_canvas_blank(self, raw_bytes):
+        """Canvas verisinin boş/tek renk olup olmadığını kontrol et."""
+        try:
+            img = Image.open(BytesIO(raw_bytes)).convert("RGB")
+            # Kenardan 5 piksel al — hepsi aynıysa boş
+            pixels = list(img.getdata())
+            first = pixels[0]
+            return all(p == first for p in pixels[:200])
+        except Exception:
+            return True
 
     def _get_total_pages_manga_tr(self):
         """Açık olan reader sayfasındaki toplam sayfa sayısını tespit et."""
@@ -403,16 +431,16 @@ class AutoBot:
             return 1
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
-        """manga-tr.com bölümünü URL tabanlı sayfa navigasyonuyla indir.
-        - Her sayfa kendi URL'ine sahip: ...chapter-N-page-X.html
-        - Sayfa 1: orijinal URL
-        - Sayfa 2+: ...-page-X.html eklenmiş URL
-        - Site canvas üzerinde render ediyor → screenshot yöntemi kullanılıyor
+        """manga-tr.com bölümünü indir.
+        - Site canvas-based webtoon reader kullanıyor
+        - Her sayfa URL'si ayrı: chapter-N-page-X.html
+        - Canvas toDataURL() ile piksel verisi çekilir
+        - Boş/bozuk canvas'ta tam sayfa screenshot fallback
         """
         try:
-            # ── 1. Sayfa 1'i yükle, toplam sayfayı öğren ─────────────────────────
+            # ── 1. Sayfa 1'i yükle, toplam sayfayı öğren ────────────────────────
             self.driver.get(url)
-            time.sleep(5)
+            time.sleep(6)
 
             total_pages = self._get_total_pages_manga_tr()
             print(f"      📄 Toplam {total_pages} sayfa.")
@@ -421,102 +449,40 @@ class AutoBot:
             saved_paths = []
 
             for page_num in range(1, total_pages + 1):
-                # ── 2. Doğrudan sayfa URL'sine git ───────────────────────────────
-                page_url = self._build_page_url(url, page_num)
-                if page_num > 1:
-                    print(f"      🌐 Sayfa URL'sine gidiliyor: {page_url}")
-                    self.driver.get(page_url)
-                    time.sleep(4)
-
                 fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
                 saved = None
 
-                # ── 3. Önce <img> tag'i dene ─────────────────────────────────────
-                BLACKLIST_JS = (
-                    "['/yorum/', 'tenor.com', 'giphy.com', 'emoji', 'favicon',"
-                    " 'avatar', 'logo', 'icon', 'banner', 'ads', 'pixel', 'facebook', 'twitter']"
-                )
-                img_url = self.driver.execute_script(
-                    "var BLACKLIST = " + BLACKLIST_JS + ";\n"
-                    "function isOk(src) {\n"
-                    "  if (!src || src.startsWith('data:') || src.startsWith('blob:')) return false;\n"
-                    "  var s = src.toLowerCase();\n"
-                    "  return !BLACKLIST.some(function(b) { return s.indexOf(b) !== -1; });\n"
-                    "}\n"
-                    "var best = null, bestArea = 0;\n"
-                    "document.querySelectorAll('img').forEach(function(img) {\n"
-                    "  var src = img.getAttribute('data-src') || img.getAttribute('data-original') || img.src || '';\n"
-                    "  src = src.trim();\n"
-                    "  if (!isOk(src)) return;\n"
-                    "  var area = img.naturalWidth * img.naturalHeight;\n"
-                    "  if (area === 0) {\n"
-                    "    var w = parseInt(img.getAttribute('width') || '0');\n"
-                    "    var h = parseInt(img.getAttribute('height') || '0');\n"
-                    "    area = w * h;\n"
-                    "  }\n"
-                    "  if (area > bestArea) { bestArea = area; best = src; }\n"
-                    "});\n"
-                    "return best;"
-                )
+                # ── 2. Sayfaya git (URL tabanlı — site kendi pozisyonuna scroll eder) ──
+                page_url = self._build_page_url(url, page_num)
+                print(f"      🌐 [{page_num}/{total_pages}] {page_url}")
+                self.driver.get(page_url)
 
-                BLACKLIST_PY = [
-                    '/yorum/', 'tenor.com', 'giphy.com', 'emoji', 'favicon',
-                    'avatar', 'logo', 'icon', 'banner', 'ads', 'pixel',
-                    'facebook', 'twitter', 'instagram', 'google',
-                ]
+                # Canvas render + scroll bitmesi için bekle
+                time.sleep(5)
 
-                def is_manga_image(src):
-                    if not src or src.startswith('data:') or src.startswith('blob:'):
-                        return False
-                    sl = src.lower()
-                    return not any(b in sl for b in BLACKLIST_PY)
+                # ── 3. Canvas'tan piksel verisi çek (en güvenilir yöntem) ──────────
+                print(f"      🖼️  Canvas verisi çekiliyor...")
+                raw_bytes = self._extract_canvas_image()
 
-                if img_url and is_manga_image(img_url):
-                    print(f"      ⬇️  Sayfa {page_num}/{total_pages}: {img_url[:80]}...")
-                    browser_cookies = self._get_browser_cookies()
-                    saved = process_and_save_image(
-                        img_url, episode_folder, fname,
-                        cookies=browser_cookies, referer=url
-                    )
-                    if not saved:
-                        raw_bytes = self._fetch_image_via_browser(img_url)
-                        if raw_bytes and len(raw_bytes) > 1000:
-                            try:
-                                image = Image.open(BytesIO(raw_bytes))
-                                image.verify()
-                                image = Image.open(BytesIO(raw_bytes))
-                                if image.mode in ("RGBA", "P"):
-                                    image = image.convert("RGB")
-                                if not os.path.exists(episode_folder):
-                                    os.makedirs(episode_folder)
-                                full_path = os.path.join(episode_folder, fname)
-                                image.save(full_path, "WEBP", quality=85)
-                                saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                                print(f"      ✅ (fetch) Kaydedildi: {fname}")
-                            except Exception as fe:
-                                print(f"      ⚠️ fetch sonucu işlenemedi: {fe}")
-
-                # ── 4. Son çare: screenshot (canvas için gerekli) ─────────────────
-                if not saved:
-                    print(f"      📸 Sayfa {page_num}: Screenshot deneniyor...")
+                if raw_bytes and not self._is_canvas_blank(raw_bytes):
                     try:
-                        # Canvas veya reader alanını bul
-                        reader_el = None
-                        for sel in [
-                            'canvas', '.reader-img', '#reader', '.chapter-img',
-                            '.reading-content', '#readerarea'
-                        ]:
-                            try:
-                                reader_el = self.driver.find_element(By.CSS_SELECTOR, sel)
-                                break
-                            except Exception:
-                                continue
+                        image = Image.open(BytesIO(raw_bytes))
+                        if image.mode in ("RGBA", "P"):
+                            image = image.convert("RGB")
+                        if not os.path.exists(episode_folder):
+                            os.makedirs(episode_folder)
+                        full_path = os.path.join(episode_folder, fname)
+                        image.save(full_path, "WEBP", quality=85)
+                        saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
+                        print(f"      ✅ Canvas kaydedildi: {fname}")
+                    except Exception as ce:
+                        print(f"      ⚠️ Canvas işleme hatası: {ce}")
 
-                        png_bytes = (
-                            reader_el.screenshot_as_png
-                            if reader_el
-                            else self.driver.get_screenshot_as_png()
-                        )
+                # ── 4. Canvas boşsa veya yoksa — tam sayfa screenshot ────────────
+                if not saved:
+                    print(f"      📸 Screenshot fallback deneniyor...")
+                    try:
+                        png_bytes = self.driver.get_screenshot_as_png()
                         img = Image.open(BytesIO(png_bytes))
                         if img.mode in ("RGBA", "P"):
                             img = img.convert("RGB")
