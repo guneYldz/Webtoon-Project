@@ -430,96 +430,179 @@ class AutoBot:
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com bölümünü indir.
-        - Site canvas-based webtoon reader kullanıyor
-        - Tüm sayfalar scroll edildikçe yükleniyor.
+
+        Strateji:
+        1) Sayfayı yükle ve tüm içeriği lazy-load için yavaşça scroll et.
+        2) Her .chapter-page için önce canvas.toDataURL() dene (retry ile).
+        3) Canvas boşsa veya yoksa, .chapter-page içindeki <img> elementinin
+           src/data-src adresini alıp fetch() ile tam byte'ı indir.
+        4) İkisi de başarısız olursa o sayfayı atla.
+        5) Screenshot KULLANMA — arkaplan/UI elementlerini kesiyor.
         """
+        import base64
+
+        def _canvas_to_b64(driver, page_index, retries=3):
+            """Canvas içeriğini base64 PNG olarak al; boşsa None döndür."""
+            for attempt in range(retries):
+                b64 = driver.execute_script(f"""
+                    var page = document.querySelectorAll('.chapter-page')[{page_index}];
+                    if (!page) return null;
+                    page.scrollIntoView({{behavior: 'instant', block: 'center'}});
+                    var c = page.querySelector('canvas');
+                    if (!c || c.width === 0 || c.height === 0) return null;
+                    try {{
+                        var data = c.toDataURL('image/png').split(',')[1];
+                        return data || null;
+                    }} catch(e) {{ return null; }}
+                """)
+                if b64:
+                    # Boş/tek renk kontrol
+                    try:
+                        raw = base64.b64decode(b64)
+                        img = Image.open(BytesIO(raw))
+                        pixels = list(img.getdata())
+                        if len(pixels) > 200 and not all(p == pixels[0] for p in pixels[:200]):
+                            return b64
+                    except Exception:
+                        return b64  # parse edilemiyorsa raw'ı dön, dışarıda hata yakalanır
+                # Henüz render olmamış olabilir, bekle
+                time.sleep(1.5)
+            return None
+
+        def _get_img_url_in_page(driver, page_index):
+            """Bir .chapter-page içindeki <img> elementinin gerçek URL'sini döndür."""
+            return driver.execute_script(f"""
+                var page = document.querySelectorAll('.chapter-page')[{page_index}];
+                if (!page) return null;
+                var img = page.querySelector('img');
+                if (!img) return null;
+                return img.getAttribute('data-src') || img.getAttribute('data-original')
+                       || img.src || null;
+            """)
+
+        def _fetch_bytes(driver, img_url):
+            """Tarayıcı fetch() ile resmi indir (cookie/session dahil). Bytes döndürür."""
+            result = driver.execute_async_script("""
+                var done = arguments[0];
+                var url  = arguments[1];
+                fetch(url, {credentials: 'include'})
+                    .then(function(r) { return r.arrayBuffer(); })
+                    .then(function(buf) {
+                        var bytes = new Uint8Array(buf);
+                        var binary = '';
+                        for (var i = 0; i < bytes.byteLength; i++) {
+                            binary += String.fromCharCode(bytes[i]);
+                        }
+                        done({ok: true, data: btoa(binary)});
+                    })
+                    .catch(function(e) { done({ok: false, error: e.toString()}); });
+            """, img_url)
+            if result and result.get('ok') and result.get('data'):
+                return base64.b64decode(result['data'])
+            return None
+
         try:
-            # ── 1. Bölümü yükle ve render olmasını bekle ──────────────────────────
+            # ── 1. Bölümü yükle ──────────────────────────────────────────────────
             self.driver.get(url)
             time.sleep(6)
 
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
 
-            print(f"      📄 Tüm sayfalar yükleniyor (Aşağı kaydırma)...")
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/3);")
-            time.sleep(2)
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight*2/3);")
-            time.sleep(2)
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(3)
+            # ── 2. Tüm sayfaları lazy-load tetiklemek için scroll et ─────────────
+            print(f"      📄 Lazy-load için sayfalar scroll ediliyor...")
+            scroll_steps = 6
+            for step in range(1, scroll_steps + 1):
+                self.driver.execute_script(
+                    f"window.scrollTo(0, document.body.scrollHeight * {step}/{scroll_steps});"
+                )
+                time.sleep(1.2)
+            # Başa dön, render'ın tamamlanması için bekle
             self.driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(2)
 
-            num_pages = self.driver.execute_script("return document.querySelectorAll('.chapter-page').length;")
-            
+            # ── 3. Sayfa sayısını tespit et ──────────────────────────────────────
+            num_pages = self.driver.execute_script(
+                "return document.querySelectorAll('.chapter-page').length;"
+            )
+
             if num_pages == 0:
                 print("      ⚠️ Hiçbir sayfa (.chapter-page) bulunamadı.")
                 return
 
             print(f"      📄 Toplam {num_pages} sayfa tespit edildi.")
 
+            # ── 4. Her sayfayı işle ───────────────────────────────────────────────
             for i in range(num_pages):
                 fname = f"{series_slug}-bolum-{chap_num}-sayfa-{i+1}.webp"
                 saved = None
+                img_bytes = None
 
-                b64_data = self.driver.execute_script(f"""
-                    var page = document.querySelectorAll('.chapter-page')[{i}];
-                    if (!page) return null;
-                    page.scrollIntoView({{behavior: 'instant', block: 'center'}});
-                    var c = page.querySelector('canvas');
-                    if (!c) return null;
-                    try {{
-                        return c.toDataURL('image/png').split(',')[1];
-                    }} catch(e) {{
-                        return null;
-                    }}
-                """)
-
+                # --- Yöntem A: Canvas ---
+                b64_data = _canvas_to_b64(self.driver, i)
                 if b64_data:
                     try:
-                        import base64
-                        raw_bytes = base64.b64decode(b64_data)
-                        image = Image.open(BytesIO(raw_bytes))
-                        if image.mode in ("RGBA", "P"):
-                            image = image.convert("RGB")
-                        
-                        pixels = list(image.getdata())
-                        if all(p == pixels[0] for p in pixels[:200]):
-                            print(f"      ⚠️ Sayfa {i+1}: Canvas boş/tek renk.")
-                        else:
-                            if not os.path.exists(episode_folder):
-                                os.makedirs(episode_folder)
-                            full_path = os.path.join(episode_folder, fname)
-                            image.save(full_path, "WEBP", quality=85)
-                            saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                            print(f"      ✅ Canvas kaydedildi: {fname}")
+                        img_bytes = base64.b64decode(b64_data)
                     except Exception as e:
-                        print(f"      ⚠️ Canvas işleme hatası: {e}")
+                        print(f"      ⚠️ Canvas base64 decode hatası (sayfa {i+1}): {e}")
 
-                if not saved:
-                    print(f"      📸 Screenshot fallback deneniyor (Sayfa {i+1})...")
+                # --- Yöntem B: <img> src'den fetch ---
+                if not img_bytes:
+                    img_url = _get_img_url_in_page(self.driver, i)
+                    if img_url and img_url.startswith("http"):
+                        print(f"      🌐 img fetch deneniyor (sayfa {i+1}): {img_url[:80]}")
+                        # Önce browser fetch (session dahil)
+                        img_bytes = _fetch_bytes(self.driver, img_url)
+                        # Sonra requests ile dene
+                        if not img_bytes:
+                            try:
+                                cookies = self._get_browser_cookies()
+                                resp = requests.get(
+                                    img_url,
+                                    headers={
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                                        'Referer': url,
+                                    },
+                                    cookies=cookies,
+                                    stream=True,
+                                    timeout=20,
+                                )
+                                if resp.status_code == 200 and len(resp.content) > 1000:
+                                    img_bytes = resp.content
+                            except Exception as e:
+                                print(f"      ⚠️ requests fallback hatası: {e}")
+
+                # --- Kaydet ---
+                if img_bytes:
                     try:
-                        page_el = self.driver.find_elements(By.CSS_SELECTOR, '.chapter-page')[i]
-                        self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'instant', block: 'center'});", page_el)
-                        time.sleep(1)
-                        png_bytes = page_el.screenshot_as_png
-                        image = Image.open(BytesIO(png_bytes))
+                        image = Image.open(BytesIO(img_bytes))
+                        image.verify()
+                        image = Image.open(BytesIO(img_bytes))
+
+                        # Boyut kontrolü: çok küçük görseller (logo/ikon) atla
+                        w, h = image.size
+                        if w < 100 or h < 100:
+                            print(f"      ⚠️ Sayfa {i+1} çok küçük ({w}x{h}), atlandı.")
+                            continue
+
                         if image.mode in ("RGBA", "P"):
                             image = image.convert("RGB")
+
                         if not os.path.exists(episode_folder):
                             os.makedirs(episode_folder)
                         full_path = os.path.join(episode_folder, fname)
                         image.save(full_path, "WEBP", quality=85)
                         saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                        print(f"      ✅ Screenshot kaydedildi: {fname}")
+                        print(f"      ✅ Kaydedildi ({w}x{h}): {fname}")
                     except Exception as e:
-                        print(f"      ⚠️ Screenshot hatası: {e}")
+                        print(f"      ⚠️ Görsel işleme hatası (sayfa {i+1}): {e}")
+                else:
+                    print(f"      ❌ Sayfa {i+1}: Canvas ve img kaynağı bulunamadı, atlandı.")
 
                 if saved:
                     saved_paths.append(saved)
 
-            # ── 4. DB'ye kaydet ───────────────────────────────────────────────────
+            # ── 5. DB'ye kaydet ───────────────────────────────────────────────────
             if not saved_paths:
                 print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
                 return
