@@ -430,172 +430,94 @@ class AutoBot:
 
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com bölümünü indir.
-
-        Strateji:
-        1. Sayfaya git, 'Sayfadan Sayfaya' moduna geç
-        2. <select> dropdown ile kaç sayfa olduğunu öğren
-        3. Her sayfa için dropdown value'yu set et → 'change' event → img src çek → indir
-        4. Fallback: 'Tümü' modunda tüm img'leri topla
+        - Site canvas-based webtoon reader kullanıyor
+        - Tüm sayfalar scroll edildikçe yükleniyor.
         """
-        BLACKLIST = [
-            '/yorum/', 'tenor.com', 'giphy.com', 'emoji', 'favicon',
-            'avatar', 'logo', 'icon', 'banner', 'ads', 'pixel',
-            'facebook', 'twitter', 'instagram', 'google',
-        ]
-
-        def is_ok(src):
-            if not src or src.startswith('data:') or src.startswith('blob:'):
-                return False
-            return not any(b in src.lower() for b in BLACKLIST)
-
         try:
-            # ── 1. Bölümü yükle ──────────────────────────────────────────────────
+            # ── 1. Bölümü yükle ve render olmasını bekle ──────────────────────────
             self.driver.get(url)
-            time.sleep(5)
+            time.sleep(6)
 
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
 
-            # ── 2. 'Sayfadan Sayfaya' moduna geç ────────────────────────────────
-            self._switch_to_page_mode()
+            print(f"      📄 Tüm sayfalar yükleniyor (Aşağı kaydırma)...")
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/3);")
+            time.sleep(2)
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight*2/3);")
+            time.sleep(2)
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(3)
+            self.driver.execute_script("window.scrollTo(0, 0);")
             time.sleep(2)
 
-            # ── 3. Select dropdown'dan toplam sayfa sayısını oku ─────────────────
-            total_pages = self.driver.execute_script(
-                "var sel = document.querySelector('select');"
-                "if (sel && sel.options.length > 1) return sel.options.length;"
-                "return 0;"
-            ) or 0
+            num_pages = self.driver.execute_script("return document.querySelectorAll('.chapter-page').length;")
+            
+            if num_pages == 0:
+                print("      ⚠️ Hiçbir sayfa (.chapter-page) bulunamadı.")
+                return
 
-            if total_pages < 1:
-                # Mod geçişi olmadıysa, input[type=number] dene
-                total_pages = self.driver.execute_script(
-                    "var inp = document.querySelector('input[type=\"number\"]');"
-                    "if (inp && inp.max) return parseInt(inp.max);"
-                    "return 0;"
-                ) or 0
+            print(f"      📄 Toplam {num_pages} sayfa tespit edildi.")
 
-            if total_pages < 1:
-                print("      ⚠️ 'Sayfadan Sayfaya' modu çalışmadı — 'Tümü' modu ile fallback...")
-                # ── FALLBACK: Tümü modunda tüm img'leri topla ───────────────────
-                # Sayfayı aşağı kaydır ki lazy-load img'ler yüklensin
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(3)
-                self.driver.execute_script("window.scrollTo(0, 0);")
-                time.sleep(2)
-                img_urls = self._get_page_image_urls_all_mode()
-                print(f"      📄 'Tümü' modu: {len(img_urls)} görsel bulundu.")
-                browser_cookies = self._get_browser_cookies()
-                for idx, img_url in enumerate(img_urls, start=1):
-                    fname = f"{series_slug}-bolum-{chap_num}-sayfa-{idx}.webp"
-                    print(f"      ⬇️  [{idx}/{len(img_urls)}] {img_url[:80]}")
-                    saved = process_and_save_image(
-                        img_url, episode_folder, fname,
-                        cookies=browser_cookies, referer=url
-                    )
-                    if not saved:
-                        raw = self._fetch_image_via_browser(img_url)
-                        if raw and len(raw) > 1000:
-                            try:
-                                im = Image.open(BytesIO(raw))
-                                if im.mode in ("RGBA", "P"):
-                                    im = im.convert("RGB")
-                                if not os.path.exists(episode_folder):
-                                    os.makedirs(episode_folder)
-                                fp = os.path.join(episode_folder, fname)
-                                im.save(fp, "WEBP", quality=85)
-                                saved = os.path.relpath(fp, BACKEND_DIR).replace("\\", "/")
-                                print(f"      ✅ (fetch) Kaydedildi: {fname}")
-                            except Exception as fe:
-                                print(f"      ⚠️ fetch işlenemedi: {fe}")
-                    if saved:
-                        saved_paths.append(saved)
+            for i in range(num_pages):
+                fname = f"{series_slug}-bolum-{chap_num}-sayfa-{i+1}.webp"
+                saved = None
 
-            else:
-                # ── 'Sayfadan Sayfaya' modu: select ile her sayfayı gez ──────────
-                print(f"      📄 Toplam {total_pages} sayfa (select dropdown).")
-                browser_cookies = self._get_browser_cookies()
+                b64_data = self.driver.execute_script(f"""
+                    var page = document.querySelectorAll('.chapter-page')[{i}];
+                    if (!page) return null;
+                    page.scrollIntoView({{behavior: 'instant', block: 'center'}});
+                    var c = page.querySelector('canvas');
+                    if (!c) return null;
+                    try {{
+                        return c.toDataURL('image/png').split(',')[1];
+                    }} catch(e) {{
+                        return null;
+                    }}
+                """)
 
-                for page_num in range(1, total_pages + 1):
-                    fname = f"{series_slug}-bolum-{chap_num}-sayfa-{page_num}.webp"
-                    saved = None
-
-                    # Select value'yu değiştir ve change event tetikle
-                    changed = self.driver.execute_script(
-                        "var sel = document.querySelector('select');"
-                        "if (!sel) return false;"
-                        "sel.value = '" + str(page_num) + "';"
-                        "sel.dispatchEvent(new Event('change', {bubbles:true}));"
-                        "return true;"
-                    )
-                    if not changed:
-                        print(f"      ⚠️ Sayfa {page_num}: select bulunamadı")
-                        continue
-                    time.sleep(3)  # Görsel yüklenmesi bekle
-
-                    # En büyük geçerli img'yi bul
-                    img_url = self.driver.execute_script(
-                        "var BL = ['/yorum/','tenor.com','giphy.com','emoji','favicon',"
-                        "          'avatar','logo','icon','banner','ads','pixel','facebook','twitter'];"
-                        "function ok(src) {"
-                        "  if (!src || src.startsWith('data:') || src.startsWith('blob:')) return false;"
-                        "  return !BL.some(function(b){return src.toLowerCase().indexOf(b)!==-1;});"
-                        "}"
-                        "var best=null, bestArea=0;"
-                        "document.querySelectorAll('img').forEach(function(img){"
-                        "  var src=img.getAttribute('data-src')||img.getAttribute('data-original')||img.src||'';"
-                        "  src=src.trim();"
-                        "  if(!ok(src)) return;"
-                        "  var area=(img.naturalWidth||0)*(img.naturalHeight||0);"
-                        "  if(area===0){"
-                        "    area=(parseInt(img.getAttribute('width')||'0'))*(parseInt(img.getAttribute('height')||'0'));"
-                        "  }"
-                        "  if(area>bestArea){bestArea=area;best=src;}"
-                        "});"
-                        "return best;"
-                    )
-
-                    if img_url and is_ok(img_url):
-                        print(f"      ⬇️  [{page_num}/{total_pages}] {img_url[:80]}")
-                        saved = process_and_save_image(
-                            img_url, episode_folder, fname,
-                            cookies=browser_cookies, referer=url
-                        )
-                        if not saved:
-                            raw = self._fetch_image_via_browser(img_url)
-                            if raw and len(raw) > 1000:
-                                try:
-                                    im = Image.open(BytesIO(raw))
-                                    if im.mode in ("RGBA", "P"):
-                                        im = im.convert("RGB")
-                                    if not os.path.exists(episode_folder):
-                                        os.makedirs(episode_folder)
-                                    fp = os.path.join(episode_folder, fname)
-                                    im.save(fp, "WEBP", quality=85)
-                                    saved = os.path.relpath(fp, BACKEND_DIR).replace("\\", "/")
-                                    print(f"      ✅ (fetch) Kaydedildi: {fname}")
-                                except Exception as fe:
-                                    print(f"      ⚠️ fetch işlenemedi: {fe}")
-
-                    # Son çare: screenshot
-                    if not saved:
-                        print(f"      📸 Screenshot fallback: sayfa {page_num}")
-                        try:
-                            png = self.driver.get_screenshot_as_png()
-                            im = Image.open(BytesIO(png))
-                            if im.mode in ("RGBA", "P"):
-                                im = im.convert("RGB")
+                if b64_data:
+                    try:
+                        import base64
+                        raw_bytes = base64.b64decode(b64_data)
+                        image = Image.open(BytesIO(raw_bytes))
+                        if image.mode in ("RGBA", "P"):
+                            image = image.convert("RGB")
+                        
+                        pixels = list(image.getdata())
+                        if all(p == pixels[0] for p in pixels[:200]):
+                            print(f"      ⚠️ Sayfa {i+1}: Canvas boş/tek renk.")
+                        else:
                             if not os.path.exists(episode_folder):
                                 os.makedirs(episode_folder)
-                            fp = os.path.join(episode_folder, fname)
-                            im.save(fp, "WEBP", quality=85)
-                            saved = os.path.relpath(fp, BACKEND_DIR).replace("\\", "/")
-                            print(f"      ✅ Screenshot kaydedildi: {fname}")
-                        except Exception as se:
-                            print(f"      ⚠️ Screenshot hatası: {se}")
+                            full_path = os.path.join(episode_folder, fname)
+                            image.save(full_path, "WEBP", quality=85)
+                            saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
+                            print(f"      ✅ Canvas kaydedildi: {fname}")
+                    except Exception as e:
+                        print(f"      ⚠️ Canvas işleme hatası: {e}")
 
-                    if saved:
-                        saved_paths.append(saved)
+                if not saved:
+                    print(f"      📸 Screenshot fallback deneniyor (Sayfa {i+1})...")
+                    try:
+                        page_el = self.driver.find_elements(By.CSS_SELECTOR, '.chapter-page')[i]
+                        self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'instant', block: 'center'});", page_el)
+                        time.sleep(1)
+                        png_bytes = page_el.screenshot_as_png
+                        image = Image.open(BytesIO(png_bytes))
+                        if image.mode in ("RGBA", "P"):
+                            image = image.convert("RGB")
+                        if not os.path.exists(episode_folder):
+                            os.makedirs(episode_folder)
+                        full_path = os.path.join(episode_folder, fname)
+                        image.save(full_path, "WEBP", quality=85)
+                        saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
+                        print(f"      ✅ Screenshot kaydedildi: {fname}")
+                    except Exception as e:
+                        print(f"      ⚠️ Screenshot hatası: {e}")
+
+                if saved:
+                    saved_paths.append(saved)
 
             # ── 4. DB'ye kaydet ───────────────────────────────────────────────────
             if not saved_paths:
