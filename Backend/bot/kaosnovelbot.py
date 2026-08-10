@@ -519,21 +519,27 @@ YAPAMAYACAKLARIN:
 # ve tamamını yeniden çevirip günceller. Sağlam bölümlere DOKUNMAZ.
 # ==========================================
 ONARIM_CHECKPOINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint.json")
+ONARIM_SURUM = 2         # Tespit mantığı değişirse artır → eski checkpoint sıfırlanır, her şey yeniden kontrol edilir
 ONARIM_EN_MIN = 8000     # İngilizce kaynak bundan kısaysa kırpma hatasından etkilenmemiştir
-ONARIM_ORAN_ESIK = 0.6   # TR/EN karakter oranı bunun altındaysa bölüm EKSİK sayılır
-                         # (normal çeviri oranı ~0.8-1.1 arasıdır)
+ONARIM_ORAN_ESIK = 0.80  # TR/EN karakter oranı bunun altındaysa şüpheli (tam çeviri ~%85-110 olur)
+ONARIM_TR_SUPHE_MAX = 9200  # Kırpık çeviri en fazla ~8000×1.15 karakter olabilir.
+                            # TR bundan uzunsa bölüm kesin tam çevrilmiştir.
 
-def load_onarim_checkpoint():
+def load_onarim_checkpoint(checkpoint_file):
     """Daha önce doğrulanan bölümleri diskten yükle (bot yarıda kesilirse kaldığı yerden devam eder)."""
     try:
-        with open(ONARIM_CHECKPOINT_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(checkpoint_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("_surum") != ONARIM_SURUM:
+            print("   ♻️ Tespit mantığı güncellendi — eski checkpoint sıfırlanıyor, tüm bölümler yeniden kontrol edilecek.")
+            return {"_surum": ONARIM_SURUM}
+        return data
     except Exception:
-        return {}
+        return {"_surum": ONARIM_SURUM}
 
-def save_onarim_checkpoint(checkpoint):
+def save_onarim_checkpoint(checkpoint, checkpoint_file):
     try:
-        with open(ONARIM_CHECKPOINT_FILE, "w", encoding="utf-8") as f:
+        with open(checkpoint_file, "w", encoding="utf-8") as f:
             json.dump(checkpoint, f, ensure_ascii=False, indent=1)
     except Exception as e:
         print(f"   ⚠️ Checkpoint kaydedilemedi: {e}")
@@ -560,10 +566,19 @@ def get_chapter_content(novel_slug, chapter_number):
         pass
     return None
 
-def repair_mode():
-    print("🔧 ONARIM MODU BAŞLATILDI (--onar)")
-    print("   Eksik çevrilmiş (8000 karakterde kırpılmış) bölümler tespit edilip yeniden çevrilecek.")
-    print(f"   Checkpoint dosyası: {ONARIM_CHECKPOINT_FILE}")
+def repair_mode(kesin=False):
+    if kesin:
+        # KESİN MOD: Oran tahminine güvenme. İngilizcesi 8000 karakterden uzun
+        # olan (yani kırpma hatasından etkilenmiş OLABİLECEK) her bölümü,
+        # Türkçesi zaten kesin-tam olanlar (TR ≥ 9200) hariç, yeniden çevir.
+        checkpoint_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint_kesin.json")
+        print("🔧 ONARIM MODU BAŞLATILDI (--onar --kesin)")
+        print("   KESİN MOD: Etkilenmiş olabilecek TÜM bölümler orana bakılmadan yeniden çevrilecek.")
+    else:
+        checkpoint_file = ONARIM_CHECKPOINT_FILE
+        print("🔧 ONARIM MODU BAŞLATILDI (--onar)")
+        print("   Eksik çevrilmiş (8000 karakterde kırpılmış) bölümler tespit edilip yeniden çevrilecek.")
+    print(f"   Checkpoint dosyası: {checkpoint_file}")
 
     token = get_auth_token()
     if not token:
@@ -578,7 +593,7 @@ def repair_mode():
     ]
     print(f"🎯 Kontrol edilecek roman sayısı: {len(active_novels)}")
 
-    checkpoint = load_onarim_checkpoint()
+    checkpoint = load_onarim_checkpoint(checkpoint_file)
     stats = {"saglam": 0, "onarildi": 0, "eklendi": 0, "kaynak_yok": 0, "hata": 0}
 
     for novel in active_novels:
@@ -611,7 +626,7 @@ def repair_mode():
             if eng_title in ("SERIES_END", "GHOST") or not eng_text:
                 print(f"   ⏭️  Bölüm {num}: kaynak alınamadı (hayalet/yönlendirme), atlanıyor.")
                 cp_novel[key] = "kaynak_yok"
-                save_onarim_checkpoint(checkpoint)
+                save_onarim_checkpoint(checkpoint, checkpoint_file)
                 stats["kaynak_yok"] += 1
                 continue
 
@@ -621,7 +636,7 @@ def repair_mode():
                 status = translate_and_upload(token, novel, num, eng_title, eng_text)
                 if status in ("SUCCESS", "SKIP"):
                     cp_novel[key] = "ok"
-                    save_onarim_checkpoint(checkpoint)
+                    save_onarim_checkpoint(checkpoint, checkpoint_file)
                     stats["eklendi"] += 1
                     consecutive_errors = 0
                     time.sleep(5)
@@ -642,25 +657,40 @@ def repair_mode():
 
             # İngilizce kaynak 8000 karakterden kısaysa kırpma hatası bu bölümü ETKİLEMEMİŞTİR
             if len(eng_text) <= ONARIM_EN_MIN:
+                print(f"   ✅ Bölüm {num} sağlam (EN {len(eng_text)} ≤ {ONARIM_EN_MIN} karakter, kırpma bu bölümü etkilememiş).")
                 cp_novel[key] = "ok"
-                save_onarim_checkpoint(checkpoint)
+                save_onarim_checkpoint(checkpoint, checkpoint_file)
                 stats["saglam"] += 1
                 continue
 
+            # KIRPILMA İMZASI KONTROLÜ:
+            # Eski hata EN'in ilk 8000 karakterini çeviriyordu → kırpık TR her zaman
+            # ~9200 karakterin ALTINDA kalır (8000 × ~1.15 tavan).
+            # TR bundan uzunsa bölüm kesin tamdır.
             oran = len(tr_content) / len(eng_text)
-            if oran >= ONARIM_ORAN_ESIK:
+            if len(tr_content) >= ONARIM_TR_SUPHE_MAX:
+                print(f"   ✅ Bölüm {num} sağlam (TR {len(tr_content)} ≥ {ONARIM_TR_SUPHE_MAX} karakter — kırpık çeviri bu uzunluğa ulaşamaz).")
+                cp_novel[key] = "ok"
+                save_onarim_checkpoint(checkpoint, checkpoint_file)
+                stats["saglam"] += 1
+                continue
+
+            # Normal mod: orana bakılır (tam çeviri EN'le orantılı büyür, ~%85-110).
+            # Kesin mod: oran tahminine güvenilmez, şüpheli her bölüm yeniden çevrilir.
+            if not kesin and oran >= ONARIM_ORAN_ESIK:
                 print(f"   ✅ Bölüm {num} sağlam (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}).")
                 cp_novel[key] = "ok"
-                save_onarim_checkpoint(checkpoint)
+                save_onarim_checkpoint(checkpoint, checkpoint_file)
                 stats["saglam"] += 1
                 continue
 
-            # ── 4. EKSİK bölüm → tamamını yeniden çevir, üzerine yaz ──
-            print(f"   🔧 Bölüm {num} EKSİK! (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}) → yeniden çevriliyor...")
+            # ── 4. EKSİK/ŞÜPHELİ bölüm → tamamını yeniden çevir, üzerine yaz ──
+            sebep = "şüpheli (kesin mod)" if (kesin and oran >= ONARIM_ORAN_ESIK) else "EKSİK"
+            print(f"   🔧 Bölüm {num} {sebep}! (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}) → yeniden çevriliyor...")
             status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
             if status == "SUCCESS":
                 cp_novel[key] = "ok"
-                save_onarim_checkpoint(checkpoint)
+                save_onarim_checkpoint(checkpoint, checkpoint_file)
                 stats["onarildi"] += 1
                 consecutive_errors = 0
                 time.sleep(5)
@@ -685,7 +715,7 @@ def repair_mode():
 # ==========================================
 if __name__ == "__main__":
     if "--onar" in sys.argv:
-        repair_mode()
+        repair_mode(kesin=("--kesin" in sys.argv))
         sys.exit(0)
 
     print("🚀 KAOS BOT YEREL TEST MODU BAŞLATILDI")
