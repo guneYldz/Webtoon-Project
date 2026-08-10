@@ -1,57 +1,53 @@
-import time
 import undetected_chromedriver as uc
+import time
+import base64
 
-options = uc.ChromeOptions()
-options.add_argument("--headless=new")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-gpu")
-options.add_argument("--disable-extensions")
-options.add_argument("--window-size=1280,900")
-options.add_argument("--disable-blink-features=AutomationControlled")
-
-print("Starting uc...")
-try:
+def test():
+    options = uc.ChromeOptions()
+    options.add_argument("--headless=new")
     driver = uc.Chrome(options=options, version_main=147)
-    print("Fetching chapter URL...")
-    driver.get("https://manga-tr.com/id-47111-read-nan-hao-shang-feng-chapter-2.html")
-    time.sleep(8)
     
-    with open("page_source.html", "w", encoding="utf-8") as f:
-        f.write(driver.page_source)
+    url = "https://manga-tr.com/id-47109-read-nan-hao-shang-feng-chapter-1.html"
+    print(f"Loading {url}")
+    driver.get(url)
+    time.sleep(5)
+    
+    parts = driver.execute_script("""
+        var page = document.querySelectorAll('.chapter-page')[0];
+        if (!page) return null;
+        var parts = page.getAttribute('data-parts');
+        if (!parts) return null;
+        try {
+            return JSON.parse(parts);
+        } catch(e) {
+            return null;
+        }
+    """)
+    
+    if not parts:
+        print("No parts found")
+        return
         
-    print("Page source saved to page_source.html")
+    print(f"Found {len(parts)} parts. Fetching the first one...")
+    purl = parts[0]
+    print(f"Part URL: {purl}")
     
-    total_pages = driver.execute_script(
-        "var sel = document.querySelector('select');"
-        "if (sel && sel.options.length > 1) return sel.options.length;"
-        "return 0;"
-    ) or 0
-    print(f"Total pages (select): {total_pages}")
+    cookies = driver.get_cookies()
+    session = __import__('requests').Session()
+    for c in cookies:
+        session.cookies.set(c['name'], c['value'])
+        
+    ua = driver.execute_script("return navigator.userAgent;")
+    print(f"User Agent: {ua}")
     
-    if total_pages < 1:
-        total_pages = driver.execute_script(
-            "var inp = document.querySelector('input[type=\"number\"]');"
-            "if (inp && inp.max) return parseInt(inp.max);"
-            "return 0;"
-        ) or 0
-        print(f"Total pages (input): {total_pages}")
+    resp = session.get(purl, headers={'User-Agent': ua, 'Referer': url})
+    print(f"Status Code: {resp.status_code}")
+    if resp.status_code == 200:
+        print(f"Data length: {len(resp.content)}")
+    else:
+        print(f"Failed. Text: {resp.text[:100]}")
 
-    # Fallback Tümü testi:
-    urls = driver.execute_script(
-        "var result = [];"
-        "document.querySelectorAll('img').forEach(function(img) {"
-        "  var src = img.getAttribute('data-src') || img.getAttribute('data-original') || img.src || '';"
-        "  result.push(src);"
-        "});"
-        "return result;"
-    )
-    print(f"All images: {urls}")
+    driver.quit()
 
-except Exception as e:
-    print(f"Error: {e}")
-finally:
-    try:
-        driver.quit()
-    except:
-        pass
+if __name__ == "__main__":
+    test()

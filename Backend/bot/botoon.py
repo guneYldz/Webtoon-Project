@@ -146,10 +146,16 @@ class AutoBot:
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
+        # GPU kapalıyken canvas render olmaz; SwiftShader ile yazılımsal render aktif
+        options.add_argument("--use-gl=swiftshader")
+        options.add_argument("--enable-webgl")
         options.add_argument("--disable-extensions")
-        options.add_argument("--window-size=1280,900")
+        options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--allow-running-insecure-content")
+        # Tainted canvas engelini kaldır (cross-origin canvas screenshot için)
+        options.add_argument("--disable-web-security")
+        options.add_argument("--allow-file-access-from-files")
 
         chrome_version = get_chrome_version()
 
@@ -253,7 +259,7 @@ class AutoBot:
         total_pages = self.driver.execute_script("""
             let max = 0;
             // Yöntem 1: data-page attribute
-            document.querySelectorAll('ul.pagination1 a, .pagination a, .page-link').forEach(a => {
+            document.querySelectorAll('ul.pagination1 a, .pagination a, .page-link, .pagination-link').forEach(a => {
                 let dp = parseInt(a.getAttribute('data-page'));
                 if (!isNaN(dp) && dp > max) max = dp;
                 // Yöntem 2: buton yazısı rakam ise
@@ -299,11 +305,11 @@ class AutoBot:
             clicked = self.driver.execute_script(f"""
                 // Yöntem 1: data-page={next_page} attribute
                 let btn = document.querySelector(
-                    'ul.pagination1 a[data-page="{next_page}"], .pagination a[data-page="{next_page}"]'
+                    'ul.pagination1 a[data-page="{next_page}"], .pagination a[data-page="{next_page}"], .pagination-link[data-page="{next_page}"]'
                 );
                 if (btn) {{ btn.click(); return true; }}
                 // Yöntem 2: Text içeriği rakam olan buton
-                let allBtns = document.querySelectorAll('ul.pagination1 a, .pagination a, .page-link');
+                let allBtns = document.querySelectorAll('ul.pagination1 a, .pagination a, .page-link, .pagination-link');
                 for (let b of allBtns) {{
                     if (b.textContent.trim() === '{next_page}') {{ b.click(); return true; }}
                 }}
@@ -341,8 +347,8 @@ class AutoBot:
         """
         try:
             result = self.driver.execute_async_script("""
-                var done = arguments[0];
-                var url  = arguments[1];
+                var url  = arguments[0];
+                var done = arguments[arguments.length - 1];
                 fetch(url, {credentials: 'include'})
                     .then(function(r) { return r.arrayBuffer(); })
                     .then(function(buf) {
@@ -431,176 +437,246 @@ class AutoBot:
     def download_chapter_manga_tr(self, url, webtoon_id, chap_num, series_slug):
         """manga-tr.com bölümünü indir.
 
-        Strateji:
-        1) Sayfayı yükle ve tüm içeriği lazy-load için yavaşça scroll et.
-        2) Her .chapter-page için önce canvas.toDataURL() dene (retry ile).
-        3) Canvas boşsa veya yoksa, .chapter-page içindeki <img> elementinin
-           src/data-src adresini alıp fetch() ile tam byte'ı indir.
-        4) İkisi de başarısız olursa o sayfayı atla.
-        5) Screenshot KULLANMA — arkaplan/UI elementlerini kesiyor.
+        Yöntem sırası (her sayfa için):
+        A) Selenium element.screenshot_as_png  → tainted canvas bypass
+        B) canvas.toDataURL()                  → --disable-web-security ile çalışır
+        C) <img> src browser fetch             → canvas olmayan sayfalar için
         """
         import base64
 
-        def _canvas_to_b64(driver, page_index, retries=3):
-            """Canvas içeriğini base64 PNG olarak al; boşsa None döndür."""
-            for attempt in range(retries):
+        def _scroll_and_wait(driver, page_index, wait_sec=2.5):
+            driver.execute_script(f"""
+                var p = document.querySelectorAll('.chapter-page')[{page_index}];
+                if (p) p.scrollIntoView({{behavior: 'instant', block: 'center'}});
+            """)
+            time.sleep(wait_sec)
+
+        def _canvas_to_b64(driver, page_index, retries=4):
+            """Canvas.toDataURL() — tüm piksel verisi, viewport bağımsız.
+            --disable-web-security ile cross-origin taint engeli kalkar.
+            """
+            for _ in range(retries):
                 b64 = driver.execute_script(f"""
                     var page = document.querySelectorAll('.chapter-page')[{page_index}];
                     if (!page) return null;
-                    page.scrollIntoView({{behavior: 'instant', block: 'center'}});
                     var c = page.querySelector('canvas');
                     if (!c || c.width === 0 || c.height === 0) return null;
                     try {{
-                        var data = c.toDataURL('image/png').split(',')[1];
-                        return data || null;
+                        var d = c.toDataURL('image/png');
+                        if (!d || d === 'data:,' || d.length < 100) return null;
+                        return d.split(',')[1] || null;
                     }} catch(e) {{ return null; }}
                 """)
                 if b64:
-                    # Boş/tek renk kontrol
                     try:
                         raw = base64.b64decode(b64)
                         img = Image.open(BytesIO(raw))
-                        pixels = list(img.getdata())
-                        if len(pixels) > 200 and not all(p == pixels[0] for p in pixels[:200]):
-                            return b64
+                        w, h = img.size
+                        if w < 100 or h < 100:
+                            time.sleep(1.5); continue
+                        pixels = list(img.convert('RGB').getdata())
+                        sample = pixels[::max(1, len(pixels) // 400)]
+                        if len(sample) > 10 and all(p == sample[0] for p in sample):
+                            time.sleep(1.5); continue
+                        return b64  # ✅ Geçerli, tam boyutlu canvas
                     except Exception:
-                        return b64  # parse edilemiyorsa raw'ı dön, dışarıda hata yakalanır
-                # Henüz render olmamış olabilir, bekle
+                        return b64
                 time.sleep(1.5)
             return None
 
-        def _get_img_url_in_page(driver, page_index):
-            """Bir .chapter-page içindeki <img> elementinin gerçek URL'sini döndür."""
+        def _element_screenshot_full(driver, page_index):
+            """Selenium element screenshot — tainted canvas fallback.
+            Pencereyi canvas yüksekliğine ayarlayarak crop'u önler.
+            """
+            try:
+                # Canvas boyutlarını JS'den oku
+                dims = driver.execute_script(f"""
+                    var page = document.querySelectorAll('.chapter-page')[{page_index}];
+                    if (!page) return null;
+                    var c = page.querySelector('canvas');
+                    if (c && c.width > 0 && c.height > 0)
+                        return {{w: c.width, h: c.height, el: 'canvas'}};
+                    var r = page.getBoundingClientRect();
+                    return {{w: Math.round(r.width), h: Math.round(r.height), el: 'page'}};
+                """)
+                if not dims or dims.get('w', 0) < 100 or dims.get('h', 0) < 100:
+                    return None
+
+                canvas_h = int(dims['h'])
+                canvas_w = int(dims['w'])
+
+                # Pencereyi canvas yüksekliğine ayarla (+ margin)
+                driver.set_window_size(max(1920, canvas_w + 100), canvas_h + 200)
+                time.sleep(0.5)
+
+                # Canvas'a scroll et ve tam screenshot al
+                driver.execute_script(f"""
+                    var page = document.querySelectorAll('.chapter-page')[{page_index}];
+                    if (page) page.scrollIntoView({{behavior: 'instant', block: 'start'}});
+                """)
+                time.sleep(0.5)
+
+                pages = driver.find_elements(By.CSS_SELECTOR, '.chapter-page')
+                if page_index >= len(pages):
+                    return None
+                page_el = pages[page_index]
+
+                canvas_els = page_el.find_elements(By.TAG_NAME, 'canvas')
+                target_el = canvas_els[0] if canvas_els else page_el
+                png = target_el.screenshot_as_png
+
+                # Pencereyi geri döndür
+                driver.set_window_size(1920, 1080)
+
+                if not png or len(png) < 500:
+                    return None
+                img = Image.open(BytesIO(png))
+                w, h = img.size
+                if w < 100 or h < 100:
+                    return None
+                pixels = list(img.convert('RGB').getdata())
+                sample = pixels[::max(1, len(pixels) // 400)]
+                if len(sample) > 10 and all(p == sample[0] for p in sample):
+                    return None
+                return png
+            except Exception as e:
+                print(f"        ⚠️ element screenshot hatası: {e}")
+                try:
+                    driver.set_window_size(1920, 1080)
+                except Exception:
+                    pass
+                return None
+
+        def _get_img_url(driver, page_index):
             return driver.execute_script(f"""
-                var page = document.querySelectorAll('.chapter-page')[{page_index}];
-                if (!page) return null;
-                var img = page.querySelector('img');
+                var p = document.querySelectorAll('.chapter-page')[{page_index}];
+                if (!p) return null;
+                var img = p.querySelector('img');
                 if (!img) return null;
                 return img.getAttribute('data-src') || img.getAttribute('data-original')
-                       || img.src || null;
+                       || img.getAttribute('src') || null;
             """)
 
         def _fetch_bytes(driver, img_url):
-            """Tarayıcı fetch() ile resmi indir (cookie/session dahil). Bytes döndürür."""
-            result = driver.execute_async_script("""
-                var done = arguments[0];
-                var url  = arguments[1];
-                fetch(url, {credentials: 'include'})
-                    .then(function(r) { return r.arrayBuffer(); })
-                    .then(function(buf) {
-                        var bytes = new Uint8Array(buf);
-                        var binary = '';
-                        for (var i = 0; i < bytes.byteLength; i++) {
-                            binary += String.fromCharCode(bytes[i]);
-                        }
-                        done({ok: true, data: btoa(binary)});
-                    })
-                    .catch(function(e) { done({ok: false, error: e.toString()}); });
-            """, img_url)
-            if result and result.get('ok') and result.get('data'):
-                return base64.b64decode(result['data'])
+            try:
+                result = driver.execute_async_script("""
+                    var url = arguments[0], done = arguments[arguments.length-1];
+                    fetch(url, {credentials:'include'})
+                        .then(r => r.arrayBuffer())
+                        .then(buf => {
+                            var b = new Uint8Array(buf), s = '';
+                            for (var i=0;i<b.byteLength;i++) s += String.fromCharCode(b[i]);
+                            done({ok:true, data:btoa(s)});
+                        }).catch(e => done({ok:false, error:e.toString()}));
+                """, img_url)
+                if result and result.get('ok') and result.get('data'):
+                    return base64.b64decode(result['data'])
+            except Exception as e:
+                print(f"        ⚠️ fetch hatası: {e}")
             return None
+
+        def _save_image(img_bytes, episode_folder, fname):
+            image = Image.open(BytesIO(img_bytes))
+            image.verify()
+            image = Image.open(BytesIO(img_bytes))
+            w, h = image.size
+            if w < 100 or h < 100:
+                return None, w, h
+            if image.mode in ("RGBA", "P"):
+                image = image.convert("RGB")
+            os.makedirs(episode_folder, exist_ok=True)
+            full_path = os.path.join(episode_folder, fname)
+            image.save(full_path, "WEBP", quality=85)
+            return full_path, w, h
 
         try:
             # ── 1. Bölümü yükle ──────────────────────────────────────────────────
             self.driver.get(url)
-            time.sleep(6)
+            time.sleep(8)
 
             episode_folder = os.path.join(BASE_PATH, "images", series_slug, f"bolum-{chap_num}")
             saved_paths = []
 
-            # ── 2. Tüm sayfaları lazy-load tetiklemek için scroll et ─────────────
-            print(f"      📄 Lazy-load için sayfalar scroll ediliyor...")
-            scroll_steps = 6
-            for step in range(1, scroll_steps + 1):
+            # ── 2. Scroll ile lazy-load + render tetikle ──────────────────────────
+            print(f"      📄 Lazy-load scroll başlıyor...")
+            for step in range(1, 12):
                 self.driver.execute_script(
-                    f"window.scrollTo(0, document.body.scrollHeight * {step}/{scroll_steps});"
+                    f"window.scrollTo(0, document.body.scrollHeight * {step}/11);"
                 )
-                time.sleep(1.2)
-            # Başa dön, render'ın tamamlanması için bekle
+                time.sleep(0.7)
             self.driver.execute_script("window.scrollTo(0, 0);")
-            time.sleep(2)
+            time.sleep(3)
 
-            # ── 3. Sayfa sayısını tespit et ──────────────────────────────────────
+            # ── 3. Sayfa sayısı ───────────────────────────────────────────────────
             num_pages = self.driver.execute_script(
                 "return document.querySelectorAll('.chapter-page').length;"
             )
-
             if num_pages == 0:
-                print("      ⚠️ Hiçbir sayfa (.chapter-page) bulunamadı.")
+                print("      ⚠️ Hiçbir .chapter-page bulunamadı.")
                 return
-
-            print(f"      📄 Toplam {num_pages} sayfa tespit edildi.")
+            print(f"      📄 Toplam {num_pages} sayfa.")
 
             # ── 4. Her sayfayı işle ───────────────────────────────────────────────
             for i in range(num_pages):
                 fname = f"{series_slug}-bolum-{chap_num}-sayfa-{i+1}.webp"
-                saved = None
                 img_bytes = None
+                method = ""
 
-                # --- Yöntem A: Canvas ---
-                b64_data = _canvas_to_b64(self.driver, i)
-                if b64_data:
+                # Sayfayı görünüme getir, render bekle
+                _scroll_and_wait(self.driver, i, wait_sec=2.5)
+
+                # --- Yöntem A: canvas.toDataURL() ---
+                # viewport bağımsız tam canvas verisi verir, banner vs. olmaz
+                b64 = _canvas_to_b64(self.driver, i)
+                if b64:
                     try:
-                        img_bytes = base64.b64decode(b64_data)
-                    except Exception as e:
-                        print(f"      ⚠️ Canvas base64 decode hatası (sayfa {i+1}): {e}")
+                        img_bytes = base64.b64decode(b64)
+                        method = "toDataURL"
+                    except Exception:
+                        pass
 
-                # --- Yöntem B: <img> src'den fetch ---
+                # --- Yöntem B: Selenium element screenshot (pencere yeniden boyutlandırılır) ---
                 if not img_bytes:
-                    img_url = _get_img_url_in_page(self.driver, i)
+                    png = _element_screenshot_full(self.driver, i)
+                    if png:
+                        img_bytes = png
+                        method = "element-screenshot"
+
+                # --- Yöntem C: <img> src fetch ---
+                if not img_bytes:
+                    img_url = _get_img_url(self.driver, i)
                     if img_url and img_url.startswith("http"):
-                        print(f"      🌐 img fetch deneniyor (sayfa {i+1}): {img_url[:80]}")
-                        # Önce browser fetch (session dahil)
+                        print(f"      🌐 img fetch (sayfa {i+1}): {img_url[:70]}")
                         img_bytes = _fetch_bytes(self.driver, img_url)
-                        # Sonra requests ile dene
                         if not img_bytes:
                             try:
                                 cookies = self._get_browser_cookies()
                                 resp = requests.get(
                                     img_url,
-                                    headers={
-                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                                        'Referer': url,
-                                    },
-                                    cookies=cookies,
-                                    stream=True,
-                                    timeout=20,
+                                    headers={'User-Agent': 'Mozilla/5.0', 'Referer': url},
+                                    cookies=cookies, stream=True, timeout=20
                                 )
                                 if resp.status_code == 200 and len(resp.content) > 1000:
                                     img_bytes = resp.content
                             except Exception as e:
-                                print(f"      ⚠️ requests fallback hatası: {e}")
+                                print(f"      ⚠️ requests hatası: {e}")
+                        if img_bytes:
+                            method = "img-fetch"
 
                 # --- Kaydet ---
                 if img_bytes:
                     try:
-                        image = Image.open(BytesIO(img_bytes))
-                        image.verify()
-                        image = Image.open(BytesIO(img_bytes))
-
-                        # Boyut kontrolü: çok küçük görseller (logo/ikon) atla
-                        w, h = image.size
-                        if w < 100 or h < 100:
-                            print(f"      ⚠️ Sayfa {i+1} çok küçük ({w}x{h}), atlandı.")
+                        full_path, w, h = _save_image(img_bytes, episode_folder, fname)
+                        if full_path is None:
+                            print(f"      ⚠️ Sayfa {i+1} çok küçük, atlandı.")
                             continue
-
-                        if image.mode in ("RGBA", "P"):
-                            image = image.convert("RGB")
-
-                        if not os.path.exists(episode_folder):
-                            os.makedirs(episode_folder)
-                        full_path = os.path.join(episode_folder, fname)
-                        image.save(full_path, "WEBP", quality=85)
                         saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
-                        print(f"      ✅ Kaydedildi ({w}x{h}): {fname}")
+                        print(f"      ✅ [{method}] Kaydedildi ({w}x{h}): {fname}")
+                        saved_paths.append(saved)
                     except Exception as e:
                         print(f"      ⚠️ Görsel işleme hatası (sayfa {i+1}): {e}")
                 else:
-                    print(f"      ❌ Sayfa {i+1}: Canvas ve img kaynağı bulunamadı, atlandı.")
-
-                if saved:
-                    saved_paths.append(saved)
+                    print(f"      ❌ Sayfa {i+1}: Tüm yöntemler başarısız, atlandı.")
 
             # ── 5. DB'ye kaydet ───────────────────────────────────────────────────
             if not saved_paths:
@@ -608,7 +684,6 @@ class AutoBot:
                 return
 
             print(f"      🖼️ {len(saved_paths)} sayfa tamamlandı.")
-
             with engine.connect() as conn:
                 check = conn.execute(
                     text("SELECT id FROM webtoon_episodes WHERE webtoon_id=:w AND episode_number=:e"),
@@ -616,9 +691,9 @@ class AutoBot:
                 ).fetchone()
                 if not check:
                     result = conn.execute(text("""
-                        INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, is_published, created_at)
-                        VALUES (:w, :e, :t, 0, TRUE, NOW())
-                        RETURNING id
+                        INSERT INTO webtoon_episodes
+                            (webtoon_id, episode_number, title, view_count, is_published, created_at)
+                        VALUES (:w, :e, :t, 0, TRUE, NOW()) RETURNING id
                     """), {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
                     episode_id = result.fetchone()[0]
                     for order, path in enumerate(saved_paths, start=1):
