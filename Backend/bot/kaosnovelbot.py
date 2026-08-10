@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 from google import genai
 import time
 import os
+import sys
+import json
 import itertools
 from dotenv import load_dotenv
 import cloudscraper
@@ -282,7 +284,31 @@ def call_gemini(prompt_text, label=""):
     return None
 
 
-def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
+def split_text_into_chunks(text, max_chars=9000):
+    """
+    Metni paragraf sınırlarından bölerek max_chars'ı aşmayan parçalara ayırır.
+    Uzun bölümlerin [:8000] kırpması yüzünden eksik çevrilmesini önler:
+    her parça ayrı çevrilip sonra birleştirilir.
+    """
+    paragraphs = text.split("\n\n")
+    chunks = []
+    current = ""
+    for p in paragraphs:
+        if current and len(current) + len(p) + 2 > max_chars:
+            chunks.append(current)
+            current = p
+        else:
+            current = f"{current}\n\n{p}" if current else p
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def translate_and_upload(token, novel, chapter_num, eng_title, eng_text, guncelle=False):
+    """
+    guncelle=False → yeni bölüm ekler (POST /novels/bolum-ekle)
+    guncelle=True  → mevcut bölümün İÇERİĞİNİ günceller (PUT), Türkçe başlık korunur.
+    """
     global client
 
     if not client:
@@ -301,12 +327,13 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text):
     if " - " in eng_title:
         eng_isim = eng_title.split(" - ", 1)[1].strip()
 
-    print(f"   🤖 AI ({novel_key}) Tek Seferde Çeviriyor... (Key: {GOOGLE_API_KEYS[_current_key_index][:5]}...)")
+    # ==================================================
+    # METNİ PARÇALARA BÖL (uzun bölümler eksik çevrilmesin)
+    # Eski kod eng_text[:8000] ile kırpıyordu → bölüm sonu kayboluyordu.
+    # ==================================================
+    chunks = split_text_into_chunks(eng_text)
+    print(f"   🤖 AI ({novel_key}) Çeviriyor... ({len(eng_text)} karakter, {len(chunks)} parça) (Key: {GOOGLE_API_KEYS[_current_key_index][:5]}...)")
 
-    # ==================================================
-    # TEK PAŞ: BAŞLIK + METİN BİR ARADA (Mega Prompt)
-    # Marker tabanlı çıktı formatı: parse güvenilirliği için
-    # ==================================================
     if eng_isim:
         baslik_talimati = f"""
 BÖLÜM İSMİ ÇEVİRİSİ:
@@ -317,32 +344,55 @@ BÖLÜM İSMİ ÇEVİRİSİ:
     else:
         baslik_talimati = "BÖLÜM İSMİ: Bu bölümün özel bir ismi yok, BAŞLIK satırı yazma."
 
-    translation_prompt = f"""
-Sen usta bir roman çevirmenisin. Tek seferde hem bölüm ismini hem de metni Türkçeye çevir.
-
-{baslik_talimati}
-
+    ceviri_kurallari = f"""
 ROMAN METNİ ÇEVİRİSİ KURALLARI (ZORUNLU):
 1. ASLA "Elbette", "İşte çeviri", "Tabii ki" gibi AI giriş cümleleri YAZMA.
 2. SADECE çevrilmiş roman metnini döndür — açıklama, not veya yorum EKLEME.
 3. Paragraf düzenini KORU: Orijinaldeki her paragraf ayrı paragraf olarak kalmalı.
-4. Kopuk, anlamsız veya yarım kalan cümle BIRAKMA — gerekirse önceki/sonraki cümleyle birleştir.
-5. "Ve...", "Ama..." ile başlayan tek başına duran kısa cümleleri önceki cümleye ekle.
-6. Bire bir sözcük çevirisi YAPMA; anlamı, duyguyu ve romanın akışını Türkçeye taşı.
-7. Her cümle akışkan, doğal, kitap okur gibi hissettirmeli.
+4. Metnin TAMAMINI çevir — hiçbir cümleyi veya paragrafı ATLAMA, özetleme.
+5. Kopuk, anlamsız veya yarım kalan cümle BIRAKMA — gerekirse önceki/sonraki cümleyle birleştir.
+6. "Ve...", "Ama..." ile başlayan tek başına duran kısa cümleleri önceki cümleye ekle.
+7. Bire bir sözcük çevirisi YAPMA; anlamı, duyguyu ve romanın akışını Türkçeye taşı.
+8. Her cümle akışkan, doğal, kitap okur gibi hissettirmeli.
 
 ROMANIN TÜRÜNE ÖZEL TALİMATLAR:
 {config}
-
-ÇEVİRİLECEK METİN:
-{eng_text[:8000]}
 """
 
-    ceviri_ham = call_gemini(translation_prompt, label="Mega Çeviri")
-    if ceviri_ham is None:
-        print("❌ Çeviri başarısız. Bot 1 saat uyuyor...")
-        time.sleep(3600)
-        return "ERROR"
+    translated_parts = []
+    for i, chunk in enumerate(chunks, 1):
+        if i == 1:
+            translation_prompt = f"""
+Sen usta bir roman çevirmenisin. Tek seferde hem bölüm ismini hem de metni Türkçeye çevir.
+
+{baslik_talimati}
+
+{ceviri_kurallari}
+
+ÇEVİRİLECEK METİN:
+{chunk}
+"""
+        else:
+            translation_prompt = f"""
+Sen usta bir roman çevirmenisin. Aşağıdaki metin, bir roman bölümünün DEVAMIDIR (parça {i}/{len(chunks)}). Türkçeye çevir.
+
+BAŞLIK satırı YAZMA — bu sadece metin devamıdır.
+
+{ceviri_kurallari}
+
+ÇEVİRİLECEK METİN:
+{chunk}
+"""
+        parca = call_gemini(translation_prompt, label=f"Çeviri {i}/{len(chunks)}")
+        if parca is None:
+            print("❌ Çeviri başarısız. Bot 1 saat uyuyor...")
+            time.sleep(3600)
+            return "ERROR"
+        translated_parts.append(parca)
+        if len(chunks) > 1:
+            print(f"      ✔ Parça {i}/{len(chunks)} çevrildi.")
+
+    ceviri_ham = "\n\n".join(translated_parts)
 
     # ==================================================
     # ÇIKTIYI AYRIŞTIR: BAŞLIK + METİN
@@ -389,8 +439,13 @@ ROMANIN TÜRÜNE ÖZEL TALİMATLAR:
     # 2. PAŞ: EDEBİYAT EDİTÖRÜ (Sadece metin — başlık kilitli)
     # tr_title zaten güvende, buna HİÇ dokunmuyoruz
     # ==================================================
-    print(f"   ✨ Edebiyat editörü devrede (2. paş)...")
-    polish_prompt = f"""
+    polish_chunks = split_text_into_chunks(ceviri_metin)
+    print(f"   ✨ Edebiyat editörü devrede (2. paş, {len(polish_chunks)} parça)...")
+
+    polished_parts = []
+    polish_failed = False
+    for i, p_chunk in enumerate(polish_chunks, 1):
+        polish_prompt = f"""
 Sen titiz bir Türk edebiyat editörüsün. Aşağıdaki roman çevirisini, anlamını veya paragraf sayısını DEĞİŞTİRMEDEN yeniden yaz.
 
 YAPACAKLARIN:
@@ -406,28 +461,47 @@ SERİYE ÖZEL TALIMATLAR (bunu da uygula):
 YAPAMAYACAKLARIN:
 - "İşte", "Elbette", "Düzeltilmiş metin:" gibi AI çıkış cümleleri YAZMA.
 - Paragraf SILME veya BİRLEŞTİRME — her paragraf ayrı kalmalı.
+- Metni KISALTMA veya ÖZETLEME — tamamını yeniden yaz.
 - Yorum veya açıklama EKLEME.
 
 ÇEVİRİ METNİ:
-{ceviri_metin[:8000]}
+{p_chunk}
 """
-    ceviri_polish = call_gemini(polish_prompt, label="Editör")
-    if ceviri_polish:
-        # Giriş cümlesi varsa temizle
-        for giris in ["İşte", "Elbette", "Düzeltilmiş", "Aşağıda", "Tabii"]:
-            if ceviri_polish.lstrip().startswith(giris):
-                ceviri_polish = "\n".join(ceviri_polish.split("\n")[1:]).strip()
-                break
-        ceviri_metin = ceviri_polish
-        print(f"   ✅ Editör tamamladı.")
+        parca_polish = call_gemini(polish_prompt, label=f"Editör {i}/{len(polish_chunks)}")
+        if parca_polish:
+            # Giriş cümlesi varsa temizle
+            for giris in ["İşte", "Elbette", "Düzeltilmiş", "Aşağıda", "Tabii"]:
+                if parca_polish.lstrip().startswith(giris):
+                    parca_polish = "\n".join(parca_polish.split("\n")[1:]).strip()
+                    break
+            polished_parts.append(parca_polish)
+        else:
+            # Bu parça için editör başarısız → ham çeviri parçasını koru
+            polish_failed = True
+            polished_parts.append(p_chunk)
+
+    ceviri_metin = "\n\n".join(polished_parts)
+    if polish_failed:
+        print("   ⚠️ Editör pası kısmen başarısız, o parçalarda ham çeviri kullanıldı.")
     else:
-        print("   ⚠️ Editör pası başarısız, ham çeviri kullanılıyor.")
+        print(f"   ✅ Editör tamamladı.")
 
     # ==================================================
     # KAYDET  (tr_title Pass 1'den kilitli, asla değişmedi)
     # ==================================================
-    payload = {"novel_id": novel['id'], "chapter_number": chapter_num, "title": tr_title, "content": ceviri_metin}
     headers = {"Authorization": f"Bearer {token}"}
+
+    if guncelle:
+        # ONARIM: mevcut bölümün içeriğini değiştir, başlığa dokunma (zaten Türkçe)
+        payload = {"content": ceviri_metin}
+        res = requests.put(f"{API_URL}/novels/{novel['slug']}/chapters/{chapter_num}", data=payload, headers=headers)
+        if res.status_code == 200:
+            print(f"   🎉 Bölüm {chapter_num} GÜNCELLENDİ! (Yeni içerik: {len(ceviri_metin)} karakter)")
+            return "SUCCESS"
+        print(f"   ❌ Güncelleme Hatası: {res.status_code} - {res.text}")
+        return "ERROR"
+
+    payload = {"novel_id": novel['id'], "chapter_number": chapter_num, "title": tr_title, "content": ceviri_metin}
     res = requests.post(f"{API_URL}/novels/bolum-ekle", data=payload, headers=headers)
 
     if res.status_code in [200, 201]:
@@ -440,9 +514,180 @@ YAPAMAYACAKLARIN:
         return "ERROR"
 
 # ==========================================
+# 🔧 ONARIM MODU (--onar)
+# Eski [:8000] kırpma hatası yüzünden eksik çevrilmiş bölümleri bulur
+# ve tamamını yeniden çevirip günceller. Sağlam bölümlere DOKUNMAZ.
+# ==========================================
+ONARIM_CHECKPOINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint.json")
+ONARIM_EN_MIN = 8000     # İngilizce kaynak bundan kısaysa kırpma hatasından etkilenmemiştir
+ONARIM_ORAN_ESIK = 0.6   # TR/EN karakter oranı bunun altındaysa bölüm EKSİK sayılır
+                         # (normal çeviri oranı ~0.8-1.1 arasıdır)
+
+def load_onarim_checkpoint():
+    """Daha önce doğrulanan bölümleri diskten yükle (bot yarıda kesilirse kaldığı yerden devam eder)."""
+    try:
+        with open(ONARIM_CHECKPOINT_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_onarim_checkpoint(checkpoint):
+    try:
+        with open(ONARIM_CHECKPOINT_FILE, "w", encoding="utf-8") as f:
+            json.dump(checkpoint, f, ensure_ascii=False, indent=1)
+    except Exception as e:
+        print(f"   ⚠️ Checkpoint kaydedilemedi: {e}")
+
+def get_chapter_list(token, novel):
+    """Romanın veritabanındaki bölüm listesini (numara + başlık) getirir."""
+    headers = {"Authorization": f"Bearer {token}"}
+    for identifier in [novel.get('slug'), novel.get('id')]:
+        try:
+            res = requests.get(f"{API_URL}/novels/{identifier}", headers=headers)
+            if res.status_code == 200:
+                return res.json().get("chapters", [])
+        except Exception:
+            continue
+    return []
+
+def get_chapter_content(novel_slug, chapter_number):
+    """Mevcut bölümün Türkçe içeriğini getirir. Hata olursa None döner."""
+    try:
+        res = requests.get(f"{API_URL}/novels/{novel_slug}/chapters/{chapter_number}")
+        if res.status_code == 200:
+            return res.json().get("content", "") or ""
+    except Exception:
+        pass
+    return None
+
+def repair_mode():
+    print("🔧 ONARIM MODU BAŞLATILDI (--onar)")
+    print("   Eksik çevrilmiş (8000 karakterde kırpılmış) bölümler tespit edilip yeniden çevrilecek.")
+    print(f"   Checkpoint dosyası: {ONARIM_CHECKPOINT_FILE}")
+
+    token = get_auth_token()
+    if not token:
+        print("❌ Giriş yapılamadı, onarım iptal.")
+        return
+
+    novels = get_all_novels(token)
+    KAOS_DOMAINS = ["freewebnovel.com"]
+    active_novels = [
+        n for n in novels
+        if n.get('source_url') and any(d in n['source_url'] for d in KAOS_DOMAINS)
+    ]
+    print(f"🎯 Kontrol edilecek roman sayısı: {len(active_novels)}")
+
+    checkpoint = load_onarim_checkpoint()
+    stats = {"saglam": 0, "onarildi": 0, "eklendi": 0, "kaynak_yok": 0, "hata": 0}
+
+    for novel in active_novels:
+        slug = novel['slug']
+        print(f"\n📖 ONARIM KONTROLÜ: {novel['title']}")
+
+        chapters = get_chapter_list(token, novel)
+        if not chapters:
+            print("   ⚠️ Bölüm listesi alınamadı, roman atlanıyor.")
+            continue
+
+        mevcut_numaralar = {float(ch["chapter_number"]) for ch in chapters}
+        max_ch = int(max(mevcut_numaralar))
+        cp_novel = checkpoint.setdefault(slug, {})
+        kalan = sum(1 for n in range(1, max_ch + 1) if str(n) not in cp_novel)
+        print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). Kontrol edilecek: {kalan}")
+
+        consecutive_errors = 0
+
+        for num in range(1, max_ch + 1):
+            key = str(num)
+            if key in cp_novel:
+                continue  # Bu bölüm daha önce doğrulandı/işlendi
+
+            # ── 1. İngilizce kaynağı çek ─────────────────────────
+            target_url = novel['source_url'].format(num)
+            eng_title, eng_text = scrape_chapter(target_url, num)
+            time.sleep(2)  # Kaynak siteyi yormamak için bekleme
+
+            if eng_title in ("SERIES_END", "GHOST") or not eng_text:
+                print(f"   ⏭️  Bölüm {num}: kaynak alınamadı (hayalet/yönlendirme), atlanıyor.")
+                cp_novel[key] = "kaynak_yok"
+                save_onarim_checkpoint(checkpoint)
+                stats["kaynak_yok"] += 1
+                continue
+
+            # ── 2. Bölüm veritabanında hiç yoksa → çevir ve EKLE ──
+            if float(num) not in mevcut_numaralar:
+                print(f"   ➕ Bölüm {num} veritabanında YOK → çevrilip ekleniyor...")
+                status = translate_and_upload(token, novel, num, eng_title, eng_text)
+                if status in ("SUCCESS", "SKIP"):
+                    cp_novel[key] = "ok"
+                    save_onarim_checkpoint(checkpoint)
+                    stats["eklendi"] += 1
+                    consecutive_errors = 0
+                    time.sleep(5)
+                else:
+                    stats["hata"] += 1
+                    consecutive_errors += 1
+                    if consecutive_errors >= 3:
+                        print("   🛑 Art arda 3 hata — bu roman atlanıyor (checkpoint sayesinde sonraki çalıştırmada devam eder).")
+                        break
+                continue
+
+            # ── 3. Bölüm varsa → Türkçe içeriğin uzunluğunu kontrol et ──
+            tr_content = get_chapter_content(slug, num)
+            if tr_content is None:
+                print(f"   ⚠️ Bölüm {num}: Türkçe içerik okunamadı, atlanıyor.")
+                stats["hata"] += 1
+                continue
+
+            # İngilizce kaynak 8000 karakterden kısaysa kırpma hatası bu bölümü ETKİLEMEMİŞTİR
+            if len(eng_text) <= ONARIM_EN_MIN:
+                cp_novel[key] = "ok"
+                save_onarim_checkpoint(checkpoint)
+                stats["saglam"] += 1
+                continue
+
+            oran = len(tr_content) / len(eng_text)
+            if oran >= ONARIM_ORAN_ESIK:
+                print(f"   ✅ Bölüm {num} sağlam (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}).")
+                cp_novel[key] = "ok"
+                save_onarim_checkpoint(checkpoint)
+                stats["saglam"] += 1
+                continue
+
+            # ── 4. EKSİK bölüm → tamamını yeniden çevir, üzerine yaz ──
+            print(f"   🔧 Bölüm {num} EKSİK! (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}) → yeniden çevriliyor...")
+            status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
+            if status == "SUCCESS":
+                cp_novel[key] = "ok"
+                save_onarim_checkpoint(checkpoint)
+                stats["onarildi"] += 1
+                consecutive_errors = 0
+                time.sleep(5)
+            else:
+                stats["hata"] += 1
+                consecutive_errors += 1
+                if consecutive_errors >= 3:
+                    print("   🛑 Art arda 3 hata — bu roman atlanıyor (checkpoint sayesinde sonraki çalıştırmada devam eder).")
+                    break
+
+    print("\n" + "=" * 50)
+    print("🏁 ONARIM TAMAMLANDI — ÖZET:")
+    print(f"   ✅ Sağlam (dokunulmadı) : {stats['saglam']}")
+    print(f"   🔧 Onarıldı (güncellendi): {stats['onarildi']}")
+    print(f"   ➕ Yeni eklendi          : {stats['eklendi']}")
+    print(f"   ⏭️  Kaynak yok/hayalet    : {stats['kaynak_yok']}")
+    print(f"   ❌ Hata                  : {stats['hata']}")
+    print("=" * 50)
+
+# ==========================================
 # 🏭 ANA DÖNGÜ
 # ==========================================
 if __name__ == "__main__":
+    if "--onar" in sys.argv:
+        repair_mode()
+        sys.exit(0)
+
     print("🚀 KAOS BOT YEREL TEST MODU BAŞLATILDI")
 
     while True:
