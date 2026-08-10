@@ -272,9 +272,15 @@ def call_gemini(prompt_text, label=""):
                 )
                 return response.text.strip()
             except Exception as e:
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                err = str(e)
+                if "429" in err or "RESOURCE_EXHAUSTED" in err:
                     print(f"⚠️ Rate limit ({label}) - Key #{_current_key_index + 1} doldu, sonraki key'e geçiliyor...")
                     rotate_key()
+                elif "503" in err or "UNAVAILABLE" in err or "500" in err or "INTERNAL" in err or "DEADLINE" in err:
+                    # GEÇİCİ Google sunucu hatası (model yoğun vb.) — pes etme, bekle ve tekrar dene
+                    print(f"⚠️ Geçici sunucu hatası ({label}): model yoğun/erişilemez. 30sn beklenip tekrar denenecek...")
+                    time.sleep(30)
+                    rotate_key()  # farklı key farklı kapasiteye düşebilir, denemeye değer
                 else:
                     print(f"   ❌ API Hatası ({label}): {e}")
                     return None
