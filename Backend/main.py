@@ -22,7 +22,7 @@ import uuid
 import shutil
 
 # --- ROUTERLARI ÇAĞIR ---
-from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router
+from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications
 
 # 1. Tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
@@ -263,6 +263,7 @@ app.include_router(favorites.router)
 app.include_router(likes.router)
 app.include_router(novel.router)
 app.include_router(admin_router.router)
+app.include_router(notifications.router)
 
 @app.get("/")
 def ana_sayfa():

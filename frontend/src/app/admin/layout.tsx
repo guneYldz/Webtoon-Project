@@ -102,6 +102,7 @@ export default function AdminLayout({
                     </div>
                     <NavItem href="/admin/users" icon="👥" label="Üyeler" />
                     <NavItem href="/admin/comments" icon="💬" label="Yorumlar" />
+                    <NavItem href="/admin/announcements" icon="📢" label="Duyurular" />
                 </nav>
 
                 <div className="p-4 border-t border-gray-800 space-y-2">

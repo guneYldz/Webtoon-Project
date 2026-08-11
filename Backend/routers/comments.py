@@ -46,14 +46,16 @@ def _seri_bilgisi(c):
     """Yorumun ait olduğu seri + bölüm bilgisi ve okuma sayfası linki."""
     if c.novel_chapter:
         novel = c.novel_chapter.novel
+        # Novel URL'leri chapter_number kullanır (id değil — id yanlış bölüme gider)
         return {
             "seri_type": "novel",
             "seri_title": novel.title if novel else "Silinmiş Seri",
             "bolum_title": c.novel_chapter.title or f"Bölüm {c.novel_chapter.chapter_number}",
-            "link": f"/novel/{novel.slug}/bolum/{c.novel_chapter.id}" if novel else None,
+            "link": f"/novel/{novel.slug}/bolum/{c.novel_chapter.chapter_number}" if novel else None,
         }
     if c.webtoon_episode:
         w = c.webtoon_episode.webtoon
+        # Webtoon URL'leri episode id kullanır
         return {
             "seri_type": "webtoon",
             "seri_title": w.title if w else "Silinmiş Seri",
@@ -99,6 +101,28 @@ def create_comment(
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
+
+    # Yanıt bildirimi: üst yorumun sahibine (kendine yanıt hariç)
+    if comment.parent_id is not None:
+        parent = db.query(models.Comment)\
+            .options(*_COMMENT_LOAD_OPTIONS)\
+            .filter(models.Comment.id == comment.parent_id)\
+            .first()
+        if parent and parent.user_id != current_user.id:
+            from routers.notifications import create_notification
+            seri = _seri_bilgisi(parent)
+            preview = comment.content.strip()
+            if len(preview) > 120:
+                preview = preview[:117] + "..."
+            create_notification(
+                db,
+                user_id=parent.user_id,
+                type_="reply",
+                title=f"{current_user.username} yorumuna yanıt verdi",
+                message=preview,
+                link=seri.get("link"),
+            )
+            db.commit()
     
     return {"message": "Yorum başarıyla eklendi", "id": new_comment.id}
 

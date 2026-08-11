@@ -173,6 +173,24 @@ class Comment(Base):
     def __str__(self):
         return f"Yorum ({self.id}) - {self.content[:20]}..."
 
+# 7.5 BİLDİRİMLER
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    type = Column(String(30), nullable=False)  # "reply" | "announcement"
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    link = Column(String(500), nullable=True)
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", backref="notifications")
+
+    def __str__(self):
+        return f"Bildirim ({self.id}) → User {self.user_id}: {self.title}"
+
 # 8. FAVORİLER
 class Favorite(Base):
     __tablename__ = "favorites"

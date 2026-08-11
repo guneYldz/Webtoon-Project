@@ -604,6 +604,45 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== DUYURULAR ====================
+
+@router.post("/announcements")
+async def create_announcement(
+    title: str = Form(...),
+    message: str = Form(...),
+    link: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)  # AUTH
+):
+    """Admin duyurusu — tüm aktif kullanıcılara bildirim oluşturur."""
+    from routers.notifications import create_notification
+
+    title = title.strip()
+    message = message.strip()
+    if not title or not message:
+        raise HTTPException(status_code=400, detail="Başlık ve mesaj zorunlu")
+
+    users = db.query(models.User).filter(models.User.is_active == True).all()
+    count = 0
+    for u in users:
+        create_notification(
+            db,
+            user_id=u.id,
+            type_="announcement",
+            title=title,
+            message=message,
+            link=link.strip() if link else None,
+        )
+        count += 1
+
+    db.commit()
+    return {
+        "status": "success",
+        "message": f"Duyuru {count} kullanıcıya gönderildi",
+        "sent_to": count,
+    }
+
+
 # ==================== YORUM PANELİ ====================
 
 @router.get("/comments")

@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image"; // Image import edildi
 import { usePathname, useRouter } from "next/navigation";
 import { API } from "@/api";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
@@ -168,8 +169,11 @@ export default function Navbar() {
           </Link>
         </div>
 
-        {/* SAĞ: PROFİL ALANI */}
-        <div className="relative">
+        {/* SAĞ: BİLDİRİM + PROFİL ALANI */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          <NotificationBell user={user} />
+
+          <div className="relative">
           {user ? (
             <div>
               <button
@@ -286,6 +290,7 @@ export default function Navbar() {
               </div>
             </button>
           )}
+        </div>
         </div>
       </div>
 
