@@ -9,6 +9,12 @@ import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
 import { API } from "@/api";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import RecommendedSeries from "@/components/RecommendedSeries";
+import ReadingSettingsSheet, {
+    DEFAULT_READING_SETTINGS,
+    loadReadingSettings,
+    saveReadingSettings,
+    getReadingStyle,
+} from "@/components/ReadingSettingsSheet";
 
 const crimson = Crimson_Pro({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
 const cinzel = Cinzel({ subsets: ["latin"], weight: ["700", "900"], display: "swap" });
@@ -22,7 +28,16 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
     const [allChapters, setAllChapters] = useState([]); // Tüm bölümleri tutacak state
     const [loading, setLoading] = useState(true);
     const [showNavbar, setShowNavbar] = useState(true);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [savedSettings, setSavedSettings] = useState(DEFAULT_READING_SETTINGS);
+    const [draftSettings, setDraftSettings] = useState(DEFAULT_READING_SETTINGS);
     const lastScrollY = useRef(0);
+
+    useEffect(() => {
+        const loaded = loadReadingSettings();
+        setSavedSettings(loaded);
+        setDraftSettings(loaded);
+    }, []);
 
     useEffect(() => {
         loadChapter();
@@ -85,8 +100,34 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
         }
     };
 
+    const activeSettings = settingsOpen ? draftSettings : savedSettings;
+    const readingStyle = getReadingStyle(activeSettings);
+
+    const openSettings = () => {
+        setDraftSettings(savedSettings);
+        setSettingsOpen(true);
+    };
+
+    const closeSettings = () => {
+        setDraftSettings(savedSettings);
+        setSettingsOpen(false);
+    };
+
+    const handleSaveSettings = () => {
+        saveReadingSettings(draftSettings);
+        setSavedSettings(draftSettings);
+        setSettingsOpen(false);
+    };
+
+    const handleResetSettings = () => {
+        setDraftSettings({ ...DEFAULT_READING_SETTINGS });
+    };
+
     const formatContent = (text) => {
         if (!text) return null;
+
+        const indentClass = readingStyle.indent ? "indent-8" : "indent-0";
+        const paraStyle = { lineHeight: readingStyle.lineHeight };
 
         // İçerik zaten HTML etiketleri içeriyorsa (editörden geliyorsa) direkt render et
         const hasHtmlTags = /<[a-z][\s\S]*>/i.test(text);
@@ -94,7 +135,12 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
         if (hasHtmlTags) {
             return (
                 <div
-                    className="novel-content mb-8 text-justify leading-loose"
+                    className={`novel-content mb-8 text-justify ${indentClass}`}
+                    style={{
+                        ...paraStyle,
+                        fontSize: `${readingStyle.fontSizePx}px`,
+                        ["--novel-indent"]: readingStyle.indent ? "2rem" : "0",
+                    }}
                     dangerouslySetInnerHTML={{ __html: text }}
                 />
             );
@@ -104,7 +150,11 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
         return text.split('\n').map((para, index) => {
             if (!para.trim()) return <br key={index} className="mb-4" />;
             return (
-                <p key={index} className="mb-8 indent-8 text-justify leading-loose">
+                <p
+                    key={index}
+                    className={`mb-8 text-justify ${indentClass}`}
+                    style={{ ...paraStyle, fontSize: `${readingStyle.fontSizePx}px` }}
+                >
                     {para}
                 </p>
             );
@@ -183,7 +233,11 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
             </div>
 
             {/* 2. OKUMA ALANI */}
-            <main className="container mx-auto max-w-4xl px-4 md:px-8 relative z-10">
+            <main
+                className={`container mx-auto relative z-10 transition-[max-width] duration-300 ${
+                    readingStyle.fullWidth ? "max-w-6xl" : "max-w-4xl"
+                } ${readingStyle.paddingClass}`}
+            >
 
                 {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
                 <div className="flex justify-center mb-8">
@@ -207,7 +261,13 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                 </div>
 
                 <div className="flex justify-center mb-10 opacity-40 text-purple-500 text-2xl">❖</div>
-                <article className={`${crimson.className} text-[#e5e5e5] text-xl md:text-2xl`}>
+                <article
+                    className={`${crimson.className} text-[#e5e5e5] transition-[font-size] duration-200`}
+                    style={{
+                        fontSize: `${readingStyle.fontSizePx}px`,
+                        lineHeight: readingStyle.lineHeight,
+                    }}
+                >
                     {formatContent(chapter.content)}
                 </article>
                 <div className="flex justify-center mt-12 opacity-40 text-purple-500 text-2xl">❖</div>
@@ -250,24 +310,46 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
             </div>
 
             {/* 4. SABİT ALT BAR */}
-            <div className={`fixed bottom-0 left-0 w-full z-[999] h-16 transition-transform duration-300 ${showNavbar ? "translate-y-0" : "translate-y-full"}`}>
+            <div className={`fixed bottom-0 left-0 w-full z-[999] h-16 transition-transform duration-300 ${showNavbar || settingsOpen ? "translate-y-0" : "translate-y-full"}`}>
                 <div className="flex justify-center w-full h-full">
-                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-full px-6">
-                        <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group">
+                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-full px-4 sm:px-6 gap-2">
+                        <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group shrink-0">
                             <span className="text-xl group-hover:-translate-x-1 transition">←</span>
                             <span className={`hidden sm:inline ${lato.className} text-sm font-bold tracking-widest uppercase`}>Seri</span>
                         </Link>
-                        <div className="flex flex-col items-center justify-center px-4">
-                            <h2 className={`text-sm font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>{chapter.title}</h2>
+
+                        <button
+                            type="button"
+                            onClick={openSettings}
+                            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg text-gray-500/70 hover:text-gray-300 hover:bg-white/5 transition"
+                            aria-label="Okuma ayarları"
+                            title="Okuma ayarları"
+                        >
+                            <span className="text-lg leading-none select-none opacity-70" aria-hidden>
+                                ⚙️
+                            </span>
+                        </button>
+
+                        <div className="flex flex-col items-center justify-center px-1 min-w-0 flex-1">
+                            <h2 className={`text-sm font-bold text-gray-200 max-w-[100px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>{chapter.title}</h2>
                             <span className="text-sm text-purple-500 font-black tracking-widest">#{chapter.chapter_number}</span>
                         </div>
-                        <div className={`flex gap-3 ${lato.className}`}>
-                            <button onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)} disabled={!chapter.prev_chapter} className="px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-purple-400 transition">Önceki</button>
-                            <button onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)} disabled={!chapter.next_chapter} className="px-3 py-1.5 rounded-lg bg-purple-600 border border-purple-500 text-sm font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-purple-500 transition shadow-lg">Sonraki</button>
+                        <div className={`flex gap-2 sm:gap-3 shrink-0 ${lato.className}`}>
+                            <button onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)} disabled={!chapter.prev_chapter} className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-purple-400 transition">Önceki</button>
+                            <button onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)} disabled={!chapter.next_chapter} className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-purple-600 border border-purple-500 text-sm font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-purple-500 transition shadow-lg">Sonraki</button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <ReadingSettingsSheet
+                open={settingsOpen}
+                onClose={closeSettings}
+                settings={draftSettings}
+                onChange={setDraftSettings}
+                onSave={handleSaveSettings}
+                onReset={handleResetSettings}
+            />
         </div>
     );
 }

@@ -94,5 +94,6 @@ div[class*="breadcrumb"] a:hover {
 
 .novel-content p {
   margin-bottom: 1.5rem;
-  line-height: 1.8;
+  line-height: inherit;
+  text-indent: var(--novel-indent, 2rem);
 }
