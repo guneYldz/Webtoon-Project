@@ -167,6 +167,9 @@ export default function Navbar() {
           <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Yeniler
           </Link>
+          <Link href="/duyurular" title="Duyurular" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+            Duyurular
+          </Link>
         </div>
 
         {/* SAĞ: BİLDİRİM + PROFİL ALANI */}
@@ -335,6 +338,9 @@ export default function Navbar() {
             </Link>
             <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               ✨ Yeniler
+            </Link>
+            <Link href="/duyurular" title="Duyurular" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              📢 Duyurular
             </Link>
           </div>
 

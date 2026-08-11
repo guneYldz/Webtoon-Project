@@ -614,7 +614,7 @@ async def create_announcement(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
-    """Admin duyurusu — tüm aktif kullanıcılara bildirim oluşturur."""
+    """Admin duyurusu — duyuru kanalına kaydeder + tüm aktif kullanıcılara bildirim gönderir."""
     from routers.notifications import create_notification
 
     title = title.strip()
@@ -622,6 +622,19 @@ async def create_announcement(
     if not title or not message:
         raise HTTPException(status_code=400, detail="Başlık ve mesaj zorunlu")
 
+    # 1) Duyuru kanalına kalıcı kayıt
+    announcement = models.Announcement(
+        title=title,
+        message=message,
+        link=link.strip() if link else None,
+        created_by=current_admin.id,
+    )
+    db.add(announcement)
+    db.flush()  # id alsın
+
+    duyuru_link = f"/duyurular#duyuru-{announcement.id}"
+
+    # 2) Herkese bildirim (tıklanınca duyuru sayfasına gider)
     users = db.query(models.User).filter(models.User.is_active == True).all()
     count = 0
     for u in users:
@@ -631,15 +644,16 @@ async def create_announcement(
             type_="announcement",
             title=title,
             message=message,
-            link=link.strip() if link else None,
+            link=duyuru_link,
         )
         count += 1
 
     db.commit()
     return {
         "status": "success",
-        "message": f"Duyuru {count} kullanıcıya gönderildi",
+        "message": f"Duyuru yayınlandı ve {count} kullanıcıya bildirildi",
         "sent_to": count,
+        "announcement_id": announcement.id,
     }
 
 

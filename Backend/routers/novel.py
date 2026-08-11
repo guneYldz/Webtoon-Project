@@ -166,6 +166,24 @@ def novel_bolum_ekle(
     db.add(yeni_bolum)
     db.commit()
     db.refresh(yeni_bolum)
+
+    # Favorisinde bu roman olanlara bildirim
+    try:
+        from routers.notifications import notify_favorite_users_new_chapter
+        novel = db.query(models.Novel).filter(models.Novel.id == novel_id).first()
+        if novel:
+            ch_label = title if (title and str(chapter_number) in title) else f"Bölüm {chapter_number:g}"
+            notify_favorite_users_new_chapter(
+                db,
+                novel_id=novel.id,
+                series_title=novel.title,
+                chapter_label=ch_label,
+                link=f"/novel/{novel.slug}/bolum/{chapter_number}",
+            )
+            db.commit()
+    except Exception as e:
+        print(f"⚠️ Favori bildirim hatası (novel): {e}")
+
     return {"durum": "Başarılı", "mesaj": "Bölüm eklendi"}
 
 # 5. OKUMA SAYFASI (🔥 FİNAL VERSİYON: KORUMALI & HYBRID LOCATOR 🔥)

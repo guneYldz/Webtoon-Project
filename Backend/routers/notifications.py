@@ -49,6 +49,66 @@ def create_notification(db: Session, user_id: int, type_: str, title: str, messa
     return n
 
 
+def notify_favorite_users_new_chapter(
+    db: Session,
+    *,
+    novel_id: int = None,
+    webtoon_id: int = None,
+    series_title: str,
+    chapter_label: str,
+    link: str,
+):
+    """
+    Favorisinde bu seri olan kullanıcılara yeni bölüm bildirimi gönder.
+    chapter_label örn: 'Bölüm 2880' veya '#124 - Başlık'
+    """
+    q = db.query(models.Favorite)
+    if novel_id is not None:
+        q = q.filter(models.Favorite.novel_id == novel_id)
+    elif webtoon_id is not None:
+        q = q.filter(models.Favorite.webtoon_id == webtoon_id)
+    else:
+        return 0
+
+    favorites = q.all()
+    count = 0
+    msg = (
+        f"Favorilerinizde olan {series_title} serisinin "
+        f"{chapter_label} bölümü gelmiştir, keyifli okumalar dileriz."
+    )
+    for fav in favorites:
+        create_notification(
+            db,
+            user_id=fav.user_id,
+            type_="favorite_update",
+            title=f"📚 {series_title} — yeni bölüm",
+            message=msg,
+            link=link,
+        )
+        count += 1
+    return count
+
+
+# Herkese açık duyuru listesi (Duyurular sayfası)
+@router.get("/announcements")
+def list_announcements(limit: int = 50, db: Session = Depends(get_db)):
+    items = db.query(models.Announcement)\
+        .order_by(desc(models.Announcement.created_at))\
+        .limit(min(limit, 100))\
+        .all()
+    return [
+        {
+            "id": a.id,
+            "title": a.title,
+            "message": a.message,
+            "link": a.link,
+            "created_at": str(a.created_at),
+            "author": a.author.username if a.author else "Admin",
+        }
+        for a in items
+    ]
+
+
 # 1. Bildirim listesi (giriş yapmış kullanıcı)
 @router.get("/", response_model=List[NotificationOut])
 def list_notifications(

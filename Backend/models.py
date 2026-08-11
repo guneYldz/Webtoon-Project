@@ -191,6 +191,22 @@ class Notification(Base):
     def __str__(self):
         return f"Bildirim ({self.id}) → User {self.user_id}: {self.title}"
 
+# 7.6 DUYURULAR (herkese açık kanal sayfası)
+class Announcement(Base):
+    __tablename__ = "announcements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    link = Column(String(500), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    author = relationship("User")
+
+    def __str__(self):
+        return f"Duyuru ({self.id}): {self.title}"
+
 # 8. FAVORİLER
 class Favorite(Base):
     __tablename__ = "favorites"

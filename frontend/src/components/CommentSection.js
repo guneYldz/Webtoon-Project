@@ -48,6 +48,27 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
     loadComments();
   }, [itemId, episodeId, chapterId]);
 
+  // Bildirimden #comment-ID ile gelindiyse ilgili yoruma kaydır
+  useEffect(() => {
+    if (loading || comments.length === 0) return;
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (!hash.startsWith("#comment-")) return;
+    const tryScroll = () => {
+      const el = document.querySelector(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-blue-500");
+        setTimeout(() => el.classList.remove("ring-2", "ring-blue-500"), 2500);
+        return true;
+      }
+      return false;
+    };
+    if (!tryScroll()) {
+      // Yanıt henüz DOM'a oturmamış olabilir
+      setTimeout(tryScroll, 300);
+    }
+  }, [loading, comments]);
+
   const loadComments = async () => {
     try {
       let url = "";
@@ -270,14 +291,22 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
           <p className="text-gray-600 text-sm italic">Henüz yorum yapılmamış. İlk yorumu sen yap!</p>
         ) : (
           rootComments.map((c) => (
-            <div key={c.id} className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-all">
+            <div
+              key={c.id}
+              id={`comment-${c.id}`}
+              className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-all scroll-mt-24"
+            >
               {renderCommentBody(c)}
 
               {/* Yanıtlar */}
               {repliesByParent[c.id] && repliesByParent[c.id].length > 0 && (
                 <div className="mt-4 ml-6 md:ml-12 space-y-3 border-l-2 border-gray-800 pl-4">
                   {repliesByParent[c.id].map((r) => (
-                    <div key={r.id} className="bg-[#141414] p-4 rounded-lg border border-gray-800/50">
+                    <div
+                      key={r.id}
+                      id={`comment-${r.id}`}
+                      className="bg-[#141414] p-4 rounded-lg border border-gray-800/50 scroll-mt-24"
+                    >
                       {renderCommentBody(r, true, c.id)}
                     </div>
                   ))}

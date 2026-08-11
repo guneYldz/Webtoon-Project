@@ -114,13 +114,16 @@ def create_comment(
             preview = comment.content.strip()
             if len(preview) > 120:
                 preview = preview[:117] + "..."
+            # Yeni yanıtın id'siyle yorum yerine derin link
+            base_link = seri.get("link") or ""
+            deep_link = f"{base_link}#comment-{new_comment.id}" if base_link else None
             create_notification(
                 db,
                 user_id=parent.user_id,
                 type_="reply",
                 title=f"{current_user.username} yorumuna yanıt verdi",
                 message=preview,
-                link=seri.get("link"),
+                link=deep_link,
             )
             db.commit()
     

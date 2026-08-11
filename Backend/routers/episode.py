@@ -102,6 +102,23 @@ def create_episode(
         
         db.commit()
 
+    # Favorisinde bu webtoon olanlara bildirim
+    try:
+        from routers.notifications import notify_favorite_users_new_chapter
+        ch_label = f"#{episode_number:g}"
+        if title:
+            ch_label = f"#{episode_number:g} - {title}"
+        notify_favorite_users_new_chapter(
+            db,
+            webtoon_id=webtoon.id,
+            series_title=webtoon.title,
+            chapter_label=ch_label,
+            link=f"/webtoon/{webtoon.slug or webtoon.id}/bolum/{yeni_bolum.id}",
+        )
+        db.commit()
+    except Exception as e:
+        print(f"⚠️ Favori bildirim hatası (webtoon): {e}")
+
     return {
         "mesaj": "Bölüm Başarıyla Eklendi", 
         "bolum_id": yeni_bolum.id, 

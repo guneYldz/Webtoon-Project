@@ -170,7 +170,7 @@ export default function NotificationBell({ user }) {
                   <div className={`px-4 py-3 border-b border-gray-800/60 hover:bg-white/[0.03] transition ${!n.is_read ? "bg-purple-500/5" : ""}`}>
                     <div className="flex items-start gap-3">
                       <span className="text-lg shrink-0 mt-0.5">
-                        {n.type === "announcement" ? "📢" : "💬"}
+                        {n.type === "announcement" ? "📢" : n.type === "favorite_update" ? "📚" : "💬"}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold text-gray-100 leading-snug">{n.title}</p>
