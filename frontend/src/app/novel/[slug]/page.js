@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import FavoriteButton from "@/components/FavoriteButton";
+import ChapterListPaginated from "@/components/ChapterListPaginated";
 
 // --- 1. SEO AYARLARI (DİNAMİK METADATA) ---
 export async function generateMetadata({ params }) {
@@ -145,34 +146,13 @@ export default async function NovelDetail({ params }) {
           </span>
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {novel.chapters && novel.chapters.length > 0 ? (
-            // Bölümleri numaraya göre tersten sırala (En yeni en üstte)
-            [...novel.chapters].sort((a, b) => b.chapter_number - a.chapter_number).map((ch) => (
-              <Link
-                key={ch.id}
-                href={`/novel/${slug}/bolum/${ch.chapter_number}`}
-                title={`${ch.title || `Bölüm ${ch.chapter_number}`} Oku`}
-                className="bg-[#1e1e1e] p-5 rounded-2xl border border-gray-800 hover:border-purple-500/50 hover:bg-[#252525] transition-all flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-purple-900/20 rounded-xl flex items-center justify-center text-purple-400 font-bold group-hover:bg-purple-600 group-hover:text-white transition-all">
-                    {ch.chapter_number}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gray-200 group-hover:text-white transition">{ch.title}</h4>
-                    <span className="text-sm text-gray-500 uppercase tracking-widest group-hover:text-purple-400">Okumak için tıkla</span>
-                  </div>
-                </div>
-                <div className="text-gray-600 group-hover:text-purple-500 transition">➜</div>
-              </Link>
-            ))
-          ) : (
-            <div className="col-span-full text-center py-10 bg-[#1e1e1e] rounded-xl border border-dashed border-gray-800 text-gray-500">
-              Henüz bölüm yüklenmemiş. Bot çalışıyor mu? 🤖
-            </div>
-          )}
-        </div>
+        <ChapterListPaginated
+          items={novel.chapters || []}
+          type="novel"
+          basePath={`/novel/${slug}`}
+          accent="purple"
+          perPage={30}
+        />
       </div>
     </div>
   );

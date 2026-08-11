@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import FavoriteButton from "@/components/FavoriteButton"; // ✅ Button import edildi
+import ChapterListPaginated from "@/components/ChapterListPaginated";
 
 export default function WebtoonDetail() {
   const params = useParams();
@@ -118,43 +119,13 @@ export default function WebtoonDetail() {
           </span>
         </h3>
 
-        <div className="flex flex-col gap-3">
-          {webtoon.episodes && webtoon.episodes.length > 0 ? (
-            // Veritabanındaki bölümleri listele (Ters sıralı: En yeni en üstte)
-            [...webtoon.episodes].sort((a, b) => b.episode_number - a.episode_number).map((ep) => (
-              <Link
-                key={ep.id}
-                href={`/webtoon/${id}/bolum/${ep.id}`}
-                title={`${ep.title || `Bölüm ${ep.episode_number}`} Oku`}
-                className="bg-[#1e1e1e] p-4 rounded-xl border border-gray-800 hover:border-blue-500/50 hover:bg-[#252525] transition flex items-center justify-between group shadow-sm"
-              >
-                <div className="flex items-center gap-5">
-                  <div className="w-14 h-14 bg-[#121212] rounded-lg border border-gray-800 flex items-center justify-center text-gray-400 font-bold text-lg group-hover:text-blue-500 group-hover:border-blue-500/30 transition">
-                    #{ep.episode_number}
-                  </div>
-
-                  <div>
-                    <h4 className="font-bold text-gray-200 text-lg group-hover:text-blue-400 transition">
-                      {ep.title}
-                    </h4>
-                    <span className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                      📅 {new Date(ep.created_at).toLocaleDateString("tr-TR")}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-gray-500 group-hover:text-blue-500 font-medium text-sm flex items-center gap-2 transition px-4 py-2 rounded bg-[#121212] border border-gray-800 group-hover:border-blue-500/30">
-                  Oku <span className="text-lg leading-none">→</span>
-                </div>
-              </Link>
-            ))
-          ) : (
-            <div className="text-center py-20 bg-[#1e1e1e] rounded-xl border border-dashed border-gray-800 text-gray-500">
-              <span className="text-4xl block mb-2">🕸️</span>
-              Henüz hiç bölüm yüklenmemiş.
-            </div>
-          )}
-        </div>
+        <ChapterListPaginated
+          items={webtoon.episodes || []}
+          type="webtoon"
+          basePath={`/webtoon/${id}`}
+          accent="blue"
+          perPage={30}
+        />
       </div>
     </div>
   );
