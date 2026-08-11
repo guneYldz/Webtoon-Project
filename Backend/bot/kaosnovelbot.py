@@ -255,15 +255,27 @@ def scrape_chapter(url, current_ch_num):
 # 🤖 ÇEVİRİ VE YÜKLEME
 # ==========================================
 
+# Kalıcı olarak reddedilen (ban yemiş / geçersiz) key'lerin indexleri.
+# Bu key'ler oturum boyunca bir daha denenmez.
+_dead_keys = set()
+
 def call_gemini(prompt_text, label=""):
     """
     Gemini'yi çağır. 429/rate limit üzerinde key rotasyonu uygular.
+    403/PERMISSION_DENIED veren key'i ölü sayıp kalıcı olarak atlar.
     Başarılıysa metin döndürür, tüm denemeler biterse None döndürür.
     """
     global client
     max_cycles = 3
     for cycle in range(max_cycles):
         for _ in range(len(GOOGLE_API_KEYS)):
+            # Ölü olduğu bilinen key'i deneme, direkt sonrakine geç
+            if _current_key_index in _dead_keys:
+                if len(_dead_keys) >= len(GOOGLE_API_KEYS):
+                    print("❌ TÜM KEY'LER ÖLÜ (403/geçersiz)! Yeni key gerekiyor.")
+                    return None
+                rotate_key()
+                continue
             try:
                 client = get_gemini_client()
                 response = client.models.generate_content(
@@ -276,6 +288,12 @@ def call_gemini(prompt_text, label=""):
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
                     print(f"⚠️ Rate limit ({label}) - Key #{_current_key_index + 1} doldu, sonraki key'e geçiliyor...")
                     rotate_key()
+                elif "403" in err or "PERMISSION_DENIED" in err or "API_KEY_INVALID" in err or "API key not valid" in err:
+                    # KALICI key hatası: Google bu key'in projesini reddetmiş.
+                    # Bu key'i ölü işaretle, kalan key'lerle devam et.
+                    print(f"💀 Key #{_current_key_index + 1} ÖLÜ (403/geçersiz — Google erişimi reddetti). Bu key artık atlanacak.")
+                    _dead_keys.add(_current_key_index)
+                    rotate_key()
                 elif "503" in err or "UNAVAILABLE" in err or "500" in err or "INTERNAL" in err or "DEADLINE" in err:
                     # GEÇİCİ Google sunucu hatası (model yoğun vb.) — pes etme, bekle ve tekrar dene
                     print(f"⚠️ Geçici sunucu hatası ({label}): model yoğun/erişilemez. 30sn beklenip tekrar denenecek...")
@@ -284,7 +302,10 @@ def call_gemini(prompt_text, label=""):
                 else:
                     print(f"   ❌ API Hatası ({label}): {e}")
                     return None
-        print(f"⏳ Tüm key'ler rate limit'e çarptı. 65sn bekleniyor... (Döngü {cycle+1}/{max_cycles})")
+        if len(_dead_keys) >= len(GOOGLE_API_KEYS):
+            print("❌ TÜM KEY'LER ÖLÜ (403/geçersiz)! Yeni key gerekiyor.")
+            return None
+        print(f"⏳ Kullanılabilir key'ler rate limit'e çarptı. 65sn bekleniyor... (Döngü {cycle+1}/{max_cycles})")
         time.sleep(65)
     print("❌ Tüm API denemeleri başarısız.")
     return None
