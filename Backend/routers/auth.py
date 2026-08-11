@@ -146,6 +146,26 @@ def giris_yap(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = De
 def beni_getir(current_user: models.User = Depends(get_current_user)):
     return current_user
 
+# HERKESE AÇIK PROFİL ÖNİZLEME (yorumdaki isme/pp'ye tıklanınca)
+# Dikkat: e-posta gibi özel bilgiler ASLA döndürülmez.
+@router.get("/kullanici/{username}")
+def kullanici_profili(username: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+
+    comment_count = db.query(models.Comment).filter(models.Comment.user_id == user.id).count()
+    favorite_count = db.query(models.Favorite).filter(models.Favorite.user_id == user.id).count()
+
+    return {
+        "username": user.username,
+        "profile_image": user.profile_image,
+        "role": user.role,
+        "created_at": str(user.created_at),
+        "comment_count": comment_count,
+        "favorite_count": favorite_count,
+    }
+
 # --- PROFİL VE ŞİFRE İŞLEMLERİ ---
 
 @router.post("/update-profile-image")

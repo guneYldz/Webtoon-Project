@@ -604,6 +604,81 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== YORUM PANELİ ====================
+
+@router.get("/comments")
+async def list_comments(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    seri_type: Optional[str] = Query(None),  # "novel" | "webtoon"
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)  # AUTH
+):
+    from routers.comments import _seri_bilgisi, _COMMENT_LOAD_OPTIONS
+
+    query = db.query(models.Comment)\
+        .outerjoin(models.User, models.Comment.user_id == models.User.id)\
+        .options(*_COMMENT_LOAD_OPTIONS)
+
+    if search:
+        query = query.filter(
+            or_(
+                models.Comment.content.ilike(f"%{search}%"),
+                models.User.username.ilike(f"%{search}%")
+            )
+        )
+
+    if seri_type == "novel":
+        query = query.filter(models.Comment.novel_chapter_id.isnot(None))
+    elif seri_type == "webtoon":
+        query = query.filter(models.Comment.webtoon_episode_id.isnot(None))
+
+    total = query.count()
+    offset = (page - 1) * limit
+    comments = query.order_by(models.Comment.created_at.desc()).offset(offset).limit(limit).all()
+
+    data = []
+    for c in comments:
+        seri = _seri_bilgisi(c)
+        data.append({
+            "id": c.id,
+            "username": c.user.username if c.user else "Silinmiş Kullanıcı",
+            "user_id": c.user_id,
+            "content": c.content,
+            "created_at": str(c.created_at),
+            "parent_id": c.parent_id,
+            **seri,
+        })
+
+    return {
+        "status": "success",
+        "data": data,
+        "pagination": {"page": page, "limit": limit, "total": total, "pages": (total + limit - 1) // limit}
+    }
+
+
+@router.delete("/comments/{comment_id}")
+async def delete_comment_admin(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)  # AUTH
+):
+    comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Yorum bulunamadı")
+
+    try:
+        # Önce yanıtları sil (FK kısıtlaması)
+        db.query(models.Comment).filter(models.Comment.parent_id == comment_id).delete()
+        db.delete(comment)
+        db.commit()
+        return {"status": "success", "message": "Yorum ve yanıtları silindi"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== DASHBOARD STATS ====================
 
 @router.get("/stats")

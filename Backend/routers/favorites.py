@@ -99,10 +99,9 @@ def check_favorite_generic(type: str, id: int,
 # ==========================================
 # 3. FAVORİLERİMİ LİSTELE (PROFİL İÇİN)
 # ==========================================
-@router.get("/listele")
-def favorilerimi_getir(kullanici: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    favoriler = db.query(models.Favorite).filter(models.Favorite.user_id == kullanici.id).all()
-    
+def _favori_listesi(db: Session, user_id: int):
+    favoriler = db.query(models.Favorite).filter(models.Favorite.user_id == user_id).all()
+
     sonuc = []
     for fav in favoriler:
         if fav.webtoon:
@@ -121,5 +120,19 @@ def favorilerimi_getir(kullanici: models.User = Depends(get_current_user), db: S
                 "resim": fav.novel.cover_image,
                 "slug": f"/novel/{fav.novel.slug}"
             })
-        
+
     return sonuc
+
+@router.get("/listele")
+def favorilerimi_getir(kullanici: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _favori_listesi(db, kullanici.id)
+
+# ==========================================
+# 4. BİR KULLANICININ FAVORİLERİ (Herkese açık profil önizleme)
+# ==========================================
+@router.get("/kullanici/{username}")
+def kullanici_favorileri(username: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    return _favori_listesi(db, user.id)

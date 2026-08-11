@@ -4,21 +4,26 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { API } from "@/api";
 
-// Profil fotoğrafı varsa onu, yoksa baş harfli daireyi gösterir
+// Profil fotoğrafı varsa onu, yoksa baş harfli daireyi gösterir.
+// username varsa /kullanici/[username] profil önizlemesine tıklanabilir.
 function Avatar({ username, image, sizeClass = "w-10 h-10", textClass = "text-sm" }) {
-  if (image) {
-    return (
-      <img
-        src={`${API}/${image}`}
-        alt={username || "avatar"}
-        className={`${sizeClass} rounded-full object-cover shadow-md shrink-0 border border-gray-700`}
-      />
-    );
-  }
-  return (
+  const avatar = image ? (
+    <img
+      src={`${API}/${image}`}
+      alt={username || "avatar"}
+      className={`${sizeClass} rounded-full object-cover shadow-md shrink-0 border border-gray-700`}
+    />
+  ) : (
     <div className={`${sizeClass} rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold ${textClass} shadow-md shrink-0`}>
       {username ? username[0].toUpperCase() : "?"}
     </div>
+  );
+
+  if (!username) return avatar;
+  return (
+    <Link href={`/kullanici/${encodeURIComponent(username)}`} className="shrink-0 hover:opacity-80 transition" title={`${username} profili`}>
+      {avatar}
+    </Link>
   );
 }
 
@@ -195,7 +200,12 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
         {/* İçerik */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-blue-400 font-bold text-sm">{c.user_username}</span>
+            <Link
+              href={`/kullanici/${encodeURIComponent(c.user_username)}`}
+              className="text-blue-400 font-bold text-sm hover:underline"
+            >
+              {c.user_username}
+            </Link>
             <span className="text-sm text-gray-600">• {new Date(c.created_at).toLocaleDateString()}</span>
           </div>
           <p className="text-gray-300 text-sm leading-relaxed break-words">{c.content}</p>
