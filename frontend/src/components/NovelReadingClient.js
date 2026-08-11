@@ -135,9 +135,9 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
         if (hasHtmlTags) {
             return (
                 <div
-                    className={`novel-content mb-8 text-justify ${indentClass}`}
+                    className="novel-content mb-8 text-justify"
                     style={{
-                        ...paraStyle,
+                        lineHeight: readingStyle.lineHeight,
                         fontSize: `${readingStyle.fontSizePx}px`,
                         ["--novel-indent"]: readingStyle.indent ? "2rem" : "0",
                     }}
