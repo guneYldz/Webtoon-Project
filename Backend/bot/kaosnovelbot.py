@@ -259,13 +259,20 @@ def scrape_chapter(url, current_ch_num):
 # Bu key'ler oturum boyunca bir daha denenmez.
 _dead_keys = set()
 
+# 🤖 MODEL LİSTESİ (öncelik sırasıyla):
+# gemini-2.5-flash yeni projelere KAPATILDI (404 "no longer available to new users").
+# Google'ın resmi önerisi: gemini-3.6-flash. Bir model 404 verirse sıradakine geçilir.
+GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]
+_current_model_index = 0
+
 def call_gemini(prompt_text, label=""):
     """
     Gemini'yi çağır. 429/rate limit üzerinde key rotasyonu uygular.
     403/PERMISSION_DENIED veren key'i ölü sayıp kalıcı olarak atlar.
+    404 "model kullanılamıyor" hatasında listedeki sıradaki modele geçer.
     Başarılıysa metin döndürür, tüm denemeler biterse None döndürür.
     """
-    global client
+    global client, _current_model_index
     max_cycles = 3
     for cycle in range(max_cycles):
         for _ in range(len(GOOGLE_API_KEYS)):
@@ -279,7 +286,7 @@ def call_gemini(prompt_text, label=""):
             try:
                 client = get_gemini_client()
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model=GEMINI_MODELS[_current_model_index],
                     contents=prompt_text
                 )
                 return response.text.strip()
@@ -288,6 +295,14 @@ def call_gemini(prompt_text, label=""):
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
                     print(f"⚠️ Rate limit ({label}) - Key #{_current_key_index + 1} doldu, sonraki key'e geçiliyor...")
                     rotate_key()
+                elif "404" in err and ("no longer available" in err or "NOT_FOUND" in err or "not found" in err):
+                    # Model bu key/proje için kullanılamıyor → sıradaki modele geç
+                    if _current_model_index + 1 < len(GEMINI_MODELS):
+                        _current_model_index += 1
+                        print(f"🔁 Model kullanılamıyor ({label}) → '{GEMINI_MODELS[_current_model_index]}' modeline geçiliyor...")
+                    else:
+                        print(f"   ❌ Listedeki hiçbir model kullanılamıyor ({label}): {e}")
+                        return None
                 elif "403" in err or "PERMISSION_DENIED" in err or "API_KEY_INVALID" in err or "API key not valid" in err:
                     # KALICI key hatası: Google bu key'in projesini reddetmiş.
                     # Bu key'i ölü işaretle, kalan key'lerle devam et.
