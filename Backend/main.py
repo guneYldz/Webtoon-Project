@@ -38,12 +38,16 @@ with engine.connect() as _conn:
     except Exception:
         pass  # Kolon zaten varsa sessizce geç
 
+# ⚠️ root_path="/api" KALDIRILDI (Starlette 0.50 uyumu):
+# Nginx zaten /api önekini kırpıp backend'e öneksiz iletiyor.
+# Yeni Starlette, root_path ayarlıyken öneksiz gelen isteklerde static mount
+# yollarını yanlış hesaplıyordu → tüm resimler 404 veriyordu.
+# Docs'un doğru URL göstermesi için "servers" ayarı yeterli.
 app = FastAPI(
     title="Kaos Manga API",
-    root_path="/api",
     docs_url="/docs",
     openapi_url="/openapi.json",
-    servers=[{"url": "https://kaosmanga.net/api"}] # Burayı ekle
+    servers=[{"url": "https://kaosmanga.net/api"}]
 )
 
 # ==========================================
