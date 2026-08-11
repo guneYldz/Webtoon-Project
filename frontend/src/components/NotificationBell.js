@@ -115,11 +115,33 @@ export default function NotificationBell({ user }) {
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className="relative p-2 rounded-full text-gray-400 hover:text-white hover:bg-white/5 transition"
+        className="relative p-2 rounded-full text-gray-400 hover:text-gray-200 hover:bg-white/5 transition"
         aria-label="Bildirimler"
         title="Bildirimler"
       >
-        <span className="text-xl leading-none">🔔</span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-6 h-6"
+        >
+          {/* Zil gövdesi */}
+          <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 3.2.8 4.6 1.5 5.8.3.5-.1 1.2-.7 1.2H5.7c-.6 0-1-.7-.7-1.2.7-1.2 1.5-2.6 1.5-5.8z" />
+          {/* Tutamak */}
+          <path d="M10 4.2a2 2 0 0 1 4 0" />
+          {/* Çekiç / dil */}
+          <path d="M10.2 16.5a1.8 1.8 0 0 0 3.6 0" />
+          {/* Sol ses yayları */}
+          <path d="M3.5 9.2c-.6.9-.9 2-.9 3.1" />
+          <path d="M1.8 8.2c-.9 1.3-1.4 2.8-1.4 4.4" opacity="0.55" />
+          {/* Sağ ses yayları */}
+          <path d="M20.5 9.2c.6.9.9 2 .9 3.1" />
+          <path d="M22.2 8.2c.9 1.3 1.4 2.8 1.4 4.4" opacity="0.55" />
+        </svg>
         {unread > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-[#1a1a1a] shadow">
             {unread > 99 ? "99+" : unread}
