@@ -321,13 +321,26 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                         <button
                             type="button"
                             onClick={openSettings}
-                            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg text-gray-500/70 hover:text-gray-300 hover:bg-white/5 transition"
+                            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg text-gray-500/60 hover:text-gray-300 hover:bg-white/5 transition"
                             aria-label="Okuma ayarları"
                             title="Okuma ayarları"
                         >
-                            <span className="text-lg leading-none select-none opacity-70" aria-hidden>
-                                ⚙️
-                            </span>
+                            <svg
+                                className="w-6 h-6"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden
+                            >
+                                <path d="M12 6.5c-1.4-1.15-3.3-1.75-5.7-1.75H3.5v13.5c1 .3 2.2.55 3.5.55 2.15 0 3.9-.55 5-1.55" />
+                                <path d="M12 6.5c1.4-1.15 3.3-1.75 5.7-1.75H20.5v13.5c-1 .3-2.2.55-3.5.55-2.15 0-3.9-.55-5-1.55" />
+                                <path d="M12 6.5v11.3" />
+                                <path d="M5.8 8.6h3.2M5.8 10.8h3.2M5.8 13h3.2M5.8 15.2h2.2" />
+                                <path d="M15 8.6h3.2M15 10.8h3.2M15 13h3.2M15 15.2h2.2" />
+                            </svg>
                         </button>
 
                         <div className="flex flex-col items-center justify-center px-1 min-w-0 flex-1">
