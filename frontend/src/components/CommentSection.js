@@ -4,11 +4,32 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { API } from "@/api";
 
+// Profil fotoğrafı varsa onu, yoksa baş harfli daireyi gösterir
+function Avatar({ username, image, sizeClass = "w-10 h-10", textClass = "text-sm" }) {
+  if (image) {
+    return (
+      <img
+        src={`${API}/${image}`}
+        alt={username || "avatar"}
+        className={`${sizeClass} rounded-full object-cover shadow-md shrink-0 border border-gray-700`}
+      />
+    );
+  }
+  return (
+    <div className={`${sizeClass} rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold ${textClass} shadow-md shrink-0`}>
+      {username ? username[0].toUpperCase() : "?"}
+    </div>
+  );
+}
+
 export default function CommentSection({ type, itemId, episodeId = null, chapterId = null }) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Yanıt sistemi: hangi yorumun altında yanıt formu açık?
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState("");
 
   // --- Giriş Kontrolü ve Yorumları Çekme ---
   useEffect(() => {
@@ -48,22 +69,21 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
     }
   };
 
-  const handleCommentSubmit = async (e) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
+  // Ortak gönderim: parentId null ise ana yorum, doluysa yanıt
+  const submitComment = async (content, parentId = null) => {
+    if (!content.trim()) return false;
 
     const token = localStorage.getItem("token");
     if (!token) {
       alert("Lütfen önce giriş yapın!");
-      return;
+      return false;
     }
 
-    // Gönderilecek Veri Paketi
-    const payload = {
-      content: newComment,
-    };
+    const payload = { content };
 
-    // Hangi ID'yi göndereceğiz?
+    if (parentId) {
+      payload.parent_id = parentId;
+    }
     if (type === "webtoon") {
       payload.webtoon_episode_id = episodeId;
     } else {
@@ -83,23 +103,120 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
       const data = await res.json();
 
       if (res.ok) {
-        // Başarılıysa temizle ve yeniden yükle
-        setNewComment("");
         loadComments();
+        return true;
       } else {
-        // 🚨 HATA DÜZELTMESİ BURADA:
-        // Eskiden alert(data) yapıldığı için [object Object] diyordu.
-        // Şimdi data.detail diyerek içindeki mesajı okuyoruz.
         alert(data.detail || "Yorum gönderilirken bir hata oluştu.");
+        return false;
       }
-
     } catch (err) {
       console.error("Yorum hatası:", err);
       alert("Sunucuyla bağlantı kurulamadı.");
+      return false;
+    }
+  };
+
+  const handleCommentSubmit = async (e) => {
+    e.preventDefault();
+    const ok = await submitComment(newComment);
+    if (ok) setNewComment("");
+  };
+
+  const handleReplySubmit = async (e, parentId) => {
+    e.preventDefault();
+    const ok = await submitComment(replyText, parentId);
+    if (ok) {
+      setReplyText("");
+      setReplyingTo(null);
     }
   };
 
   if (loading) return <div className="text-gray-500 text-sm py-4">Yorumlar yükleniyor...</div>;
+
+  // --- Yorumları ağaca çevir: ana yorumlar + altlarındaki yanıtlar ---
+  const rootComments = comments.filter((c) => !c.parent_id);
+  const repliesByParent = {};
+  comments.forEach((c) => {
+    if (c.parent_id) {
+      if (!repliesByParent[c.parent_id]) repliesByParent[c.parent_id] = [];
+      repliesByParent[c.parent_id].push(c);
+    }
+  });
+  // Yanıtlar eskiden yeniye sıralansın (sohbet akışı gibi okunur)
+  Object.values(repliesByParent).forEach((list) =>
+    list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  );
+
+  const renderReplyForm = (parentId) => (
+    <form onSubmit={(e) => handleReplySubmit(e, parentId)} className="mt-3 relative">
+      <textarea
+        className="w-full bg-[#141414] text-gray-200 p-3 rounded-lg border border-gray-800 outline-none focus:border-blue-500/50 transition-all resize-none min-h-[70px] text-sm placeholder:text-gray-600"
+        placeholder="Yanıtını yaz..."
+        value={replyText}
+        onChange={(e) => setReplyText(e.target.value)}
+        autoFocus
+        required
+      />
+      <div className="flex justify-end gap-2 mt-2">
+        <button
+          type="button"
+          onClick={() => { setReplyingTo(null); setReplyText(""); }}
+          className="px-4 py-1.5 rounded-full text-xs font-bold text-gray-400 hover:text-white transition"
+        >
+          Vazgeç
+        </button>
+        <button
+          type="submit"
+          className="bg-white text-black hover:bg-blue-600 hover:text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow"
+        >
+          YANITLA
+        </button>
+      </div>
+    </form>
+  );
+
+  // isReply=true iken yanıt butonu KÖK yorumun id'sini kullanır;
+  // böylece yanıta verilen yanıt da aynı zincirin altında görünür.
+  const renderCommentBody = (c, isReply = false, rootId = null) => {
+    const replyTarget = rootId || c.id;
+    // Aynı zincirde iki form açılmasın diye form anahtarı yorumun kendi id'si
+    const formKey = c.id;
+
+    return (
+      <div className="flex gap-4">
+        {/* Avatar */}
+        <Avatar
+          username={c.user_username}
+          image={c.user_profile_image}
+          sizeClass={isReply ? "w-8 h-8" : "w-10 h-10"}
+          textClass={isReply ? "text-xs" : "text-sm"}
+        />
+
+        {/* İçerik */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-blue-400 font-bold text-sm">{c.user_username}</span>
+            <span className="text-sm text-gray-600">• {new Date(c.created_at).toLocaleDateString()}</span>
+          </div>
+          <p className="text-gray-300 text-sm leading-relaxed break-words">{c.content}</p>
+
+          {isAuthenticated && (
+            <button
+              onClick={() => {
+                setReplyingTo(replyingTo === formKey ? null : formKey);
+                setReplyText("");
+              }}
+              className="mt-2 text-xs font-bold text-gray-500 hover:text-blue-400 transition"
+            >
+              ↩ Yanıtla
+            </button>
+          )}
+
+          {replyingTo === formKey && renderReplyForm(replyTarget)}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section>
@@ -139,24 +256,23 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
 
       {/* Yorum Listesi */}
       <div className="space-y-4">
-        {comments.length === 0 ? (
+        {rootComments.length === 0 ? (
           <p className="text-gray-600 text-sm italic">Henüz yorum yapılmamış. İlk yorumu sen yap!</p>
         ) : (
-          comments.map((c) => (
-            <div key={c.id} className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-all flex gap-4">
-              {/* Avatar */}
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0">
-                {c.user_username ? c.user_username[0].toUpperCase() : "?"}
-              </div>
+          rootComments.map((c) => (
+            <div key={c.id} className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-all">
+              {renderCommentBody(c)}
 
-              {/* İçerik */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-blue-400 font-bold text-sm">{c.user_username}</span>
-                  <span className="text-sm text-gray-600">• {new Date(c.created_at).toLocaleDateString()}</span>
+              {/* Yanıtlar */}
+              {repliesByParent[c.id] && repliesByParent[c.id].length > 0 && (
+                <div className="mt-4 ml-6 md:ml-12 space-y-3 border-l-2 border-gray-800 pl-4">
+                  {repliesByParent[c.id].map((r) => (
+                    <div key={r.id} className="bg-[#141414] p-4 rounded-lg border border-gray-800/50">
+                      {renderCommentBody(r, true, c.id)}
+                    </div>
+                  ))}
                 </div>
-                <p className="text-gray-300 text-sm leading-relaxed">{c.content}</p>
-              </div>
+              )}
             </div>
           ))
         )}

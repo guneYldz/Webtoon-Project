@@ -160,6 +160,9 @@ class Comment(Base):
     novel_chapter_id = Column(Integer, ForeignKey("novel_chapters.id"), nullable=True) 
     webtoon_episode_id = Column(Integer, ForeignKey("webtoon_episodes.id"), nullable=True) 
     
+    # Yanıt sistemi: bu yorum başka bir yorumun cevabıysa onun id'si
+    parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
+    
     content = Column(Text, nullable=False)                              
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
