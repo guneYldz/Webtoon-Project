@@ -53,12 +53,19 @@ async function getData() {
 
     const combinedData = [...formattedWebtoons, ...formattedNovels];
 
-    // Sıralama (Güncellenme tarihine göre)
-    combinedData.sort((a, b) => {
-      const dateA = new Date(a.updated_at || a.created_at);
-      const dateB = new Date(b.updated_at || b.created_at);
-      return dateB - dateA;
-    });
+    // Sıralama: EN SON BÖLÜM yüklenme tarihine göre.
+    // (Serinin kendi created_at'i siteye EKLENME tarihidir, güncellenme değil.
+    //  updated_at kolonu ise veritabanında yok, hep null gelir.)
+    const getLastUpdate = (item) => {
+      const chapterDates = (item.latestChapters || [])
+        .map(c => new Date(c.created_at || 0).getTime())
+        .filter(t => t > 0);
+      if (chapterDates.length > 0) return Math.max(...chapterDates);
+      // Hiç bölümü yoksa serinin eklenme tarihine düş
+      return new Date(item.updated_at || item.created_at || 0).getTime() || 0;
+    };
+
+    combinedData.sort((a, b) => getLastUpdate(b) - getLastUpdate(a));
 
     // Vitrin (Slider) verisi (HomeSlider artık prop alıyor, ama biz yine de tüm veriyi gönderelim, o filtrelesin veya direk vitrin endpointinden çekelim)
     // HomeSlider.js mantığı değişti, Vitrin endpointini burada çekip ona yollamalıyız.

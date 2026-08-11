@@ -30,13 +30,15 @@ models.Base.metadata.create_all(bind=engine)
 # 2. Eksik kolonları güvenli biçimde ekle (ALTER TABLE IF NOT EXISTS)
 from sqlalchemy import text as sql_text
 with engine.connect() as _conn:
-    try:
-        _conn.execute(sql_text(
-            "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0"
-        ))
-        _conn.commit()
-    except Exception:
-        pass  # Kolon zaten varsa sessizce geç
+    for _stmt in [
+        "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
+        "ALTER TABLE comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES comments(id)",
+    ]:
+        try:
+            _conn.execute(sql_text(_stmt))
+            _conn.commit()
+        except Exception:
+            pass  # Kolon zaten varsa sessizce geç
 
 app = FastAPI(
     title="Kaos Manga API",

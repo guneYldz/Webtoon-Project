@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image"; // Image import edildi
 import { usePathname, useRouter } from "next/navigation";
+import { API } from "@/api";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
@@ -180,9 +181,17 @@ export default function Navbar() {
                   {user.username}
                 </span>
 
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white text-base font-bold shadow-md">
-                  {user.username ? user.username.charAt(0).toUpperCase() : "U"}
-                </div>
+                {user.profile_image ? (
+                  <img
+                    src={`${API}/${user.profile_image}`}
+                    alt={user.username || "Profil"}
+                    className="w-8 h-8 rounded-full object-cover shadow-md border border-gray-600"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white text-base font-bold shadow-md">
+                    {user.username ? user.username.charAt(0).toUpperCase() : "U"}
+                  </div>
+                )}
 
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-4 h-4 text-gray-400 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -334,9 +343,17 @@ export default function Navbar() {
               </button>
             ) : (
               <div className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white font-bold">
-                  {user.username ? user.username.charAt(0).toUpperCase() : "U"}
-                </div>
+                {user.profile_image ? (
+                  <img
+                    src={`${API}/${user.profile_image}`}
+                    alt={user.username || "Profil"}
+                    className="w-10 h-10 rounded-full object-cover border border-gray-600"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white font-bold">
+                    {user.username ? user.username.charAt(0).toUpperCase() : "U"}
+                  </div>
+                )}
                 <div className="flex flex-col overflow-hidden">
                   <span className="text-base font-bold text-white truncate">{user.username}</span>
                   <span className="text-base text-gray-500 capitalize">{user.role || 'user'}</span>
