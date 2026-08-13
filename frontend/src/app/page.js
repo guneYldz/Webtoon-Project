@@ -90,17 +90,20 @@ async function getData() {
   }
 }
 
+// 140-160 karakter arası açıklama: arama sonucunda kesilmeden görünür
+const HOME_TITLE = "Kaos Manga | Türkçe Webtoon, Manhwa ve Novel Oku";
+const HOME_DESCRIPTION =
+  "Kaos Manga'da en yeni webtoon, manhwa ve novelleri Türkçe ve ücretsiz oku. Trend seriler ve güncel bölümler her gün eklenir. Hemen okumaya başla!";
+
 export const metadata = {
-  title: "Kaos Manga | Ana Sayfa",
-  description:
-    "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler, popüler romanlar ve sürekli güncellenen bölümlerle dolu platformumuzu keşfet.",
+  title: { absolute: HOME_TITLE },
+  description: HOME_DESCRIPTION,
   alternates: {
     canonical: "https://kaosmanga.net",
   },
   openGraph: {
-    title: "Kaos Manga | Ana Sayfa",
-    description:
-      "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler, popüler romanlar ve sürekli güncellenen bölümlerle dolu platformumuzu keşfet.",
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
     url: "https://kaosmanga.net",
     images: [
       {
@@ -113,9 +116,8 @@ export const metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kaos Manga | Ana Sayfa",
-    description:
-      "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler ve popüler romanlar seni bekliyor.",
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
     images: ["/og-image.png"],
   },
 };
@@ -233,8 +235,10 @@ export default async function Home() {
                       <Image
                         src={`${API}/${w.cover_image}`}
                         alt={w.title}
-                        fill
-                        className="object-cover"
+                        width={48}
+                        height={64}
+                        loading="lazy"
+                        className="object-cover w-full h-full"
                         unoptimized={true}
                       />
                     </div>
@@ -256,6 +260,88 @@ export default async function Home() {
           </div>
 
         </div>
+
+        {/* SEO / PLATFORM TANITIM BÖLÜMÜ */}
+        <section className="mt-20 border-t border-gray-800 pt-12">
+          <div className="grid md:grid-cols-2 gap-10 text-gray-400 text-sm leading-relaxed">
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4">
+                Kaos Manga: Türkçe Webtoon ve Novel Platformu
+              </h2>
+              <p className="mb-4">
+                Kaos Manga, en popüler <strong className="text-gray-200">webtoon</strong>,{" "}
+                <strong className="text-gray-200">manhwa</strong> ve{" "}
+                <strong className="text-gray-200">web novel</strong> serilerini Türkçe ve tamamen
+                ücretsiz sunan bir dijital okuma platformudur. Aksiyon, fantastik, romantizm,
+                komedi ve daha birçok türde sürekli büyüyen arşivimizle, sevdiğin serilerin en
+                yeni bölümlerine tek tıkla ulaşabilirsin.
+              </p>
+              <p className="mb-4">
+                Titiz çeviri kalitesi ve düzenli bölüm güncellemeleriyle her gün yeni içerik
+                yayınlıyoruz. Okuma deneyimini kişiselleştirebileceğin gelişmiş okuyucu,
+                favori listesi, bölüm bildirimleri ve yorum sistemiyle topluluğun bir parçası
+                olabilirsin.
+              </p>
+              <p>
+                Yeni başlıyorsan{" "}
+                <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                  Keşfet
+                </Link>{" "}
+                sayfasından türe göre arama yapabilir,{" "}
+                <Link href="/seriler" title="Tüm Seriler" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                  Tüm Seriler
+                </Link>{" "}
+                listesinden arşivin tamamına göz atabilir veya yukarıdaki{" "}
+                <strong className="text-gray-200">Trend Listesi</strong>&apos;nden en çok okunan
+                serilere başlayabilirsin.
+              </p>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4">
+                Neden Kaos Manga&apos;da Okumalısın?
+              </h2>
+              <ul className="space-y-3">
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Güncel bölümler:</strong> Takip ettiğin
+                    webtoon ve novel serileri düzenli olarak güncellenir; yeni bölümler anında
+                    yayında olur.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Tamamen ücretsiz:</strong> Tüm webtoon,
+                    manhwa ve novel bölümlerini üyelik zorunluluğu olmadan okuyabilirsin.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Kişisel okuma deneyimi:</strong> Novel
+                    okuyucuda yazı boyutu, satır aralığı ve genişlik gibi ayarları kendine göre
+                    düzenleyebilirsin.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Aktif topluluk:</strong> Bölümlere yorum
+                    yapabilir, favorilerine ekleyebilir ve yeni bölüm bildirimleri alabilirsin.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Mobil uyumlu tasarım:</strong> Telefon,
+                    tablet veya bilgisayardan kesintisiz okuma deneyimi sunar.
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
       </div >
     </div >
   );

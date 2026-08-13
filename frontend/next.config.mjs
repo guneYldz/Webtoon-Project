@@ -35,6 +35,17 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async redirects() {
+    return [
+      // www → non-www 301 (SEO: tek tercih edilen alan adı)
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.kaosmanga.net" }],
+        destination: "https://kaosmanga.net/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

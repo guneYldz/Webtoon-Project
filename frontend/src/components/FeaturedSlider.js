@@ -42,6 +42,7 @@ const FeaturedSlider = ({ webtoon }) => {
             src={bgImage}
             alt={webtoon.title + " Banner"}
             fill
+            sizes="100vw"
             className="object-cover object-center"
             priority={true} // Slider'ın ilk resmi olduğu için öncelikli yükle
             unoptimized={true} // Docker/Localhost sorunları yaşamamak için (Gerekirse kaldırılabilir)
@@ -65,6 +66,7 @@ const FeaturedSlider = ({ webtoon }) => {
               src={`${API}/${webtoon.cover_image}`}
               alt={webtoon.title}
               fill
+              sizes="160px"
               className="object-cover"
             />
           </div>

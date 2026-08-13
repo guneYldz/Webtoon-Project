@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 // Metadata removed to fix "use client" error. See layout.js.
 
-export default function KesfetPage() {
+function KesfetContent() {
+  const searchParams = useSearchParams();
   const [allSeries, setAllSeries] = useState([]); // Webtoon + Novel birleşik liste
   const [filteredSeries, setFilteredSeries] = useState([]); // Filtrelenmiş sonuçlar
   const [loading, setLoading] = useState(true);
 
-  // Filtre State'leri
-  const [searchQuery, setSearchQuery] = useState("");
+  // Filtre State'leri (?q= parametresi: Google SearchAction desteği)
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [selectedGenre, setSelectedGenre] = useState("Tümü");
   const [selectedType, setSelectedType] = useState("Hepsi"); // Webtoon mu Novel mi?
 
@@ -156,6 +158,10 @@ export default function KesfetPage() {
                     <img
                       src={`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/${s.cover_image}`}
                       alt={s.title}
+                      width={400}
+                      height={600}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover transition duration-500 group-hover:scale-110"
                     />
                   </Link>
@@ -198,5 +204,20 @@ export default function KesfetPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// useSearchParams Suspense sınırı gerektirir (Next.js App Router)
+export default function KesfetPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg animate-pulse">
+          Kütüphane taranıyor...
+        </div>
+      }
+    >
+      <KesfetContent />
+    </Suspense>
   );
 }
