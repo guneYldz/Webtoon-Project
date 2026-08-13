@@ -168,7 +168,6 @@ export default async function Home() {
                           fill
                           className="object-cover transition duration-500 group-hover:scale-110"
                           sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
-                          unoptimized={true} // Docker network safe
                         />
                       </Link>
 
@@ -243,7 +242,6 @@ export default async function Home() {
                         height={64}
                         loading="lazy"
                         className="object-cover w-full h-full"
-                        unoptimized={true}
                       />
                     </div>
                     <div className="flex flex-col justify-center min-w-0">

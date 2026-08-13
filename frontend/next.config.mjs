@@ -3,7 +3,14 @@ const nextConfig = {
   compress: false, // Nginx gzip aktif oldugu icin devre disi
   transpilePackages: ['swiper'],
   images: {
+    // Optimize edilen görseller 31 gün önbellekte tutulur
+    minimumCacheTTL: 2678400,
     remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'kaosmanga.net',
+        pathname: '/api/static/**',
+      },
       {
         protocol: 'https',
         hostname: 'api.kaosmanga.net',

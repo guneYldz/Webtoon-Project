@@ -43,9 +43,9 @@ const FeaturedSlider = ({ webtoon }) => {
             alt={webtoon.title + " Banner"}
             fill
             sizes="100vw"
+            quality={70}
             className="object-cover object-center"
-            priority={true} // Slider'ın ilk resmi olduğu için öncelikli yükle
-            unoptimized={true} // Docker/Localhost sorunları yaşamamak için (Gerekirse kaldırılabilir)
+            priority={true} // Slider'ın ilk resmi olduğu için öncelikli yükle (LCP)
           />
         </div>
         {/* Arka planı biraz karart ki yazılar okunsun */}
