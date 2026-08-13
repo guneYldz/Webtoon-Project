@@ -15,17 +15,21 @@ async function getData() {
     // Eğer localde çalışıyorsanız ve başarısız olursa localhost deneriz (fallback)
     let webtoonRes, novelRes;
 
+    // 60 sn veri önbelleği: her ziyarette backend'i beklemek yerine
+    // cache'ten servis edilir, TTFB ciddi şekilde düşer (hız/SEO)
+    const fetchOpts = { next: { revalidate: 60 } };
+
     try {
       [webtoonRes, novelRes] = await Promise.all([
-        fetch(`${SERVER_API}/webtoons/`, { cache: 'no-store' }), // Güncel veri için no-store
-        fetch(`${SERVER_API}/novels/`, { cache: 'no-store' })
+        fetch(`${SERVER_API}/webtoons/`, fetchOpts),
+        fetch(`${SERVER_API}/novels/`, fetchOpts)
       ]);
     } catch (error) {
       console.log("Docker backend erişimi başarısız, localhost deneniyor...");
       // Fallback to localhost if backend service is not found (e.g. running locally without docker-compose)
       [webtoonRes, novelRes] = await Promise.all([
-        fetch(`https://kaosmanga.net/api/webtoons/`, { cache: 'no-store' }),
-        fetch(`https://kaosmanga.net/api/novels/`, { cache: 'no-store' })
+        fetch(`https://kaosmanga.net/api/webtoons/`, fetchOpts),
+        fetch(`https://kaosmanga.net/api/novels/`, fetchOpts)
       ]);
     }
 
@@ -72,7 +76,7 @@ async function getData() {
     // Ancak optimize olsun diye direk vitrin endpointini de çekelim.
     let vitrinData = [];
     try {
-      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, { cache: 'no-store' }).catch(() => fetch(`https://kaosmanga.net/api/vitrin`, { cache: 'no-store' }));
+      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, fetchOpts).catch(() => fetch(`https://kaosmanga.net/api/vitrin`, fetchOpts));
       if (vitrinRes.ok) {
         vitrinData = await vitrinRes.json();
       }

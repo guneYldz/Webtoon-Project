@@ -5,9 +5,10 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, EffectFade } from 'swiper/modules';
 
 // Swiper CSS dosyalarını import ediyoruz (Zorunlu)
-// import 'swiper/css';
-// import 'swiper/css/pagination';
-// import 'swiper/css/effect-fade'; // Eğer fade efekti istersen bunu kullanacağız
+// CDN yerine paketten: render-bloklayan harici CSS isteğini kaldırır (hız)
+import 'swiper/css';
+import 'swiper/css/pagination';
+import 'swiper/css/effect-fade';
 
 // Senin tasarım bileşenin
 import FeaturedSlider from "./FeaturedSlider";

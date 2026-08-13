@@ -127,14 +127,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="tr">
       <head>
-        {/* Swiper CSS CDN - Fix for Docker Build Error */}
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
         />
       </head>
-      <body style={{ backgroundColor: '#121212', color: '#e0e0e0' }} className={`${inter.className} ${cinzel.variable}`}>
+      {/* Renkler globals.css'te tanımlı; inline stil SEO araçlarında uyarı veriyordu */}
+      <body className={`${inter.className} ${cinzel.variable}`}>
         <GoogleAnalytics gaId="G-JQ0YHH7PL5" />
         {/* 2. Navbar'ı en tepeye koyduk */}
         <Navbar />
