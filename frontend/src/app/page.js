@@ -2,8 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import HomeSlider from "@/components/HomeSlider";
 
-// Force dynamic rendering to avoid build-time fetch errors
-export const dynamic = 'force-dynamic';
+// ISR: sayfa HTML'i 60 sn önbellekte tutulur. force-dynamic kullanildiginda
+// Next "no-store" gonderiyordu, bu yuzden ne tarayici ne de Cloudflare
+// sayfayi onbellekleyemiyordu (TTFB yuksek kaliyordu).
+export const revalidate = 60;
 import { API } from "@/api";
 
 // Server-side fetching için URL (Docker içinden backend'e erişim)

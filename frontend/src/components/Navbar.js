@@ -139,8 +139,7 @@ export default function Navbar() {
                 fill
                 className="object-contain"
                 sizes="64px"
-                quality={100}
-                priority
+                quality={80}
               />
             </div>
 

@@ -3,7 +3,7 @@ import { API } from "@/api";
 import FavoriteButton from "./FavoriteButton";
 import Image from "next/image"; // Image import
 
-const FeaturedSlider = ({ webtoon }) => {
+const FeaturedSlider = ({ webtoon, isFirst = false }) => {
   if (!webtoon) return null;
 
   // --- 1. TÜR VE ROTA BELİRLEME ---
@@ -42,10 +42,12 @@ const FeaturedSlider = ({ webtoon }) => {
             src={bgImage}
             alt={webtoon.title + " Banner"}
             fill
-            sizes="100vw"
-            quality={70}
+            sizes="(max-width: 768px) 100vw, 1200px"
+            quality={60}
             className="object-cover object-center"
-            priority={true} // Slider'ın ilk resmi olduğu için öncelikli yükle (LCP)
+            priority={isFirst}
+            loading={isFirst ? undefined : "lazy"}
+            fetchPriority={isFirst ? "high" : "auto"}
           />
         </div>
         {/* Arka planı biraz karart ki yazılar okunsun */}
@@ -67,6 +69,7 @@ const FeaturedSlider = ({ webtoon }) => {
               alt={webtoon.title}
               fill
               sizes="160px"
+              loading="lazy"
               className="object-cover"
             />
           </div>

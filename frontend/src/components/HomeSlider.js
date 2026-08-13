@@ -57,10 +57,11 @@ export default function HomeSlider({ slides = [] }) {
         }}
         className="w-full h-full"
       >
-        {slides.map((slide) => (
+        {slides.map((slide, index) => (
           <SwiperSlide key={`${slide.typeLabel}-${slide.id}`}>
-            {/* Senin tasarım bileşenin */}
-            <FeaturedSlider webtoon={slide} />
+            {/* Sadece ilk slayt öncelikli: diğerleri LCP ile bant genişliği
+                yarışına girmesin diye tembel yüklenir */}
+            <FeaturedSlider webtoon={slide} isFirst={index === 0} />
           </SwiperSlide>
         ))}
       </Swiper>
