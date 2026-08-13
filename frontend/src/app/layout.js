@@ -80,14 +80,16 @@ export const metadata = {
 
 import { Inter, Cinzel } from "next/font/google";
 
-const inter = Inter({ subsets: ["latin"], display: "swap", preload: true });
+// display: "optional" -> yazi tipi gecikirse tarayici yedek fontta kalir ve
+// sonradan takas yapmaz; "swap" metin kaymasina (CLS) yol aciyordu
+const inter = Inter({ subsets: ["latin"], display: "optional", preload: true });
 // Cinzel sadece baslik/logo yazisinda kullanildigi icin preload edilmiyor:
 // ilk boyamada Inter ile yaris etmesin (FCP/LCP)
 const cinzel = Cinzel({
   subsets: ["latin"],
   weight: ["700", "900"],
   variable: "--font-cinzel",
-  display: "swap",
+  display: "optional",
   preload: false,
   fallback: ["Georgia", "serif"],
 }); // Manga/Fantasy font
