@@ -127,7 +127,11 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
         if (!text) return null;
 
         const indentClass = readingStyle.indent ? "indent-8" : "indent-0";
-        const paraStyle = { lineHeight: readingStyle.lineHeight };
+        const paraStyle = {
+            lineHeight: readingStyle.lineHeight,
+            letterSpacing: `${readingStyle.letterSpacingEm}em`,
+            wordSpacing: `${readingStyle.wordSpacingEm}em`,
+        };
 
         // İçerik zaten HTML etiketleri içeriyorsa (editörden geliyorsa) direkt render et
         const hasHtmlTags = /<[a-z][\s\S]*>/i.test(text);
@@ -139,6 +143,8 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                     style={{
                         lineHeight: readingStyle.lineHeight,
                         fontSize: `${readingStyle.fontSizePx}px`,
+                        letterSpacing: `${readingStyle.letterSpacingEm}em`,
+                        wordSpacing: `${readingStyle.wordSpacingEm}em`,
                         ["--novel-indent"]: readingStyle.indent ? "2rem" : "0",
                     }}
                     dangerouslySetInnerHTML={{ __html: text }}
@@ -236,7 +242,11 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
             <main
                 className={`container mx-auto relative z-10 transition-[max-width] duration-300 ${
                     readingStyle.fullWidth ? "max-w-6xl" : "max-w-4xl"
-                } ${readingStyle.paddingClass}`}
+                }`}
+                style={{
+                    paddingLeft: `${readingStyle.paddingPx}px`,
+                    paddingRight: `${readingStyle.paddingPx}px`,
+                }}
             >
 
                 {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
@@ -266,6 +276,8 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                     style={{
                         fontSize: `${readingStyle.fontSizePx}px`,
                         lineHeight: readingStyle.lineHeight,
+                        letterSpacing: `${readingStyle.letterSpacingEm}em`,
+                        wordSpacing: `${readingStyle.wordSpacingEm}em`,
                     }}
                 >
                     {formatContent(chapter.content)}

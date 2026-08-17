@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import FavoriteButton from "@/components/FavoriteButton";
 import ChapterListPaginated from "@/components/ChapterListPaginated";
+import SeriesSummary from "@/components/SeriesSummary";
 
 // --- 1. SEO AYARLARI (DİNAMİK METADATA) ---
 export async function generateMetadata({ params }) {
@@ -102,6 +103,14 @@ export default async function NovelDetail({ params }) {
               <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-4 py-1.5 rounded-full text-sm">
                 ✍️ {novel.author || "Bilinmeyen Yazar"}
               </span>
+              {(novel.categories || []).map((cat) => (
+                <span
+                  key={cat.id || cat.name}
+                  className="bg-orange-500/10 text-orange-300 border border-orange-500/40 px-4 py-1.5 rounded-full text-sm font-bold"
+                >
+                  {cat.name}
+                </span>
+              ))}
             </div>
 
             {/* --- BUTONLAR ALANI --- */}
@@ -126,10 +135,7 @@ export default async function NovelDetail({ params }) {
               />
             </div>
 
-            {/* Özet Kutusu */}
-            <div className="bg-white/5 backdrop-blur-sm p-6 rounded-2xl border border-white/10">
-              <p className="text-gray-300 text-lg leading-relaxed italic">{novel.summary}</p>
-            </div>
+            <SeriesSummary text={novel.summary} boxed />
           </div>
         </div>
       </div>

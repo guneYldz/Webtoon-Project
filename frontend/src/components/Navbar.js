@@ -110,6 +110,10 @@ export default function Navbar() {
     router.push("/login");
   };
 
+  if (pathname?.startsWith("/admin") || pathname === "/login-admin") {
+    return null;
+  }
+
   return (
     <nav
       className={`bg-[#1a1a1a] border-b border-gray-800 z-[1000] h-20 max-h-20 shadow-md ${isReadingPage ? "relative" : "sticky top-0"

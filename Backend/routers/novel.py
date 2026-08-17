@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status, Request, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import desc, asc
 from typing import List
 import shutil
@@ -60,9 +60,9 @@ def novelleri_getir_no_slash(db: Session = Depends(get_db), limit: int = 100, sk
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
 def novel_detay(slug_or_id: str, response: Response, request: Request, db: Session = Depends(get_db)):
     if slug_or_id.isdigit():
-        novel = db.query(models.Novel).filter(models.Novel.id == int(slug_or_id), models.Novel.is_published == True).first()
+        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == int(slug_or_id), models.Novel.is_published == True).first()
     else:
-        novel = db.query(models.Novel).filter(models.Novel.slug == slug_or_id, models.Novel.is_published == True).first()
+        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.slug == slug_or_id, models.Novel.is_published == True).first()
 
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")

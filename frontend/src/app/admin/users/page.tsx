@@ -96,19 +96,19 @@ export default function UsersListPage() {
     };
 
     return (
-        <div className="p-6">
+        <div className="p-0 sm:p-2">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Kullanıcılar</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold">Kullanıcılar</h1>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow mb-6">
-                <form onSubmit={handleSearch} className="flex gap-4 flex-wrap">
+                <form onSubmit={handleSearch} className="flex gap-3 flex-col sm:flex-row flex-wrap">
                     <input
                         type="text"
                         placeholder="Kullanıcı veya email ara..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="flex-1 min-w-[200px] px-4 py-2 border rounded-lg"
+                        className="flex-1 min-w-0 px-4 py-2 border rounded-lg"
                     />
                     <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className="px-4 py-2 border rounded-lg">
                         <option value="">Tüm Roller</option>
@@ -122,8 +122,38 @@ export default function UsersListPage() {
             {loading && <div className="text-center py-8"><p className="text-gray-500">Yükleniyor...</p></div>}
 
             {!loading && (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <table className="w-full">
+                <>
+                    {/* Mobil kartlar */}
+                    <div className="md:hidden space-y-3">
+                        {users.map((user) => (
+                            <div key={user.id} className="bg-white rounded-xl shadow p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-gray-900 truncate">{user.username}</p>
+                                        <p className="text-sm text-gray-500 break-all">{user.email}</p>
+                                        <p className="text-xs text-gray-400 mt-1">ID {user.id}</p>
+                                    </div>
+                                    <span className={`shrink-0 px-2 py-1 text-xs rounded-full ${user.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
+                                        {user.role}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                                    {user.is_active ? <span className="text-green-600 text-sm">✓ Aktif</span> : <span className="text-red-600 text-sm">⛔ Yasaklı</span>}
+                                    <button
+                                        onClick={() => toggleBan(user.id, user.is_active)}
+                                        className={`text-sm font-semibold ${user.is_active ? "text-red-600" : "text-green-600"}`}
+                                    >
+                                        {user.is_active ? "Yasakla" : "Yasağı Kaldır"}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {users.length === 0 && <div className="text-center py-8 text-gray-500">Kullanıcı yok.</div>}
+                    </div>
+
+                    {/* Masaüstü tablo */}
+                    <div className="hidden md:block bg-white rounded-lg shadow overflow-x-auto">
+                    <table className="w-full min-w-[640px]">
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">ID</th>
@@ -161,7 +191,8 @@ export default function UsersListPage() {
                         </tbody>
                     </table>
                     {users.length === 0 && <div className="text-center py-8 text-gray-500">Kullanıcı yok.</div>}
-                </div>
+                    </div>
+                </>
             )}
 
             {pagination.pages > 1 && (

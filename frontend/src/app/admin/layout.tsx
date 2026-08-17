@@ -61,7 +61,7 @@ export default function AdminLayout({
     }
 
     return (
-        <div className="flex h-screen bg-gray-100 font-sans text-gray-900 overflow-hidden">
+        <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-100 font-sans text-gray-900 overflow-hidden fixed inset-0">
 
             {/* MOBİL ARKAKAPLAN (Overlay) */}
             {isSidebarOpen && (
@@ -73,7 +73,7 @@ export default function AdminLayout({
 
             {/* SIDEBAR */}
             <aside
-                className={`w-64 bg-gray-900 text-white flex flex-col shadow-xl fixed inset-y-0 left-0 z-30 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                className={`w-64 bg-gray-900 text-white flex flex-col shadow-xl fixed inset-y-0 left-0 z-30 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 h-full min-h-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
                     }`}
             >
                 <div className="p-6 border-b border-gray-800">
@@ -83,26 +83,26 @@ export default function AdminLayout({
                     <p className="text-sm text-gray-400 mt-1">Webtoon & Novel Manager</p>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                    <NavItem href="/admin" icon="📊" label="Dashboard" />
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0">
+                    <NavItem href="/admin" icon="📊" label="Dashboard" onNavigate={() => setIsSidebarOpen(false)} />
 
                     <div className="pt-4 pb-1 text-sm font-semibold text-gray-500 uppercase tracking-wider">
                         İçerik Yönetimi
                     </div>
-                    <NavItem href="/admin/webtoons" icon="🎨" label="Webtoonlar" />
-                    <NavItem href="/admin/webtoon-bolumleri" icon="🎬" label="Webtoon Bölümleri" />
-                    <NavItem href="/admin/novels" icon="📖" label="Noveller" />
-                    <NavItem href="/admin/novel-bolumleri" icon="📑" label="Novel Bölümleri" />
-                    <NavItem href="/admin/categories" icon="📂" label="Kategoriler" />
+                    <NavItem href="/admin/webtoons" icon="🎨" label="Webtoonlar" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/webtoon-bolumleri" icon="🎬" label="Webtoon Bölümleri" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/novels" icon="📖" label="Noveller" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/novel-bolumleri" icon="📑" label="Novel Bölümleri" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/categories" icon="📂" label="Kategoriler" onNavigate={() => setIsSidebarOpen(false)} />
 
 
 
                     <div className="pt-4 pb-1 text-sm font-semibold text-gray-500 uppercase tracking-wider">
                         Kullanıcılar
                     </div>
-                    <NavItem href="/admin/users" icon="👥" label="Üyeler" />
-                    <NavItem href="/admin/comments" icon="💬" label="Yorumlar" />
-                    <NavItem href="/admin/announcements" icon="📢" label="Duyurular" />
+                    <NavItem href="/admin/users" icon="👥" label="Üyeler" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/comments" icon="💬" label="Yorumlar" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/announcements" icon="📢" label="Duyurular" onNavigate={() => setIsSidebarOpen(false)} />
                 </nav>
 
                 <div className="p-4 border-t border-gray-800 space-y-2">
@@ -124,8 +124,8 @@ export default function AdminLayout({
             </aside>
 
             {/* MAIN CONTENT */}
-            <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-                <header className="bg-white shadow-sm h-16 min-h-[4rem] flex items-center px-4 md:px-8 justify-between sticky top-0 z-10 w-full">
+            <main className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden">
+                <header className="bg-white shadow-sm h-16 min-h-[4rem] flex items-center px-4 md:px-8 justify-between z-10 w-full shrink-0">
                     <div className="flex items-center gap-4">
                         {/* 🍔 HAMBURGER BUTONU (Sadece Mobilde) */}
                         <button
@@ -142,7 +142,7 @@ export default function AdminLayout({
                         </div>
                     </div>
                 </header>
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-gray-50">
+                <div className="admin-scroll flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 md:p-8 bg-gray-50">
                     {children}
                 </div>
             </main>
@@ -150,10 +150,11 @@ export default function AdminLayout({
     );
 }
 
-function NavItem({ href, icon, label }: { href: string; icon: string; label: string }) {
+function NavItem({ href, icon, label, onNavigate }: { href: string; icon: string; label: string; onNavigate?: () => void }) {
     return (
         <Link
             href={href}
+            onClick={onNavigate}
             className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-all duration-200 group"
         >
             <span className="text-xl group-hover:scale-110 transition-transform">{icon}</span>

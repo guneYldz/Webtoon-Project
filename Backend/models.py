@@ -49,6 +49,19 @@ class Category(Base):
         overlaps="webtoons,categories"
     )
 
+    novels = relationship(
+        "Novel",
+        secondary="novel_categories",
+        back_populates="categories",
+        overlaps="novel_links,category_novel_links",
+    )
+
+    novel_links = relationship(
+        "NovelCategory",
+        back_populates="category",
+        overlaps="novels,categories",
+    )
+
     def __str__(self):
         return self.name
 
@@ -260,8 +273,39 @@ class Novel(Base):
     chapters = relationship("NovelChapter", back_populates="novel", cascade="all, delete-orphan")
     banner_image = Column(String, nullable=True)
 
+    categories = relationship(
+        "Category",
+        secondary="novel_categories",
+        back_populates="novels",
+        overlaps="novel_links,category_novel_links",
+    )
+    category_links = relationship(
+        "NovelCategory",
+        back_populates="novel",
+        overlaps="categories,novels",
+    )
+
     def __str__(self):
         return self.title
+
+
+class NovelCategory(Base):
+    __tablename__ = "novel_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+
+    novel = relationship(
+        "Novel",
+        back_populates="category_links",
+        overlaps="categories,novels",
+    )
+    category = relationship(
+        "Category",
+        back_populates="novel_links",
+        overlaps="novels,categories",
+    )
 
 class NovelChapter(Base):
     __tablename__ = "novel_chapters"

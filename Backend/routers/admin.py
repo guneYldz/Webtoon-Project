@@ -9,6 +9,8 @@ import uuid
 from typing import Optional, List
 import traceback
 from routers.auth import get_current_admin  # ADMIN AUTH
+from sqlalchemy.orm import selectinload
+from fastapi.encoders import jsonable_encoder
 
 router = APIRouter(
     prefix="/admin",
@@ -20,6 +22,37 @@ UPLOAD_DIR_BANNERS = "static/banners"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR_BANNERS, exist_ok=True)
+
+
+def parse_category_ids(raw: Optional[str]) -> Optional[List[int]]:
+    """Form'dan '1,2,3' gelir. None = alanı değiştirme."""
+    if raw is None:
+        return None
+    raw = raw.strip()
+    if not raw:
+        return []
+    ids = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    return ids
+
+
+def set_item_categories(db: Session, item, category_ids: List[int]):
+    if not category_ids:
+        item.categories = []
+        return
+    cats = db.query(models.Category).filter(models.Category.id.in_(category_ids)).all()
+    item.categories = cats
+
+
+def with_categories(obj):
+    data = jsonable_encoder(obj)
+    for key in ("categories", "category_links", "webtoon_links", "novel_links", "chapters", "episodes", "favorites"):
+        data.pop(key, None)
+    data["categories"] = [{"id": c.id, "name": c.name} for c in (getattr(obj, "categories", None) or [])]
+    return data
 
 
 # ==================== WEBTOONS ====================
@@ -34,6 +67,7 @@ async def create_webtoon(
     source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
+    category_ids: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
@@ -81,11 +115,15 @@ async def create_webtoon(
             banner_image=banner_path
         )
 
+        ids = parse_category_ids(category_ids)
+        if ids is not None:
+            set_item_categories(db, new_webtoon, ids)
+
         db.add(new_webtoon)
         db.commit()
         db.refresh(new_webtoon)
 
-        return {"status": "success", "message": "Webtoon başarıyla oluşturuldu!", "data": new_webtoon}
+        return {"status": "success", "message": "Webtoon başarıyla oluşturuldu!", "data": with_categories(new_webtoon)}
 
     except Exception as e:
         print("❌ HATA OLUŞTU:")
@@ -156,10 +194,10 @@ async def get_webtoon(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
-    webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == webtoon_id).first()
+    webtoon = db.query(models.Webtoon).options(selectinload(models.Webtoon.categories)).filter(models.Webtoon.id == webtoon_id).first()
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
-    return {"status": "success", "data": webtoon}
+    return {"status": "success", "data": with_categories(webtoon)}
 
 
 @router.put("/webtoons/{webtoon_id}")
@@ -173,6 +211,7 @@ async def update_webtoon(
     source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
+    category_ids: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
@@ -210,11 +249,15 @@ async def update_webtoon(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(banner_image.file, buffer)
         webtoon.banner_image = file_path.replace("\\", "/")
+
+    ids = parse_category_ids(category_ids)
+    if ids is not None:
+        set_item_categories(db, webtoon, ids)
     
     try:
         db.commit()
         db.refresh(webtoon)
-        return {"status": "success", "message": "Webtoon güncellendi", "data": webtoon}
+        return {"status": "success", "message": "Webtoon güncellendi", "data": with_categories(webtoon)}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Güncelleme hatası: {str(e)}")
@@ -297,10 +340,10 @@ async def get_novel(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
-    novel = db.query(models.Novel).filter(models.Novel.id == novel_id).first()
+    novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == novel_id).first()
     if not novel:
         raise HTTPException(status_code=404, detail="Novel bulunamadı")
-    return {"status": "success", "data": novel}
+    return {"status": "success", "data": with_categories(novel)}
 
 
 @router.post("/novels")
@@ -314,6 +357,7 @@ async def create_novel(
     source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
+    category_ids: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
@@ -354,10 +398,14 @@ async def create_novel(
             banner_image=banner_path
         )
 
+        ids = parse_category_ids(category_ids)
+        if ids is not None:
+            set_item_categories(db, new_novel, ids)
+
         db.add(new_novel)
         db.commit()
         db.refresh(new_novel)
-        return {"status": "success", "message": "Novel oluşturuldu", "data": new_novel}
+        return {"status": "success", "message": "Novel oluşturuldu", "data": with_categories(new_novel)}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Hata: {str(e)}")
@@ -375,6 +423,7 @@ async def update_novel(
     source_url: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
+    category_ids: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
@@ -414,11 +463,15 @@ async def update_novel(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(banner_image.file, buffer)
         novel.banner_image = file_path.replace("\\", "/")
+
+    ids = parse_category_ids(category_ids)
+    if ids is not None:
+        set_item_categories(db, novel, ids)
     
     try:
         db.commit()
         db.refresh(novel)
-        return {"status": "success", "message": "Novel güncellendi", "data": novel}
+        return {"status": "success", "message": "Novel güncellendi", "data": with_categories(novel)}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

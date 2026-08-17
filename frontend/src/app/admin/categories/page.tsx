@@ -154,7 +154,7 @@ export default function CategoriesPage() {
             {loading && <div className="text-center py-8"><p className="text-gray-500">Yükleniyor...</p></div>}
 
             {!loading && (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>

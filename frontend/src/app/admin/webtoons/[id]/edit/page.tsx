@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import CategoryPicker from "@/components/CategoryPicker";
 
 export default function EditWebtoonPage({ params }: { params: { id: string } }) {
     const router = useRouter();
@@ -20,6 +21,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
 
     const [coverImage, setCoverImage] = useState<File | null>(null);
     const [bannerImage, setBannerImage] = useState<File | null>(null);
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
 
     const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
     const webtoonId = params.id;
@@ -49,6 +51,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
                         is_featured: w.is_featured || false,
                         source_url: w.source_url || "", // Load
                     });
+                    setSelectedCategoryIds((w.categories || []).map((c: any) => c.id));
                 }
             } catch (error) {
                 console.error("Webtoon yüklenemedi:", error);
@@ -73,6 +76,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
             form.append("is_published", formData.is_published.toString());
             form.append("is_featured", formData.is_featured.toString());
             form.append("source_url", formData.source_url || "");
+            form.append("category_ids", selectedCategoryIds.join(","));
 
             if (coverImage) {
                 form.append("cover_image", coverImage);
@@ -148,6 +152,17 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
                         value={formData.summary}
                         onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
                         className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+
+                {/* Kategoriler */}
+                <div>
+                    <label className="block text-sm font-medium mb-2">Kategoriler</label>
+                    <CategoryPicker
+                        api={API}
+                        token={typeof window !== "undefined" ? (sessionStorage.getItem("admin_token") || sessionStorage.getItem("access_token") || "") : ""}
+                        selectedIds={selectedCategoryIds}
+                        onChange={setSelectedCategoryIds}
                     />
                 </div>
 

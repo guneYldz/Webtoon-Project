@@ -95,5 +95,27 @@ div[class*="breadcrumb"] a:hover {
 .novel-content p {
   margin-bottom: 1.5rem;
   line-height: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
   text-indent: var(--novel-indent, 2rem);
+}
+
+.admin-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+input[type="range"].accent-gray-200 {
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type="range"].accent-gray-200::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #e5e5e5;
+  cursor: pointer;
 }

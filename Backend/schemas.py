@@ -47,6 +47,14 @@ class NovelChapterListSchema(BaseModel):
     class Config:
         from_attributes = True
 
+
+class CategoryOut(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 # ==========================================
 # 3. WEBTOON (MANGA) ŞEMALARI
 # ==========================================
@@ -85,6 +93,7 @@ class WebtoonCard(BaseModel):
 class WebtoonDetail(WebtoonCard):
     summary: Optional[str] = None
     source_url: Optional[str] = None
+    categories: List[CategoryOut] = []
     # episodes zaten WebtoonCard'dan miras geliyor
 
     class Config:
@@ -146,7 +155,8 @@ class NovelDetail(BaseModel):
     source_url: Optional[str] = None 
     
     # 🔥 DÜZELTİLDİ: NovelChapterBase yerine NovelChapterListSchema
-    chapters: List[NovelChapterListSchema] = [] 
+    chapters: List[NovelChapterListSchema] = []
+    categories: List[CategoryOut] = []
 
     class Config:
         from_attributes = True

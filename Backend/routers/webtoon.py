@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status, Response, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import desc
 from typing import List
 import shutil
@@ -62,11 +62,11 @@ def webtoonlari_getir(
 def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Session = Depends(get_db)):
     # Gelen veri sayı mı? (Örn: "1", "5")
     if id_or_slug.isdigit():
-        webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == int(id_or_slug), models.Webtoon.is_published == True).first()
+        webtoon = db.query(models.Webtoon).options(selectinload(models.Webtoon.categories)).filter(models.Webtoon.id == int(id_or_slug), models.Webtoon.is_published == True).first()
     
     # Yoksa yazı mı? (Örn: "shadow-slave")
     else:
-        webtoon = db.query(models.Webtoon).filter(models.Webtoon.slug == id_or_slug, models.Webtoon.is_published == True).first()
+        webtoon = db.query(models.Webtoon).options(selectinload(models.Webtoon.categories)).filter(models.Webtoon.slug == id_or_slug, models.Webtoon.is_published == True).first()
     
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import FavoriteButton from "@/components/FavoriteButton"; // ✅ Button import edildi
 import ChapterListPaginated from "@/components/ChapterListPaginated";
+import SeriesSummary from "@/components/SeriesSummary";
 
 export default function WebtoonDetail() {
   const params = useParams();
@@ -70,13 +71,21 @@ export default function WebtoonDetail() {
             <h1 className="text-4xl md:text-6xl font-black mb-4 drop-shadow-lg tracking-tight text-white">{webtoon.title}</h1>
 
             <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-6">
-              <span className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1 rounded text-sm font-bold">Webtoon</span>
-              <span className={`px-3 py-1 rounded text-sm font-bold border ${webtoon.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
+              <span className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-full text-sm font-bold">Webtoon</span>
+              <span className={`px-3 py-1 rounded-full text-sm font-bold border ${webtoon.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
                 {webtoon.status === 'ongoing' ? 'Devam Ediyor' : 'Tamamlandı'}
               </span>
-              <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-3 py-1 rounded text-sm flex items-center gap-2">
+              <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
                 👁️ {(webtoon.view_count || 0).toLocaleString()}
               </span>
+              {(webtoon.categories || []).map((cat) => (
+                <span
+                  key={cat.id || cat.name}
+                  className="bg-orange-500/10 text-orange-300 border border-orange-500/40 px-3 py-1 rounded-full text-sm font-bold"
+                >
+                  {cat.name}
+                </span>
+              ))}
             </div>
 
             {/* 👇 BUTONLAR ALANI (EKLENDİ) */}
@@ -100,9 +109,7 @@ export default function WebtoonDetail() {
               />
             </div>
 
-            <p className="text-gray-300 text-lg leading-relaxed max-w-4xl mb-6 drop-shadow-md">
-              {webtoon.summary}
-            </p>
+            <SeriesSummary text={webtoon.summary} boxed />
           </div>
         </div>
       </div>
