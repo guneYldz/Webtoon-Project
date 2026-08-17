@@ -2,17 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Koyu Tema Ayarları */
+/* Koyu antrasit üstte, aşağı doğru asil mora yumuşak geçiş */
+html {
+  background-color: #121212;
+}
 
-/* Koyu Tema Ayarları */
 body {
   margin: 0;
-  background-color: #121212;
-  /* Çok koyu gri (neredeyse siyah) */
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  background-color: transparent;
   color: #e0e0e0;
-  /* Yazılar açık gri */
   font-size: 16px;
-  /* SEO: Okunabilirlik için minimum 16px tavsiye edilir */
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    #121212 0%,
+    #151218 42%,
+    #1c152e 72%,
+    #2a1848 100%
+  );
 }
 
 /* Scrollbar (Kaydırma çubuğu) Güzelleştirme */

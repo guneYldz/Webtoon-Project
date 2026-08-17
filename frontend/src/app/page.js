@@ -132,7 +132,7 @@ export default async function Home() {
   const { allSeries, popularList, vitrinData } = await getData();
 
   return (
-    <div className="min-h-screen font-sans bg-[#121212] pb-20">
+    <div className="min-h-screen font-sans pb-20">
       {/* SEO H1 - Hidden from view but accessible to search engines */}
       <h1 className="sr-only">Kaos Manga - En İyi Webtoon ve Novelleri Türkçe Oku</h1>
 

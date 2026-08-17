@@ -34,10 +34,10 @@ export default function YenilerPage() {
     fetchData();
   }, []);
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg animate-pulse">Yükleniyor...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white text-lg animate-pulse">Yükleniyor...</div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] pb-20 font-sans">
+    <div className="min-h-screen pb-20 font-sans">
 
       {/* HEADER */}
       <div className="bg-[#1a1a1a] border-b border-gray-800 pt-10 pb-8 px-4">

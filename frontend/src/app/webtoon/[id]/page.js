@@ -33,8 +33,8 @@ export default function WebtoonDetail() {
       });
   }, [id]);
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg">Yükleniyor...</div>;
-  if (!webtoon) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">Webtoon Bulunamadı 😔</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white text-lg">Yükleniyor...</div>;
+  if (!webtoon) return <div className="min-h-screen flex items-center justify-center text-red-500">Webtoon Bulunamadı 😔</div>;
 
   // 👇 İLK BÖLÜMÜ BULMA MANTIĞI
   // Bölümleri küçükten büyüğe sırala ve ilkini al (Bölüm 1, Bölüm 0 vs.)
@@ -43,7 +43,7 @@ export default function WebtoonDetail() {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#121212] pb-20 font-sans">
+    <div className="min-h-screen pb-20 font-sans">
 
       {/* 1. ÜST KISIM (KAPAK & BİLGİ) */}
       <div className="relative bg-[#1a1a1a] text-white overflow-hidden shadow-2xl border-b border-gray-800">
@@ -54,7 +54,7 @@ export default function WebtoonDetail() {
         ></div>
 
         {/* İçeriği merkeze almak için gradient ekledik */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#161221] via-transparent to-transparent"></div>
 
         <div className="relative container mx-auto max-w-7xl px-4 py-16 flex flex-col md:flex-row gap-10 items-center md:items-start z-10">
           {/* Kapak Resmi */}

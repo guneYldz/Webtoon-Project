@@ -59,7 +59,7 @@ export default async function NovelDetail({ params }) {
   }
 
   // Eğer roman bulunamadıysa:
-  if (!novel) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">Roman Bulunamadı 😔</div>;
+  if (!novel) return <div className="min-h-screen flex items-center justify-center text-red-500">Roman Bulunamadı 😔</div>;
 
   // 👇 İLK BÖLÜMÜ BULMA MANTIĞI
   const firstChapter = novel.chapters && novel.chapters.length > 0
@@ -67,7 +67,7 @@ export default async function NovelDetail({ params }) {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#121212] pb-20 font-sans">
+    <div className="min-h-screen pb-20 font-sans">
 
       {/* ÜST KISIM (KAPAK & BİLGİLER) */}
       <div className="relative bg-[#1a1a1a] text-white overflow-hidden shadow-2xl border-b border-gray-800">
@@ -76,7 +76,7 @@ export default async function NovelDetail({ params }) {
           className="absolute inset-0 bg-cover bg-center opacity-20 blur-3xl transform scale-110"
           style={{ backgroundImage: `url(${process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net"}/${novel.cover_image})` }}
         ></div>
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#161221] via-transparent to-transparent"></div>
 
         <div className="relative container mx-auto max-w-7xl px-4 py-16 flex flex-col md:flex-row gap-10 items-center md:items-start z-10">
 

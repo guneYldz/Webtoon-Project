@@ -47,7 +47,7 @@ export default function FavoritesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#121212] py-20 px-4 md:px-8 font-sans">
+    <div className="min-h-screen py-20 px-4 md:px-8 font-sans">
       <div className="container mx-auto max-w-7xl">
 
         {/* ÜST BAŞLIK ALANI */}

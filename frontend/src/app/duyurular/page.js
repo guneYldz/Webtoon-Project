@@ -40,7 +40,7 @@ export default function DuyurularPage() {
   }, [loading, items]);
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] text-gray-200 pb-20">
+    <div className="min-h-screen text-gray-200 pb-20">
       <div className="container mx-auto max-w-3xl px-4 py-10">
         <div className="mb-10 border-b border-gray-800 pb-4">
           <h1 className="text-3xl font-black text-white flex items-center gap-3">

@@ -125,7 +125,7 @@ export default function ClientWebtoonReadingPage() {
 
     // --- GÖRÜNÜM KISMI (ESKİ KODUN AYNISI) ---
     return (
-        <div className={`min-h-screen bg-[#121212] text-gray-200 pb-40 ${lato.className}`}>
+        <div className={`min-h-screen text-gray-200 pb-40 ${lato.className}`}>
 
             <ReadingHero
                 title={`Bölüm ${episode.episode_number}`}
@@ -138,7 +138,7 @@ export default function ClientWebtoonReadingPage() {
             />
 
             {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
-            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mt-8 mb-8">
+            <div className="max-w-4xl mx-auto px-4 md:px-0 mt-8 mb-8">
                 <div className="flex justify-center">
                     <div className="relative w-full max-w-xs">
                         <select
@@ -185,7 +185,7 @@ export default function ClientWebtoonReadingPage() {
             </div>
 
             {/* 2. ÖNCEKİ - SERİ - SONRAKİ BUTONLARI (Alt Bölüm) */}
-            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mt-8 mb-8">
+            <div className="max-w-4xl mx-auto px-4 md:px-0 mt-8 mb-8">
                 <div className="flex items-center justify-between text-gray-400 font-medium text-sm md:text-base border-t border-b border-gray-800 py-4">
 
                     {/* Önceki Butonu */}
@@ -216,7 +216,7 @@ export default function ClientWebtoonReadingPage() {
             </div>
 
             {/* Yorum Alanı */}
-            <div className="mt-0 max-w-4xl mx-auto border-t border-gray-800 bg-[#121212] py-12 px-4 md:px-12">
+            <div className="mt-0 max-w-4xl mx-auto border-t border-gray-800 py-12 px-4 md:px-12">
                 <CommentSection
                     type="webtoon"
                     itemId={episode.webtoon_id}

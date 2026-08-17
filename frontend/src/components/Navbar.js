@@ -116,7 +116,7 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`bg-[#1a1a1a] border-b border-gray-800 z-[1000] h-20 max-h-20 shadow-md ${isReadingPage ? "relative" : "sticky top-0"
+      className={`bg-[#1a1a1a] border-b border-gray-800 z-[1000] h-24 max-h-24 shadow-md ${isReadingPage ? "relative" : "sticky top-0"
         }`}
     >
       <div className="container mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
@@ -136,14 +136,14 @@ export default function Navbar() {
 
           <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-4 group">
             {/* Logo - Optimized size */}
-            <div className="relative w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-105 transition duration-300">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 group-hover:scale-105 transition duration-300 overflow-hidden rounded-full">
               <Image
                 src="/logo.png"
                 alt="Kaos Manga Logo"
                 fill
-                className="object-contain"
-                sizes="64px"
-                quality={80}
+                className="object-cover scale-125"
+                sizes="80px"
+                quality={90}
               />
             </div>
 

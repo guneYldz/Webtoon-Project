@@ -75,10 +75,10 @@ function KesfetContent() {
     setFilteredSeries(result);
   }, [searchQuery, selectedGenre, selectedType, allSeries]);
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg animate-pulse">Kütüphane taranıyor...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white text-lg animate-pulse">Kütüphane taranıyor...</div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] pb-20 font-sans">
+    <div className="min-h-screen pb-20 font-sans">
 
       {/* HEADER BÖLÜMÜ */}
       <div className="bg-[#1a1a1a] border-b border-gray-800 pt-10 pb-8 px-4">
@@ -212,7 +212,7 @@ export default function KesfetPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg animate-pulse">
+        <div className="min-h-screen flex items-center justify-center text-white text-lg animate-pulse">
           Kütüphane taranıyor...
         </div>
       }
