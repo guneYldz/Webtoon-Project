@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Lato } from "next/font/google";
 import CommentSection from "@/components/CommentSection";
+import ChapterReactions from "@/components/ChapterReactions";
 import ReadingHero from "@/components/ReadingHero";
 import { API } from "@/api";
 
@@ -217,6 +218,7 @@ export default function ClientWebtoonReadingPage() {
 
             {/* Yorum Alanı */}
             <div className="mt-0 max-w-4xl mx-auto border-t border-gray-800 py-12 px-4 md:px-12">
+                <ChapterReactions type="webtoon" targetId={episode.id} />
                 <CommentSection
                     type="webtoon"
                     itemId={episode.webtoon_id}

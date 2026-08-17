@@ -84,7 +84,8 @@ class WebtoonCard(BaseModel):
     updated_at: Optional[datetime] = None
 
     # Anasayfada son bölümleri göstermek için
-    episodes: List[EpisodeListSchema] = [] 
+    episodes: List[EpisodeListSchema] = []
+    categories: List[CategoryOut] = []
     
     class Config:
         from_attributes = True
@@ -118,6 +119,7 @@ class NovelCard(BaseModel):
     
     # Anasayfada son bölümleri göstermek için
     chapters: List[NovelChapterListSchema] = []
+    categories: List[CategoryOut] = []
 
     class Config:
         from_attributes = True

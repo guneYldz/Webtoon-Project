@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation"; // useParams'ı props olarak alacağız
 import CommentSection from "@/components/CommentSection";
+import ChapterReactions from "@/components/ChapterReactions";
 import Link from "next/link";
 import Image from "next/image";
 import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
@@ -317,6 +318,7 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                 <RecommendedSeries type="novel" />
 
                 <div className="border-t border-gray-800 pt-12">
+                    <ChapterReactions type="novel" targetId={chapter.id} />
                     <CommentSection type="novel" itemId={chapter.novel_id} chapterId={chapter.id} />
                 </div>
             </div>

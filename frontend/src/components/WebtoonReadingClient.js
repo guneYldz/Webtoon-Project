@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import CommentSection from "@/components/CommentSection";
+import ChapterReactions from "@/components/ChapterReactions";
 import Link from "next/link";
 import Image from "next/image";
 import { Lato } from "next/font/google";
@@ -235,6 +236,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
                 <RecommendedSeries type="webtoon" />
 
                 <div className="mt-12">
+                    <ChapterReactions type="webtoon" targetId={episode.id} />
                     <CommentSection
                         type="webtoon"
                         itemId={episode.webtoon_id}

@@ -30,7 +30,10 @@ def get_novels_logic(db: Session, limit: int, skip: int):
     # O P T I M İ Z A S Y O N EKLENDİ (N+1 Sorunu Çözümü)
     from sqlalchemy.orm import selectinload
 
-    query = db.query(models.Novel).filter(models.Novel.is_published == True).options(selectinload(models.Novel.chapters))
+    query = db.query(models.Novel).filter(models.Novel.is_published == True).options(
+        selectinload(models.Novel.chapters),
+        selectinload(models.Novel.categories),
+    )
     novels = query.order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
     
     # 🚀 Frontend Performans Yaması:

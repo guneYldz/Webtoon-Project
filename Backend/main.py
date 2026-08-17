@@ -22,7 +22,7 @@ import uuid
 import shutil
 
 # --- ROUTERLARI ÇAĞIR ---
-from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications
+from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications, reactions
 
 # 1. Tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
@@ -264,10 +264,17 @@ app.include_router(likes.router)
 app.include_router(novel.router)
 app.include_router(admin_router.router)
 app.include_router(notifications.router)
+app.include_router(reactions.router)
 
 @app.get("/")
 def ana_sayfa():
     return {"durum": "Sistem Hazır", "mesaj": "Webtoon & Novel API Hazır! 🚀"}
+
+@app.get("/categories")
+def public_categories(db: Session = Depends(get_db)):
+    cats = db.query(models.Category).order_by(models.Category.name.asc()).all()
+    return [{"id": c.id, "name": c.name} for c in cats]
+
 
 @app.get("/vitrin")
 def get_vitrin(db: Session = Depends(get_db)):

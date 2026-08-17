@@ -3,45 +3,65 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-
-// Metadata removed to fix "use client" error. See layout.js.
+import { API } from "@/api";
 
 function KesfetContent() {
   const searchParams = useSearchParams();
-  const [allSeries, setAllSeries] = useState([]); // Webtoon + Novel birleşik liste
-  const [filteredSeries, setFilteredSeries] = useState([]); // Filtrelenmiş sonuçlar
+  const [allSeries, setAllSeries] = useState([]);
+  const [filteredSeries, setFilteredSeries] = useState([]);
+  const [genres, setGenres] = useState(["Tümü"]);
   const [loading, setLoading] = useState(true);
 
-  // Filtre State'leri (?q= parametresi: Google SearchAction desteği)
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
-  const [selectedGenre, setSelectedGenre] = useState("Tümü");
-  const [selectedType, setSelectedType] = useState("Hepsi"); // Webtoon mu Novel mi?
+  const [selectedGenre, setSelectedGenre] = useState(searchParams.get("kategori") || "Tümü");
+  const [selectedType, setSelectedType] = useState("Hepsi");
 
-  const genres = ["Tümü", "Aksiyon", "Macera", "Fantastik", "Dram", "Romantizm", "Isekai", "Komedi"];
-
-  // 1. Verileri Çek (Webtoon + Novel)
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [webtoonRes, novelRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/webtoons/`),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/novels/`)
+        const [webtoonRes, novelRes, catRes] = await Promise.all([
+          fetch(`${API}/webtoons/?limit=1000`),
+          fetch(`${API}/novels/?limit=1000`),
+          fetch(`${API}/categories`),
         ]);
 
         const webtoons = await webtoonRes.json();
         const novels = await novelRes.json();
+        let categoryNames = [];
+        if (catRes.ok) {
+          const cats = await catRes.json();
+          categoryNames = (Array.isArray(cats) ? cats : cats.data || [])
+            .map((c) => c.name)
+            .filter(Boolean);
+        }
 
-        // Verileri normalize edip birleştiriyoruz
         const combined = [
-          ...webtoons.map(w => ({ ...w, type: "WEBTOON", link: `/webtoon/${w.id}` })),
-          ...novels.map(n => ({ ...n, type: "NOVEL", link: `/novel/${n.slug}` }))
+          ...(Array.isArray(webtoons) ? webtoons : []).map((w) => ({
+            ...w,
+            type: "WEBTOON",
+            link: `/webtoon/${w.slug || w.id}`,
+          })),
+          ...(Array.isArray(novels) ? novels : []).map((n) => ({
+            ...n,
+            type: "NOVEL",
+            link: `/novel/${n.slug}`,
+          })),
         ];
 
+        const fromSeries = new Set();
+        combined.forEach((item) => {
+          (item.categories || []).forEach((c) => {
+            if (c?.name) fromSeries.add(c.name);
+          });
+        });
+        const chips = ["Tümü", ...new Set([...categoryNames, ...fromSeries])];
+
+        setGenres(chips);
         setAllSeries(combined);
         setFilteredSeries(combined);
-        setLoading(false);
       } catch (err) {
         console.error("Keşfet verileri çekilemedi:", err);
+      } finally {
         setLoading(false);
       }
     };
@@ -49,27 +69,23 @@ function KesfetContent() {
     fetchData();
   }, []);
 
-  // 2. Filtreleme Mantığı
   useEffect(() => {
     let result = allSeries;
 
-    // Arama Filtresi
     if (searchQuery.trim() !== "") {
-      result = result.filter((item) =>
-        item.title.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const q = searchQuery.toLowerCase();
+      result = result.filter((item) => item.title?.toLowerCase().includes(q));
     }
 
-    // Tür Filtresi (Webtoon mu Novel mi?)
     if (selectedType !== "Hepsi") {
-      result = result.filter(item => item.type === selectedType);
+      result = result.filter((item) => item.type === selectedType);
     }
 
-    // Kategori Filtresi (Örn: Fantastik)
     if (selectedGenre !== "Tümü") {
-      // Backend'de genre listesi varsa burası aktif olur. 
-      // Şimdilik başlıkta aratabiliriz veya dummy bırakabiliriz.
-      // result = result.filter(item => item.genres?.includes(selectedGenre));
+      const wanted = selectedGenre.toLowerCase();
+      result = result.filter((item) =>
+        (item.categories || []).some((c) => (c.name || c)?.toLowerCase() === wanted)
+      );
     }
 
     setFilteredSeries(result);
@@ -80,7 +96,6 @@ function KesfetContent() {
   return (
     <div className="min-h-screen pb-20 font-sans">
 
-      {/* HEADER BÖLÜMÜ */}
       <div className="bg-[#1a1a1a] border-b border-gray-800 pt-10 pb-8 px-4">
         <div className="container mx-auto max-w-7xl">
           <h1 className="text-3xl font-black text-white mb-6 flex items-center gap-3">
@@ -89,9 +104,7 @@ function KesfetContent() {
           </h1>
 
           <div className="flex flex-col gap-6">
-            {/* Üst Sıra: Arama ve Tip Seçimi */}
             <div className="flex flex-col md:flex-row gap-4">
-              {/* Arama Kutusu */}
               <div className="relative flex-1">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -107,13 +120,12 @@ function KesfetContent() {
                 />
               </div>
 
-              {/* Tip Seçici (Webtoon/Novel) */}
               <div className="flex bg-[#121212] border border-gray-700 p-1 rounded-xl">
                 {["Hepsi", "WEBTOON", "NOVEL"].map((t) => (
                   <button
                     key={t}
                     onClick={() => setSelectedType(t)}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition ${selectedType === t ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-white'}`}
+                    className={`px-6 py-2 rounded-lg text-sm font-bold transition ${selectedType === t ? "bg-blue-600 text-white" : "text-gray-500 hover:text-white"}`}
                   >
                     {t}
                   </button>
@@ -121,7 +133,6 @@ function KesfetContent() {
               </div>
             </div>
 
-            {/* Alt Sıra: Türler */}
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
               {genres.map((genre) => (
                 <button
@@ -140,7 +151,6 @@ function KesfetContent() {
         </div>
       </div>
 
-      {/* LİSTELEME ALANI */}
       <div className="container mx-auto max-w-7xl px-4 py-8">
 
         <div className="mb-6 flex justify-between items-center text-gray-400 text-sm">
@@ -152,11 +162,10 @@ function KesfetContent() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-10">
             {filteredSeries.map((s) => (
               <div key={`${s.type}-${s.id}`} className="group flex flex-col gap-3">
-                {/* Kart Resmi */}
                 <div className="relative aspect-[2/3] rounded-2xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-gray-500 transition-all duration-300">
                   <Link href={s.link}>
                     <img
-                      src={`${process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api"}/${s.cover_image}`}
+                      src={`${API}/${s.cover_image}`}
                       alt={s.title}
                       width={400}
                       height={600}
@@ -166,15 +175,13 @@ function KesfetContent() {
                     />
                   </Link>
 
-                  {/* Tür Etiketi */}
                   <div className="absolute top-3 left-3">
-                    <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${s.type === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                    <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${s.type === "WEBTOON" ? "bg-blue-600" : "bg-purple-600"}`}>
                       {s.type}
                     </span>
                   </div>
                 </div>
 
-                {/* Bilgiler */}
                 <div>
                   <Link href={s.link}>
                     <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-blue-400 transition">
@@ -182,8 +189,10 @@ function KesfetContent() {
                     </h3>
                   </Link>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-sm text-gray-500">{s.author || (s.type === 'WEBTOON' ? 'Stüdyo' : 'Yazar')}</span>
-                    <span className="text-sm text-gray-600">👁️ {s.view_count || 0}</span>
+                    <span className="text-sm text-gray-500 truncate pr-2">
+                      {(s.categories && s.categories[0]?.name) || s.author || (s.type === "WEBTOON" ? "Stüdyo" : "Yazar")}
+                    </span>
+                    <span className="text-sm text-gray-600 shrink-0">👁️ {s.view_count || 0}</span>
                   </div>
                 </div>
               </div>
@@ -193,7 +202,7 @@ function KesfetContent() {
           <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-gray-800 rounded-3xl bg-[#1a1a1a]">
             <div className="text-5xl mb-4">🛸</div>
             <h3 className="text-xl font-bold text-white mb-2">Buralarda kimse yok...</h3>
-            <p className="text-gray-500 text-sm">Aradığın seri henüz kütüphanemize eklenmemiş olabilir.</p>
+            <p className="text-gray-500 text-sm">Bu kategoride henüz seri yok veya arama eşleşmedi.</p>
             <button
               onClick={() => { setSearchQuery(""); setSelectedType("Hepsi"); setSelectedGenre("Tümü"); }}
               className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-500 transition"
@@ -207,7 +216,6 @@ function KesfetContent() {
   );
 }
 
-// useSearchParams Suspense sınırı gerektirir (Next.js App Router)
 export default function KesfetPage() {
   return (
     <Suspense

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean, Float, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -25,6 +25,7 @@ class User(Base):
     comments = relationship("Comment", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
     likes = relationship("Like", back_populates="user")
+    reactions = relationship("ChapterReaction", back_populates="user", cascade="all, delete-orphan")
 
     def __str__(self):
         return self.username
@@ -328,3 +329,25 @@ class NovelChapter(Base):
 
     def __str__(self):
         return f"{self.title} (Bölüm {self.chapter_number})"
+
+
+# 11. BÖLÜM TEPKİLERİ (webtoon bölümü veya novel bölümü)
+class ChapterReaction(Base):
+    __tablename__ = "chapter_reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    content_type = Column(String(20), nullable=False)  # webtoon | novel
+    target_id = Column(Integer, nullable=False)
+    reaction = Column(String(20), nullable=False)  # upvote, funny, love, surprised, angry, sad
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="reactions")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "content_type", "target_id", name="uq_user_chapter_reaction"),
+        Index("ix_reactions_target", "content_type", "target_id"),
+    )
+
+    def __str__(self):
+        return f"Reaction {self.reaction} by {self.user_id} on {self.content_type}:{self.target_id}"
