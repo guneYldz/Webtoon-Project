@@ -19,9 +19,12 @@ router = APIRouter(
 
 UPLOAD_DIR = "static/covers"
 UPLOAD_DIR_BANNERS = "static/banners"
+UPLOAD_DIR_ANNOUNCEMENTS = "static/announcements"
+ALLOWED_ANNOUNCEMENT_EXTS = {"jpg", "jpeg", "png", "webp", "gif"}
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR_BANNERS, exist_ok=True)
+os.makedirs(UPLOAD_DIR_ANNOUNCEMENTS, exist_ok=True)
 
 
 def parse_category_ids(raw: Optional[str]) -> Optional[List[int]]:
@@ -664,6 +667,7 @@ async def create_announcement(
     title: str = Form(...),
     message: str = Form(...),
     link: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
@@ -675,11 +679,23 @@ async def create_announcement(
     if not title or not message:
         raise HTTPException(status_code=400, detail="Başlık ve mesaj zorunlu")
 
+    image_path = None
+    if image and image.filename:
+        ext = image.filename.rsplit(".", 1)[-1].lower()
+        if ext not in ALLOWED_ANNOUNCEMENT_EXTS:
+            raise HTTPException(status_code=400, detail="Sadece jpg, png, webp veya gif yükleyebilirsin")
+        new_name = f"{uuid.uuid4()}.{ext}"
+        file_path = f"{UPLOAD_DIR_ANNOUNCEMENTS}/{new_name}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        image_path = file_path.replace("\\", "/")
+
     # 1) Duyuru kanalına kalıcı kayıt
     announcement = models.Announcement(
         title=title,
         message=message,
         link=link.strip() if link else None,
+        image=image_path,
         created_by=current_admin.id,
     )
     db.add(announcement)
@@ -707,6 +723,7 @@ async def create_announcement(
         "message": f"Duyuru yayınlandı ve {count} kullanıcıya bildirildi",
         "sent_to": count,
         "announcement_id": announcement.id,
+        "image": image_path,
     }
 
 

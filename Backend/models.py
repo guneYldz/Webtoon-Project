@@ -213,6 +213,7 @@ class Announcement(Base):
     title = Column(String(200), nullable=False)
     message = Column(Text, nullable=False)
     link = Column(String(500), nullable=True)
+    image = Column(String(500), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 

@@ -78,6 +78,7 @@ export default function NotificationBell({ user }) {
               type: "announcement",
               title: a.title,
               message: a.message,
+              image: a.image,
               link: `/duyurular#duyuru-${a.id}`,
               is_read: new Date(a.created_at).getTime() <= lastSeen,
               created_at: a.created_at,
@@ -254,6 +255,13 @@ export default function NotificationBell({ user }) {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold text-gray-100 leading-snug">{n.title}</p>
                         <p className="text-xs text-gray-400 mt-1 leading-relaxed break-words line-clamp-3">{n.message}</p>
+                        {n.image && (
+                          <img
+                            src={`${API}/${n.image}`}
+                            alt=""
+                            className="mt-2 w-full max-h-24 object-cover rounded-lg border border-gray-800"
+                          />
+                        )}
                         <p className="text-[11px] text-gray-600 mt-1.5">{timeAgo(n.created_at)}</p>
                       </div>
                       {!n.is_read && (

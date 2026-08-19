@@ -102,6 +102,7 @@ def list_announcements(limit: int = 50, db: Session = Depends(get_db)):
             "title": a.title,
             "message": a.message,
             "link": a.link,
+            "image": a.image,
             "created_at": str(a.created_at),
             "author": a.author.username if a.author else "Admin",
         }

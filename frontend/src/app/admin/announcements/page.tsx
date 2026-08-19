@@ -6,10 +6,18 @@ export default function AnnouncementsAdminPage() {
     const [title, setTitle] = useState("");
     const [message, setMessage] = useState("");
     const [link, setLink] = useState("");
+    const [image, setImage] = useState<File | null>(null);
+    const [preview, setPreview] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
 
     const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
+
+    const onPickImage = (file: File | null) => {
+        if (preview) URL.revokeObjectURL(preview);
+        setImage(file);
+        setPreview(file ? URL.createObjectURL(file) : null);
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -27,6 +35,7 @@ export default function AnnouncementsAdminPage() {
             form.append("title", title.trim());
             form.append("message", message.trim());
             if (link.trim()) form.append("link", link.trim());
+            if (image) form.append("image", image);
 
             const res = await fetch(`${API}/admin/announcements`, {
                 method: "POST",
@@ -39,6 +48,7 @@ export default function AnnouncementsAdminPage() {
                 setTitle("");
                 setMessage("");
                 setLink("");
+                onPickImage(null);
             } else {
                 alert(data.detail || "Duyuru gönderilemedi");
             }
@@ -53,7 +63,7 @@ export default function AnnouncementsAdminPage() {
         <div className="p-6 max-w-2xl">
             <h1 className="text-3xl font-bold mb-2">📢 Duyuru Gönder</h1>
             <p className="text-gray-500 text-sm mb-6">
-                Yazacağın duyuru tüm aktif kullanıcıların bildirim ziline düşer.
+                Yazacağın duyuru tüm aktif kullanıcıların bildirim ziline düşer. İstersen fotoğraf da ekleyebilirsin.
             </p>
 
             <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6 space-y-4">
@@ -79,6 +89,30 @@ export default function AnnouncementsAdminPage() {
                         className="w-full px-4 py-2 border rounded-lg resize-y"
                         required
                     />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Fotoğraf (opsiyonel)
+                    </label>
+                    <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        onChange={(e) => onPickImage(e.target.files?.[0] || null)}
+                        className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-50 file:text-purple-700 file:font-semibold hover:file:bg-purple-100"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP veya GIF. Duyurular sayfasında görünür.</p>
+                    {preview && (
+                        <div className="mt-3 relative">
+                            <img src={preview} alt="Önizleme" className="max-h-56 rounded-lg border object-contain bg-gray-50 w-full" />
+                            <button
+                                type="button"
+                                onClick={() => onPickImage(null)}
+                                className="mt-2 text-xs font-semibold text-red-600 hover:underline"
+                            >
+                                Fotoğrafı kaldır
+                            </button>
+                        </div>
+                    )}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

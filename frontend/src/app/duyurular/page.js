@@ -82,6 +82,20 @@ export default function DuyurularPage() {
                     <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap break-words">
                       {a.message}
                     </p>
+                    {a.image && (
+                      <a
+                        href={`${API}/${a.image}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block mt-4"
+                      >
+                        <img
+                          src={`${API}/${a.image}`}
+                          alt={a.title}
+                          className="w-full max-h-[28rem] object-contain rounded-xl border border-gray-800 bg-black/40"
+                        />
+                      </a>
+                    )}
                     {a.link && (
                       <Link
                         href={a.link}

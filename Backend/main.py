@@ -33,6 +33,7 @@ with engine.connect() as _conn:
     for _stmt in [
         "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
         "ALTER TABLE comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES comments(id)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image VARCHAR(500)",
     ]:
         try:
             _conn.execute(sql_text(_stmt))
