@@ -101,6 +101,24 @@ export default function AdminDashboard() {
                     </Link>
                 </div>
             </div>
+
+            <div className="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 className="text-xl font-bold mb-4">Bölüm Ekle</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Link href="/admin/bolum-ekle?series_type=WEBTOON" className="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <span className="text-3xl">📘</span>
+                        <span className="font-semibold text-gray-700">Webtoon Bölüm Ekle</span>
+                    </Link>
+                    <Link href="/admin/bolum-ekle?series_type=MANGA" className="flex items-center gap-4 p-4 border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all">
+                        <span className="text-3xl">📙</span>
+                        <span className="font-semibold text-gray-700">Manga Bölüm Ekle</span>
+                    </Link>
+                    <Link href="/admin/novel-bolum-ekle" className="flex items-center gap-4 p-4 border-2 border-purple-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all">
+                        <span className="text-3xl">📕</span>
+                        <span className="font-semibold text-gray-700">Novel Bölüm Ekle</span>
+                    </Link>
+                </div>
+            </div>
         </div>
     );
 }

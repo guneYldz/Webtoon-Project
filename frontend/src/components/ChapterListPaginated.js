@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
+import { formatChapterNumber } from "@/lib/chapterTitle";
 
 /**
  * Bölüm listesi: sayfalama + bölüm numarasına atlama.
@@ -60,11 +61,11 @@ export default function ChapterListPaginated({
   };
 
   const getNumber = (item) =>
-    type === "novel" ? item.chapter_number : item.episode_number;
+    formatChapterNumber(type === "novel" ? item.chapter_number : item.episode_number);
 
   const getTitle = (item) => {
-    if (type === "novel") return item.title || `Bölüm ${item.chapter_number}`;
-    return item.title || `Bölüm ${item.episode_number}`;
+    if (type === "novel") return item.title || `Bölüm ${getNumber(item)}`;
+    return item.title || `Bölüm ${getNumber(item)}`;
   };
 
   const handleJump = (e) => {
@@ -184,7 +185,7 @@ export default function ChapterListPaginated({
             <div
               className={`w-12 h-12 rounded-lg border border-gray-800 flex items-center justify-center text-sm font-bold shrink-0 transition-all ${accentClasses.numBg} group-hover:text-white`}
             >
-              {type === "webtoon" ? `#${getNumber(item)}` : getNumber(item)}
+              {getNumber(item)}
             </div>
             <div className="min-w-0 flex-1">
               <h4 className="font-bold text-gray-200 text-sm truncate group-hover:text-white transition">

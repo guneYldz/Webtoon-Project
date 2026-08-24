@@ -83,7 +83,7 @@ export default function ChapterReactions({ type, targetId }) {
         </p>
       </div>
 
-      <div className="flex justify-center gap-3 sm:gap-5 overflow-x-auto scrollbar-hide pb-2">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-2 gap-y-4 max-w-md sm:max-w-2xl mx-auto w-full px-1">
         {REACTIONS.map((r) => {
           const selected = mine === r.key;
           return (
@@ -92,12 +92,12 @@ export default function ChapterReactions({ type, targetId }) {
               type="button"
               onClick={() => onPick(r.key)}
               disabled={busy}
-              className="flex flex-col items-center gap-2 min-w-[56px] group"
+              className="flex flex-col items-center gap-1.5 min-w-0 w-full group"
               aria-pressed={selected}
               aria-label={r.label}
             >
               <span
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-full border backdrop-blur-md transition ${
+                className={`flex items-center justify-center gap-1 px-2 py-2 rounded-full border backdrop-blur-md transition w-full max-w-[5.75rem] ${
                   selected
                     ? "bg-blue-600/20 border-blue-500 text-white shadow-[0_0_16px_rgba(59,130,246,0.35)]"
                     : "bg-black/50 border-white/10 text-gray-200 hover:border-gray-500 hover:bg-black/70"
@@ -106,7 +106,7 @@ export default function ChapterReactions({ type, targetId }) {
                 <span className="text-lg leading-none">{r.emoji}</span>
                 <span className="text-sm font-bold tabular-nums">{counts[r.key] || 0}</span>
               </span>
-              <span className={`text-xs font-semibold ${selected ? "text-white" : "text-gray-400 group-hover:text-gray-200"}`}>
+              <span className={`text-xs font-semibold text-center leading-tight ${selected ? "text-white" : "text-gray-400 group-hover:text-gray-200"}`}>
                 {r.label}
               </span>
             </button>

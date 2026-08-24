@@ -10,6 +10,7 @@ import models
 import schemas
 from database import get_db
 from routers.auth import get_current_admin
+from utils.chapter_title import default_chapter_title, chapter_display_label
 
 
 # --- YARDIMCI: DOĞAL SIRALAMA (1, 2, 10 SORUNU İÇİN) ---
@@ -28,7 +29,7 @@ router = APIRouter(
 @router.post("/ekle", status_code=status.HTTP_201_CREATED)
 def create_episode(
     webtoon_id: int = Form(...),
-    title: str = Form(...),
+    title: str = Form(""),
     episode_number: float = Form(...),
     content_text: str = Form(None), 
     
@@ -52,6 +53,8 @@ def create_episode(
     
     if var_mi:
         raise HTTPException(status_code=400, detail="Bu bölüm numarası zaten var!")
+
+    title = default_chapter_title(title, episode_number)
 
     # C. Bölümü Veritabanına Kaydet
     yeni_bolum = models.WebtoonEpisode(
@@ -105,9 +108,7 @@ def create_episode(
     # Favorisinde bu webtoon olanlara bildirim
     try:
         from routers.notifications import notify_favorite_users_new_chapter
-        ch_label = f"#{episode_number:g}"
-        if title:
-            ch_label = f"#{episode_number:g} - {title}"
+        ch_label = chapter_display_label(title, episode_number)
         notify_favorite_users_new_chapter(
             db,
             webtoon_id=webtoon.id,

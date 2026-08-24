@@ -7,6 +7,7 @@ import HomeSlider from "@/components/HomeSlider";
 // sayfayi onbellekleyemiyordu (TTFB yuksek kaliyordu).
 export const revalidate = 60;
 import { API } from "@/api";
+import { formatChapterNumber } from "@/lib/chapterTitle";
 
 // Server-side fetching için URL (Docker içinden backend'e erişim)
 const SERVER_API = "http://backend:8000";
@@ -200,11 +201,11 @@ export default async function Home() {
                             <Link
                               key={idx}
                               href={`/${item.linkPath}/${item.slug || item.id}/bolum/${item.typeLabel === 'NOVEL' ? (chap.chapter_number || chap.id) : chap.id}`}
-                              title={`${item.title} - ${item.typeLabel === 'NOVEL' ? 'Bölüm' : 'Bölüm'} ${chap.chapter_number || chap.episode_number}`}
+                              title={`${item.title} - Bölüm ${formatChapterNumber(chap.chapter_number || chap.episode_number)}`}
                               className="flex items-center justify-between text-sm bg-[#1a1a1a] hover:bg-[#252525] border border-gray-800 rounded px-2 py-1.5 transition text-gray-300 hover:text-white hover:border-gray-600"
                             >
                               <span>
-                                {item.typeLabel === 'NOVEL' ? 'Bölüm' : '#'} {chap.chapter_number || chap.episode_number}
+                                Bölüm {formatChapterNumber(chap.chapter_number || chap.episode_number)}
                               </span>
                               <span className="text-sm text-gray-500">
                                 Yeni

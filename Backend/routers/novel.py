@@ -10,7 +10,8 @@ import uuid
 from database import get_db
 import models 
 import schemas
-from routers.auth import get_current_user 
+from routers.auth import get_current_user
+from utils.chapter_title import default_chapter_title, chapter_display_label 
 
 router = APIRouter(
     prefix="/novels",
@@ -139,7 +140,7 @@ def novel_ekle(
 def novel_bolum_ekle(
     novel_id: int = Form(...),
     chapter_number: float = Form(...),
-    title: str = Form(...),
+    title: str = Form(""),
     content: str = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -156,6 +157,8 @@ def novel_bolum_ekle(
             status_code=400, 
             detail=f"Bu roman için zaten Bölüm {chapter_number} mevcut!"
         )
+
+    title = default_chapter_title(title, chapter_number)
 
     yeni_bolum = models.NovelChapter(
         novel_id=novel_id,
@@ -175,7 +178,7 @@ def novel_bolum_ekle(
         from routers.notifications import notify_favorite_users_new_chapter
         novel = db.query(models.Novel).filter(models.Novel.id == novel_id).first()
         if novel:
-            ch_label = title if (title and str(chapter_number) in title) else f"Bölüm {chapter_number:g}"
+            ch_label = chapter_display_label(title, chapter_number)
             notify_favorite_users_new_chapter(
                 db,
                 novel_id=novel.id,
@@ -318,7 +321,8 @@ def novel_bolum_guncelle(
 
     # Güncellemeler
     if title is not None:
-        chapter.title = title
+        num = new_chapter_number if new_chapter_number is not None else chapter.chapter_number
+        chapter.title = default_chapter_title(title, num)
     if content is not None:
         chapter.content = content
     if is_published is not None:

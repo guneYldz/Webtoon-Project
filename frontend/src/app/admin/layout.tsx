@@ -95,6 +95,13 @@ export default function AdminLayout({
                     <NavItem href="/admin/novel-bolumleri" icon="📑" label="Novel Bölümleri" onNavigate={() => setIsSidebarOpen(false)} />
                     <NavItem href="/admin/categories" icon="📂" label="Kategoriler" onNavigate={() => setIsSidebarOpen(false)} />
 
+                    <div className="pt-4 pb-1 text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                        Bölüm Ekle
+                    </div>
+                    <NavItem href="/admin/bolum-ekle?series_type=WEBTOON" icon="➕" label="Webtoon Bölüm Ekle" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/bolum-ekle?series_type=MANGA" icon="➕" label="Manga Bölüm Ekle" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/novel-bolum-ekle" icon="➕" label="Novel Bölüm Ekle" onNavigate={() => setIsSidebarOpen(false)} />
+
 
 
                     <div className="pt-4 pb-1 text-sm font-semibold text-gray-500 uppercase tracking-wider">
