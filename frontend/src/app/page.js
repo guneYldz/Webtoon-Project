@@ -97,9 +97,9 @@ async function getData() {
 }
 
 // 140-160 karakter arası açıklama: arama sonucunda kesilmeden görünür
-const HOME_TITLE = "Kaos Manga | Türkçe Webtoon, Manhwa ve Novel Oku";
+const HOME_TITLE = "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku";
 const HOME_DESCRIPTION =
-  "Kaos Manga'da en yeni webtoon, manhwa ve novelleri Türkçe ve ücretsiz oku. Trend seriler ve güncel bölümler her gün eklenir. Hemen okumaya başla!";
+  "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir. Hemen okumaya başla!";
 
 export const metadata = {
   title: { absolute: HOME_TITLE },
@@ -116,7 +116,7 @@ export const metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Kaos Manga - Webtoon ve Novel Platformu",
+        alt: "Kaos Manga - Webtoon, Manga ve Novel Platformu",
       },
     ],
   },
@@ -134,7 +134,7 @@ export default async function Home() {
   return (
     <div className="min-h-screen font-sans pb-20">
       {/* SEO H1 - Hidden from view but accessible to search engines */}
-      <h1 className="sr-only">Kaos Manga - En İyi Webtoon ve Novelleri Türkçe Oku</h1>
+      <h1 className="sr-only">Kaos Manga - En İyi Webtoon, Manga ve Novelleri Türkçe Oku</h1>
 
       <div className="container mx-auto max-w-7xl px-4 py-8">
 
@@ -153,7 +153,7 @@ export default async function Home() {
                   <span className="w-2 h-8 bg-gradient-to-b from-blue-600 to-purple-600 rounded-full inline-block"></span>
                   Son Güncellenenler
                 </h2>
-                <Link href="/seriler" title="Tüm serileri gör" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
+                <Link href="/seriler" title="Tüm webtoon, manga ve novel serilerini gör" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
               </div>
 
               {/* KART GRİD YAPISI */}
@@ -270,10 +270,11 @@ export default async function Home() {
           <div className="grid md:grid-cols-2 gap-10 text-gray-400 text-sm leading-relaxed">
             <div>
               <h2 className="text-xl font-bold text-white mb-4">
-                Kaos Manga: Türkçe Webtoon ve Novel Platformu
+                Kaos Manga: Türkçe Webtoon, Manga ve Novel Platformu
               </h2>
               <p className="mb-4">
                 Kaos Manga, en popüler <strong className="text-gray-200">webtoon</strong>,{" "}
+                <strong className="text-gray-200">manga</strong>,{" "}
                 <strong className="text-gray-200">manhwa</strong> ve{" "}
                 <strong className="text-gray-200">web novel</strong> serilerini Türkçe ve tamamen
                 ücretsiz sunan bir dijital okuma platformudur. Aksiyon, fantastik, romantizm,
@@ -288,7 +289,7 @@ export default async function Home() {
               </p>
               <p>
                 Yeni başlıyorsan{" "}
-                <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
                   Keşfet
                 </Link>{" "}
                 sayfasından türe göre arama yapabilir,{" "}
@@ -309,7 +310,7 @@ export default async function Home() {
                   <span className="text-purple-500 font-bold">•</span>
                   <span>
                     <strong className="text-gray-200">Güncel bölümler:</strong> Takip ettiğin
-                    webtoon ve novel serileri düzenli olarak güncellenir; yeni bölümler anında
+                    webtoon, manga ve novel serileri düzenli olarak güncellenir; yeni bölümler anında
                     yayında olur.
                   </span>
                 </li>
@@ -317,7 +318,7 @@ export default async function Home() {
                   <span className="text-purple-500 font-bold">•</span>
                   <span>
                     <strong className="text-gray-200">Tamamen ücretsiz:</strong> Tüm webtoon,
-                    manhwa ve novel bölümlerini üyelik zorunluluğu olmadan okuyabilirsin.
+                    manga, manhwa ve novel bölümlerini üyelik zorunluluğu olmadan okuyabilirsin.
                   </span>
                 </li>
                 <li className="flex gap-3">

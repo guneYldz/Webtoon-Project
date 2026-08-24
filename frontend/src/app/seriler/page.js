@@ -48,7 +48,7 @@ export default function SerilerPage() {
             Tüm Seriler
           </h1>
           <p className="text-gray-400 text-sm">
-            Arşivimizdeki toplam <span className="text-white font-bold">{webtoons.length + novels.length}</span> seri alfabetik olarak listeleniyor.
+            Arşivimizdeki toplam <span className="text-white font-bold">{webtoons.length + novels.length}</span> webtoon, manga ve novel alfabetik olarak listeleniyor.
           </p>
         </div>
       </div>

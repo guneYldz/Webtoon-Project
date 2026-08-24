@@ -1,5 +1,5 @@
-import { API } from "@/api";
 import WebtoonReadingClient from "@/components/WebtoonReadingClient";
+import { seriesKindTr } from "@/lib/seriesType";
 
 // 1. Next.js'in özel SEO fonksiyonu
 export async function generateMetadata({ params }) {
@@ -12,18 +12,19 @@ export async function generateMetadata({ params }) {
     if (!res.ok) return { title: "Bölüm Bulunamadı | Kaos Manga" };
 
     const episode = await res.json();
+    const kind = seriesKindTr(episode.series_type);
 
     return {
-      title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} Oku | Kaos Manga`,
-      description: `${episode.webtoon_title} serisinin ${episode.episode_number}. bölümünü yüksek kalitede oku.`,
+      title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} ${kind} Oku`,
+      description: `${episode.webtoon_title} serisinin ${episode.episode_number}. bölümünü Kaos Manga'da Türkçe ${kind.toLowerCase()} olarak oku.`,
       alternates: {
         canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://kaosmanga.net"}/webtoon/${id}/bolum/${episodeId}`,
       },
       openGraph: {
-        title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} OKU`,
-        description: "En yeni webtoon bölümleri burada.",
+        title: `Bölüm ${episode.episode_number} - ${episode.webtoon_title} ${kind} Oku`,
+        description: `En yeni ${kind.toLowerCase()} bölümlerini Kaos Manga'da Türkçe oku.`,
         images: episode.webtoon_cover ? [`${apiUrl}/${episode.webtoon_cover}`] : [],
-        type: "book", // veya 'website'
+        type: "book",
       }
     };
   } catch (error) {
@@ -78,6 +79,7 @@ export default async function WebtoonReadingPage({ params }) {
     "isPartOf": {
       "@type": "ComicSeries",
       "name": episode.webtoon_title,
+      "genre": seriesKindTr(episode.series_type),
       "url": `${process.env.NEXT_PUBLIC_SITE_URL || "https://kaosmanga.net"}/webtoon/${id}`
     }
   } : null;

@@ -1,6 +1,6 @@
 export const metadata = {
-    title: "Tüm Seriler - Webtoon ve Novel Listesi",
-    description: "Kaos Manga'daki tüm Türkçe webtoon, manhwa ve novel serilerinin tam listesi. Alfabetik sırala, türe göre filtrele ve okumaya hemen başla.",
+    title: "Tüm Seriler - Webtoon, Manga ve Novel Listesi",
+    description: "Kaos Manga'daki tüm Türkçe webtoon, manga ve novel serilerinin tam listesi. Alfabetik sırala, türe göre filtrele ve okumaya hemen başla.",
     alternates: { canonical: "https://kaosmanga.net/seriler" },
 };
 

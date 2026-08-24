@@ -221,6 +221,11 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         "webtoon_title": bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
         "webtoon_slug": bolum.webtoon.slug if bolum.webtoon else "",
         "webtoon_cover": f"{request.base_url}{bolum.webtoon.cover_image}" if bolum.webtoon and bolum.webtoon.cover_image else None,
+        "series_type": (
+            getattr(bolum.webtoon.type, "value", bolum.webtoon.type)
+            if bolum.webtoon and getattr(bolum.webtoon, "type", None)
+            else "WEBTOON"
+        ),
         "title": bolum.title,
         "episode_number": bolum.episode_number,
         "created_at": bolum.created_at,

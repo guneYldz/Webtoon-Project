@@ -98,10 +98,13 @@ function KesfetContent() {
 
       <div className="bg-[#1a1a1a] border-b border-gray-800 pt-10 pb-8 px-4">
         <div className="container mx-auto max-w-7xl">
-          <h1 className="text-3xl font-black text-white mb-6 flex items-center gap-3">
+          <h1 className="text-3xl font-black text-white mb-2 flex items-center gap-3">
             <span className="bg-gradient-to-r from-blue-600 to-purple-600 w-10 h-10 rounded-lg flex items-center justify-center shadow-lg text-xl">🧭</span>
             Keşfet
           </h1>
+          <p className="text-gray-400 text-sm mb-6">
+            Türkçe webtoon, manga ve novel arşivinde tür ve isme göre ara.
+          </p>
 
           <div className="flex flex-col gap-6">
             <div className="flex flex-col md:flex-row gap-4">
@@ -114,7 +117,7 @@ function KesfetContent() {
                 <input
                   type="text"
                   className="w-full bg-[#121212] border border-gray-700 text-white rounded-xl py-3 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 transition outline-none"
-                  placeholder="Seri veya roman ara..."
+                  placeholder="Webtoon, manga veya novel ara..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />

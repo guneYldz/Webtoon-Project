@@ -46,7 +46,7 @@ export default function YenilerPage() {
             <span className="bg-gradient-to-r from-red-500 to-orange-600 w-10 h-10 rounded-lg flex items-center justify-center shadow-lg text-xl">🔥</span>
             Yeniler
           </h1>
-          <p className="text-gray-400 text-sm">Siteye eklenen son seriler ve güncellemeler.</p>
+          <p className="text-gray-400 text-sm">Siteye eklenen son webtoon, manga ve novel serileri.</p>
         </div>
       </div>
 

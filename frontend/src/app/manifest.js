@@ -1,9 +1,9 @@
 export default function manifest() {
   return {
-    name: "Kaos Manga - Türkçe Webtoon ve Novel Oku",
+    name: "Kaos Manga - Türkçe Webtoon, Manga ve Novel Oku",
     short_name: "Kaos Manga",
     description:
-      "Kaos Manga'da en yeni webtoon, manhwa ve novelleri Türkçe ve ücretsiz oku.",
+      "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku.",
     start_url: "/",
     display: "standalone",
     background_color: "#121212",

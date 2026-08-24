@@ -14,7 +14,7 @@ export default function NotFound() {
       <h1 className="text-2xl font-bold text-white mb-3">Sayfa Bulunamadı</h1>
       <p className="text-gray-400 text-sm max-w-md mb-8">
         Aradığın sayfa taşınmış, silinmiş veya hiç var olmamış olabilir. Ana
-        sayfaya dönerek en yeni webtoon ve novel bölümlerini keşfedebilirsin.
+        sayfaya dönerek en yeni webtoon, manga ve novel bölümlerini keşfedebilirsin.
       </p>
       <div className="flex flex-wrap gap-3 justify-center">
         <Link

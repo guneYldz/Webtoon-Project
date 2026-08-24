@@ -307,7 +307,7 @@ app.include_router(reactions.router)
 
 @app.get("/")
 def ana_sayfa():
-    return {"durum": "Sistem Hazır", "mesaj": "Webtoon & Novel API Hazır! 🚀"}
+    return {"durum": "Sistem Hazır", "mesaj": "Webtoon, Manga & Novel API Hazır! 🚀"}
 
 @app.get("/categories")
 def public_categories(db: Session = Depends(get_db)):

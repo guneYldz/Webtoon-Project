@@ -161,10 +161,10 @@ export default function Navbar() {
           <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Ana Sayfa
           </Link>
-          <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Keşfet
           </Link>
-          <Link href="/seriler" title="Tüm Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/seriler" title="Tüm Webtoon, Manga ve Novel Serileri" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Seriler
           </Link>
           <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
@@ -333,10 +333,10 @@ export default function Navbar() {
             <Link href="/" title="Ana Sayfa" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               🏠 Ana Sayfa
             </Link>
-            <Link href="/kesfet" title="Webtoon ve Novel Keşfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               🔍 Keşfet
             </Link>
-            <Link href="/seriler" title="Tüm Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/seriler" title="Tüm Webtoon, Manga ve Novel Serileri" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               📚 Seriler
             </Link>
             <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">

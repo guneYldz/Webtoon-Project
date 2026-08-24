@@ -12,21 +12,24 @@ export const viewport = {
 export const metadata = {
   metadataBase: new URL("https://kaosmanga.net"),
   title: {
-    default: "Kaos Manga | Türkçe Webtoon, Manhwa ve Novel Oku",
+    default: "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku",
     template: "%s | Kaos Manga",
   },
   // 140-160 karakter arası: arama sonucunda kesilmeden görünür
   description:
-    "Kaos Manga'da en yeni webtoon, manhwa ve novelleri Türkçe ve ücretsiz oku. Trend seriler ve güncel bölümler her gün eklenir. Hemen okumaya başla!",
+    "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir. Hemen okumaya başla!",
   keywords: [
     "webtoon oku",
+    "manga oku",
     "novel oku",
     "türkçe webtoon",
+    "türkçe manga",
     "türkçe novel",
+    "türkçe manga oku",
     "manhwa oku",
-    "manga oku",
-    "web roman",
+    "ücretsiz manga",
     "ücretsiz webtoon",
+    "web roman",
     "webnovel türkçe",
     "kaos manga",
   ],
@@ -60,24 +63,24 @@ export const metadata = {
     locale: "tr_TR",
     url: "https://kaosmanga.net",
     siteName: "Kaos Manga",
-    title: "Kaos Manga | Türkçe Webtoon, Manhwa ve Novel Oku",
+    title: "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku",
     description:
-      "Kaos Manga'da en yeni webtoon, manhwa ve novelleri Türkçe ve ücretsiz oku. Trend seriler ve güncel bölümler her gün eklenir.",
+      "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Kaos Manga - Webtoon ve Novel Platformu",
+        alt: "Kaos Manga - Webtoon, Manga ve Novel Platformu",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
     site: "@kaosmanga",
-    title: "Kaos Manga | Türkçe Webtoon, Manhwa ve Novel Oku",
+    title: "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku",
     description:
-      "Kaos Manga'da en yeni webtoon, manhwa ve novelleri Türkçe ve ücretsiz oku. Trend seriler ve güncel bölümler her gün eklenir.",
+      "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir.",
     images: ["/og-image.png"],
   },
 };
@@ -116,7 +119,12 @@ const siteJsonLd = {
       "@type": "WebSite",
       "@id": "https://kaosmanga.net/#website",
       name: "Kaos Manga",
-      alternateName: "Kaos Manga - Türkçe Webtoon ve Novel",
+      alternateName: [
+        "Kaos Manga - Türkçe Webtoon, Manga ve Novel",
+        "Kaos Manga - En İyi Webtoon, Manga ve Novelleri Türkçe Oku",
+      ],
+      description:
+        "Türkçe webtoon, manga ve novel oku. En yeni bölümler Kaos Manga'da ücretsiz.",
       url: "https://kaosmanga.net",
       inLanguage: "tr-TR",
       publisher: { "@id": "https://kaosmanga.net/#organization" },

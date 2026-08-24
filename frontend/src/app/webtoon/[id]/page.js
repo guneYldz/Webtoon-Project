@@ -34,7 +34,7 @@ export default function WebtoonDetail() {
   }, [id]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-white text-lg">Yükleniyor...</div>;
-  if (!webtoon) return <div className="min-h-screen flex items-center justify-center text-red-500">Webtoon Bulunamadı 😔</div>;
+  if (!webtoon) return <div className="min-h-screen flex items-center justify-center text-red-500">Seri bulunamadı 😔</div>;
 
   // 👇 İLK BÖLÜMÜ BULMA MANTIĞI
   // Bölümleri küçükten büyüğe sırala ve ilkini al (Bölüm 1, Bölüm 0 vs.)
@@ -61,7 +61,7 @@ export default function WebtoonDetail() {
           <div className="w-52 md:w-72 flex-shrink-0 rounded-xl overflow-hidden border border-gray-700 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
             <img
               src={`https://kaosmanga.net/api/${webtoon.cover_image}`}
-              alt={webtoon.title}
+              alt={`${webtoon.title} ${String(webtoon.type || "").toUpperCase().includes("MANGA") ? "manga" : "webtoon"} kapağı`}
               className="w-full h-auto object-cover"
             />
           </div>
@@ -97,7 +97,7 @@ export default function WebtoonDetail() {
                 <Link
                   href={`/webtoon/${id}/bolum/${firstEpisode.id}`}
                   className="px-8 py-3 rounded-full bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all flex items-center gap-2"
-                  title={`${webtoon.title} Türkçe Oku`}
+                  title={`${webtoon.title} Türkçe ${String(webtoon.type || "").toUpperCase().includes("MANGA") ? "Manga" : "Webtoon"} Oku`}
                 >
                   📖 Türkçe Oku
                 </Link>

@@ -5,6 +5,13 @@ export function seriesTypeLabel(type, typeLabel) {
   return "WEBTOON";
 }
 
+export function seriesKindTr(type, typeLabel) {
+  const label = seriesTypeLabel(type, typeLabel);
+  if (label === "NOVEL") return "Novel";
+  if (label === "MANGA") return "Manga";
+  return "Webtoon";
+}
+
 export function seriesTypeBadgeClass(type, typeLabel) {
   const label = seriesTypeLabel(type, typeLabel);
   if (label === "NOVEL") return "bg-purple-600";
