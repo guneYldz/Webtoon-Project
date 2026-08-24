@@ -96,7 +96,8 @@ def webtoon_ekle(
     resim: UploadFile = File(...), 
     # 👇 Banner resmi (İsteğe bağlı - None olabilir)
     banner: UploadFile = File(None), 
-    source_url: str = Form(None), # Kaynak linki eklendi
+    source_url: str = Form(None),
+    series_type: str = Form("WEBTOON"),
 
     db: Session = Depends(get_db),
     # Eğer admin sistemini henüz kurmadıysan burayı geçici olarak get_db yapabilirsin:
@@ -149,7 +150,7 @@ def webtoon_ekle(
         banner_image=banner_yolu, 
         status="ongoing",
         is_published=False,
-        type=models.ContentType.MANGA, # Enum Kullanımı
+        type=models.ContentType.MANGA if str(series_type).upper() == "MANGA" else models.ContentType.WEBTOON,
         source_url=source_url
     )
     

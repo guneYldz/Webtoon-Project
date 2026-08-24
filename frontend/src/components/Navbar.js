@@ -236,10 +236,10 @@ export default function Navbar() {
                   {(user.role === "admin" || user.role === "editor") && (
                     <>
                       <div className="px-4 py-1 text-base font-bold text-gray-500 uppercase tracking-wider mt-1">
-                        Webtoon Yönetimi
+                        Webtoon & Manga
                       </div>
                       <Link href="/admin/webtoon-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
-                        📚 Seri Ekle
+                        📚 Webtoon & Manga Ekle
                       </Link>
                       <Link href="/admin/bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
                         🎬 Bölüm Yükle

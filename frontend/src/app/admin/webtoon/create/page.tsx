@@ -12,7 +12,8 @@ export default function CreateWebtoonPage() {
         title: '',
         summary: '',
         status: 'ongoing',
-        is_published: false
+        is_published: false,
+        series_type: 'WEBTOON' as string
     });
 
     const [files, setFiles] = useState<{ cover: File | null; banner: File | null }>({
@@ -47,6 +48,7 @@ export default function CreateWebtoonPage() {
             data.append('summary', formData.summary);
             data.append('status', formData.status);
             data.append('is_published', String(formData.is_published)); // Backend boolean bekliyor ama form-data string gider
+            data.append('series_type', formData.series_type || 'WEBTOON');
 
             if (files.cover) data.append('cover_image', files.cover);
             if (files.banner) data.append('banner_image', files.banner);
@@ -71,10 +73,10 @@ export default function CreateWebtoonPage() {
                 throw new Error(result.detail || 'Bir hata oluştu');
             }
 
-            setMessage({ type: 'success', text: 'Webtoon başarıyla oluşturuldu! Yönlendiriliyorsunuz...' });
+            setMessage({ type: 'success', text: formData.series_type === 'MANGA' ? 'Manga başarıyla oluşturuldu!' : 'Webtoon başarıyla oluşturuldu!' });
 
             // Reset form
-            setFormData({ title: '', summary: '', status: 'ongoing', is_published: false });
+            setFormData({ title: '', summary: '', status: 'ongoing', is_published: false, series_type: 'WEBTOON' as string });
             setFiles({ cover: null, banner: null });
 
             // Redirect after short delay
@@ -90,7 +92,7 @@ export default function CreateWebtoonPage() {
     return (
         <div className="max-w-4xl mx-auto">
             <div className="mb-6 flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-gray-800">Yeni Webtoon Ekle</h1>
+                <h1 className="text-2xl font-bold text-gray-800">Webtoon & Manga Ekle</h1>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
@@ -103,7 +105,7 @@ export default function CreateWebtoonPage() {
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Title */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Webtoon Başlığı</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Seri Başlığı</label>
                         <input
                             type="text"
                             name="title"
@@ -125,11 +127,25 @@ export default function CreateWebtoonPage() {
                             required
                             rows={4}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                            placeholder="Webtoon konusunu buraya yazın..."
+                            placeholder="Serinin konusunu buraya yazın..."
                         />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Tür */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Tür</label>
+                            <select
+                                name="series_type"
+                                value={formData.series_type}
+                                onChange={handleInputChange}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                            >
+                                <option value="WEBTOON">Webtoon</option>
+                                <option value="MANGA">Manga</option>
+                            </select>
+                        </div>
+
                         {/* Status */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Durum</label>
@@ -156,7 +172,7 @@ export default function CreateWebtoonPage() {
                                 className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
                             />
                             <label htmlFor="is_published" className="ml-3 text-sm font-medium text-gray-700 cursor-pointer">
-                                Webtoon Yayında Olsun mu? (Public)
+                                Yayında olsun mu? (Public)
                             </label>
                         </div>
                     </div>
@@ -205,7 +221,7 @@ export default function CreateWebtoonPage() {
                 ${isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg transform hover:-translate-y-1'}
               `}
                         >
-                            {isLoading ? 'Kaydediliyor...' : 'Webtoon Oluştur 🚀'}
+                            {isLoading ? 'Kaydediliyor...' : (formData.series_type === 'MANGA' ? 'Manga Oluştur 🚀' : 'Webtoon Oluştur 🚀')}
                         </button>
                     </div>
 

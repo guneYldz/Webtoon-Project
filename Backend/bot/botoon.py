@@ -820,7 +820,7 @@ class AutoBot:
                 ) or ""
             ins = text("""
                 INSERT INTO webtoons (title, slug, summary, cover_image, status, type, view_count, is_featured, is_published, created_at)
-                VALUES (:t, :s, :sum, :c, 'ongoing', 'MANGA', 0, FALSE, TRUE, NOW())
+                VALUES (:t, :s, :sum, :c, 'ongoing', 'WEBTOON', 0, FALSE, TRUE, NOW())
                 RETURNING id
             """)
             result = conn.execute(ins, {"t": title, "s": slug, "sum": f"{title} özeti", "c": cover_path})

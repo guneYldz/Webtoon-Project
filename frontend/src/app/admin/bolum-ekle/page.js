@@ -180,7 +180,7 @@ export default function BolumEkle() {
 
           {/* Webtoon Seçimi (Ortak) */}
           <div>
-            <label className="block text-gray-400 font-medium mb-1">Hangi Webtoon?</label>
+            <label className="block text-gray-400 font-medium mb-1">Hangi Webtoon / Manga?</label>
             <select
               value={selectedWebtoon}
               onChange={(e) => setSelectedWebtoon(e.target.value)}
@@ -189,7 +189,7 @@ export default function BolumEkle() {
             >
               <option value="">Seçiniz...</option>
               {webtoons.map((w) => (
-                <option key={w.id} value={w.id}>{w.title}</option>
+                <option key={w.id} value={w.id}>{w.title} ({String(w.type || "WEBTOON").toUpperCase().includes("MANGA") ? "Manga" : "Webtoon"})</option>
               ))}
             </select>
           </div>

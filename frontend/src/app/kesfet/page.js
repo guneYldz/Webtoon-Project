@@ -38,7 +38,7 @@ function KesfetContent() {
         const combined = [
           ...(Array.isArray(webtoons) ? webtoons : []).map((w) => ({
             ...w,
-            type: "WEBTOON",
+            type: String(w.type || "WEBTOON").toUpperCase().includes("MANGA") ? "MANGA" : "WEBTOON",
             link: `/webtoon/${w.slug || w.id}`,
           })),
           ...(Array.isArray(novels) ? novels : []).map((n) => ({
@@ -121,7 +121,7 @@ function KesfetContent() {
               </div>
 
               <div className="flex bg-[#121212] border border-gray-700 p-1 rounded-xl">
-                {["Hepsi", "WEBTOON", "NOVEL"].map((t) => (
+                {["Hepsi", "WEBTOON", "MANGA", "NOVEL"].map((t) => (
                   <button
                     key={t}
                     onClick={() => setSelectedType(t)}
@@ -176,7 +176,7 @@ function KesfetContent() {
                   </Link>
 
                   <div className="absolute top-3 left-3">
-                    <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${s.type === "WEBTOON" ? "bg-blue-600" : "bg-purple-600"}`}>
+                    <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${s.type === "NOVEL" ? "bg-purple-600" : s.type === "MANGA" ? "bg-orange-600" : "bg-blue-600"}`}>
                       {s.type}
                     </span>
                   </div>

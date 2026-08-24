@@ -58,7 +58,7 @@ export default function SerilerPage() {
         {/* --- 🎬 TÜM WEBTOONLAR --- */}
         <section>
           <div className="flex items-center gap-4 mb-8">
-            <h2 className="text-2xl font-bold text-white uppercase tracking-wider">Webtoon Arşivi</h2>
+            <h2 className="text-2xl font-bold text-white uppercase tracking-wider">Webtoon / Manga Arşivi</h2>
             <div className="flex-1 h-px bg-gray-800"></div>
             <span className="text-gray-500 text-sm font-mono">{webtoons.length} SERİ</span>
           </div>
@@ -79,9 +79,14 @@ export default function SerilerPage() {
                       {w.status === 'ongoing' ? 'ONGOING' : 'TAMAMLANDI'}
                     </span>
                   </div>
+                  <div className="absolute top-2 right-2">
+                    <span className={`text-sm font-black px-1.5 py-0.5 rounded text-white shadow-sm ${String(w.type || "").toUpperCase() === "MANGA" ? "bg-orange-600" : "bg-blue-600"}`}>
+                      {String(w.type || "").toUpperCase() === "MANGA" ? "MANGA" : "WEBTOON"}
+                    </span>
+                  </div>
                 </div>
                 <div>
-                  <Link href={`/webtoon/${w.id}`} title={`${w.title} Webtoon Sayfasına Git`}>
+                  <Link href={`/webtoon/${w.id}`} title={`${w.title} Serisine Git`}>
                     <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-green-400 transition">{w.title}</h3>
                   </Link>
                   <div className="flex items-center gap-2 mt-1">

@@ -50,11 +50,24 @@ def set_item_categories(db: Session, item, category_ids: List[int]):
     item.categories = cats
 
 
+def parse_comic_type(raw: Optional[str]):
+    """Form'dan WEBTOON / MANGA. Geçersizse WEBTOON."""
+    if not raw:
+        return models.ContentType.WEBTOON
+    val = str(raw).strip().upper()
+    if val == "MANGA":
+        return models.ContentType.MANGA
+    return models.ContentType.WEBTOON
+
+
 def with_categories(obj):
     data = jsonable_encoder(obj)
     for key in ("categories", "category_links", "webtoon_links", "novel_links", "chapters", "episodes", "favorites"):
         data.pop(key, None)
     data["categories"] = [{"id": c.id, "name": c.name} for c in (getattr(obj, "categories", None) or [])]
+    t = getattr(obj, "type", None)
+    if t is not None:
+        data["type"] = getattr(t, "value", t)
     return data
 
 
@@ -68,6 +81,7 @@ async def create_webtoon(
     is_published: bool = Form(False),
     is_featured: bool = Form(False),
     source_url: Optional[str] = Form(None),
+    series_type: Optional[str] = Form("WEBTOON"),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
     category_ids: Optional[str] = Form(None),
@@ -115,7 +129,8 @@ async def create_webtoon(
             is_featured=is_featured,
             source_url=source_url,
             cover_image=cover_path,
-            banner_image=banner_path
+            banner_image=banner_path,
+            type=parse_comic_type(series_type),
         )
 
         ids = parse_category_ids(category_ids)
@@ -168,9 +183,16 @@ async def list_webtoons(
     webtoons = query.order_by(models.Webtoon.created_at.desc()).offset(offset).limit(limit).all()
     
     print(f"   ✅ Total found: {total}")
+    try:
+        encoded = jsonable_encoder(webtoons)
+        for i, w in enumerate(webtoons):
+            encoded[i]["type"] = getattr(w.type, "value", w.type) or "WEBTOON"
+        data = encoded
+    except Exception:
+        data = webtoons
     return {
         "status": "success",
-        "data": webtoons,
+        "data": data,
         "pagination": {
             "page": page,
             "limit": limit,
@@ -212,6 +234,7 @@ async def update_webtoon(
     is_published: Optional[bool] = Form(None),
     is_featured: Optional[bool] = Form(None),
     source_url: Optional[str] = Form(None),
+    series_type: Optional[str] = Form(None),
     cover_image: Optional[UploadFile] = File(None),
     banner_image: Optional[UploadFile] = File(None),
     category_ids: Optional[str] = Form(None),
@@ -236,6 +259,8 @@ async def update_webtoon(
         webtoon.is_featured = is_featured
     if source_url is not None:
         webtoon.source_url = source_url.strip() or None  # Boş string → NULL
+    if series_type is not None:
+        webtoon.type = parse_comic_type(series_type)
     
     if cover_image and cover_image.filename:
         ext = cover_image.filename.split(".")[-1]

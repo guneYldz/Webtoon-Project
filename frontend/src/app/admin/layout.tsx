@@ -80,7 +80,7 @@ export default function AdminLayout({
                     <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                         Admin Panel
                     </h1>
-                    <p className="text-sm text-gray-400 mt-1">Webtoon & Novel Manager</p>
+                    <p className="text-sm text-gray-400 mt-1">Webtoon & Manga & Novel</p>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0">
@@ -89,8 +89,8 @@ export default function AdminLayout({
                     <div className="pt-4 pb-1 text-sm font-semibold text-gray-500 uppercase tracking-wider">
                         İçerik Yönetimi
                     </div>
-                    <NavItem href="/admin/webtoons" icon="🎨" label="Webtoonlar" onNavigate={() => setIsSidebarOpen(false)} />
-                    <NavItem href="/admin/webtoon-bolumleri" icon="🎬" label="Webtoon Bölümleri" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/webtoons" icon="🎨" label="Webtoon & Manga" onNavigate={() => setIsSidebarOpen(false)} />
+                    <NavItem href="/admin/webtoon-bolumleri" icon="🎬" label="Bölümler (Webtoon/Manga)" onNavigate={() => setIsSidebarOpen(false)} />
                     <NavItem href="/admin/novels" icon="📖" label="Noveller" onNavigate={() => setIsSidebarOpen(false)} />
                     <NavItem href="/admin/novel-bolumleri" icon="📑" label="Novel Bölümleri" onNavigate={() => setIsSidebarOpen(false)} />
                     <NavItem href="/admin/categories" icon="📂" label="Kategoriler" onNavigate={() => setIsSidebarOpen(false)} />

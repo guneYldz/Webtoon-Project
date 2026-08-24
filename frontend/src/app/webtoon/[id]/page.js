@@ -71,7 +71,9 @@ export default function WebtoonDetail() {
             <h1 className="text-4xl md:text-6xl font-black mb-4 drop-shadow-lg tracking-tight text-white">{webtoon.title}</h1>
 
             <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-6">
-              <span className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1 rounded-full text-sm font-bold">Webtoon</span>
+              <span className={`px-3 py-1 rounded-full text-sm font-bold border ${String(webtoon.type || "").toUpperCase() === "MANGA" ? "bg-orange-600/20 text-orange-400 border-orange-600/50" : "bg-blue-600/20 text-blue-400 border-blue-600/50"}`}>
+                {String(webtoon.type || "").toUpperCase() === "MANGA" ? "Manga" : "Webtoon"}
+              </span>
               <span className={`px-3 py-1 rounded-full text-sm font-bold border ${webtoon.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
                 {webtoon.status === 'ongoing' ? 'Devam Ediyor' : 'Tamamlandı'}
               </span>

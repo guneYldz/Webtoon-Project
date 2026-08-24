@@ -95,20 +95,20 @@ export default function WebtoonChaptersPage() {
 
     return (
         <div className="space-y-8">
-            <h1 className="text-3xl font-bold text-gray-800 border-b pb-4">Webtoon Bölüm Yönetimi</h1>
+            <h1 className="text-3xl font-bold text-gray-800 border-b pb-4">Webtoon / Manga Bölüm Yönetimi</h1>
 
             {/* Webtoon Selection */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Webtoon Seçin</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Webtoon / Manga Seçin</label>
                 <select
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                     value={selectedWebtoon}
                     onChange={(e) => setSelectedWebtoon(e.target.value)}
                 >
-                    <option value="">-- Bir Webtoon Seçin --</option>
+                    <option value="">-- Bir seri seçin --</option>
                     {webtoons.map((webtoon) => (
                         <option key={webtoon.id} value={webtoon.id}>
-                            {webtoon.title}
+                            {webtoon.title} ({String(webtoon.type || "WEBTOON").toUpperCase().includes("MANGA") ? "Manga" : "Webtoon"})
                         </option>
                     ))}
                 </select>

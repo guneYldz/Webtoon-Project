@@ -10,15 +10,16 @@ const FeaturedSlider = ({ webtoon, isFirst = false }) => {
   // Backend'den gelen veriye göre Roman mı Webtoon mu karar verelim.
   // Hem 'type' parametresine hem de 'typeLabel'a bakıyoruz, garanti olsun.
   const isNovel = webtoon.type === 'novel' || (webtoon.typeLabel && webtoon.typeLabel.toUpperCase() === 'NOVEL');
+  const isManga = !isNovel && String(webtoon.typeLabel || webtoon.type || "").toUpperCase() === "MANGA";
 
   const routeType = isNovel ? 'novel' : 'webtoon';
-  const labelText = isNovel ? 'NOVEL' : 'WEBTOON';
+  const labelText = isNovel ? 'NOVEL' : isManga ? 'MANGA' : 'WEBTOON';
 
-  // --- 2. RENK AYARLARI ---
-  // Roman için Mor, Webtoon için Mavi tema
   const badgeClass = isNovel
     ? "bg-purple-600 shadow-purple-900/50"
-    : "bg-blue-600 shadow-blue-900/50";
+    : isManga
+      ? "bg-orange-600 shadow-orange-900/50"
+      : "bg-blue-600 shadow-blue-900/50";
 
   // --- 3. RESİM MANTIĞI (GÜÇLENDİRİLMİŞ) ---
   // Banner null ise, boş string ise veya uzantısı yoksa Cover kullan

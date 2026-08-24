@@ -157,8 +157,8 @@ export default function KullaniciProfilSayfasi() {
                       alt={f.baslik}
                       className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                     />
-                    <span className={`absolute top-1.5 left-1.5 text-[10px] font-black px-1.5 py-0.5 rounded text-white ${f.type === "webtoon" ? "bg-blue-600" : "bg-purple-600"}`}>
-                      {f.type === "webtoon" ? "WEBTOON" : "NOVEL"}
+                    <span className={`absolute top-1.5 left-1.5 text-[10px] font-black px-1.5 py-0.5 rounded text-white ${f.tag === "NOVEL" || f.type === "novel" ? "bg-purple-600" : f.tag === "MANGA" ? "bg-orange-600" : "bg-blue-600"}`}>
+                      {f.tag || (f.type === "webtoon" ? "WEBTOON" : "NOVEL")}
                     </span>
                   </div>
                   <p className="text-xs font-bold text-gray-300 mt-2 truncate group-hover:text-purple-400 transition">{f.baslik}</p>

@@ -108,6 +108,7 @@ def _favori_listesi(db: Session, user_id: int):
             sonuc.append({
                 "id": fav.webtoon.id,
                 "type": "webtoon",
+                "tag": "MANGA" if str(getattr(fav.webtoon.type, "value", fav.webtoon.type) or "").upper() == "MANGA" else "WEBTOON",
                 "baslik": fav.webtoon.title,
                 "resim": fav.webtoon.cover_image,
                 "slug": f"/webtoon/{fav.webtoon.id}"
@@ -116,6 +117,7 @@ def _favori_listesi(db: Session, user_id: int):
             sonuc.append({
                 "id": fav.novel.id,
                 "type": "novel",
+                "tag": "NOVEL",
                 "baslik": fav.novel.title,
                 "resim": fav.novel.cover_image,
                 "slug": f"/novel/{fav.novel.slug}"

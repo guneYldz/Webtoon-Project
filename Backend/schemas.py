@@ -8,6 +8,7 @@ from enum import Enum
 # ==========================================
 
 class ContentType(str, Enum):
+    WEBTOON = "WEBTOON"
     MANGA = "MANGA"
     NOVEL = "NOVEL"
 
@@ -65,7 +66,7 @@ class WebtoonBase(BaseModel):
     summary: Optional[str] = None
     cover_image: Optional[str] = None
     status: str = "ongoing"
-    type: ContentType = ContentType.MANGA 
+    type: ContentType = ContentType.WEBTOON 
     source_url: Optional[str] = None
     is_featured: bool = False 
 

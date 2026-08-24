@@ -17,6 +17,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
         is_published: false,
         is_featured: false, // SLIDER İÇİN
         source_url: "",
+        series_type: "WEBTOON" as string,
     });
 
     const [coverImage, setCoverImage] = useState<File | null>(null);
@@ -43,13 +44,15 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
                 if (data.status === "success") {
                     const w = data.data;
                     setWebtoon(w);
+                    const rawType = String(w.type || "WEBTOON").toUpperCase();
                     setFormData({
                         title: w.title || "",
                         summary: w.summary || "",
                         status: w.status || "ongoing",
                         is_published: w.is_published || false,
                         is_featured: w.is_featured || false,
-                        source_url: w.source_url || "", // Load
+                        source_url: w.source_url || "",
+                        series_type: rawType.includes("MANGA") ? "MANGA" : "WEBTOON",
                     });
                     setSelectedCategoryIds((w.categories || []).map((c: any) => c.id));
                 }
@@ -76,6 +79,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
             form.append("is_published", formData.is_published.toString());
             form.append("is_featured", formData.is_featured.toString());
             form.append("source_url", formData.source_url || "");
+            form.append("series_type", formData.series_type || "WEBTOON");
             form.append("category_ids", selectedCategoryIds.join(","));
 
             if (coverImage) {
@@ -99,7 +103,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
             const data = await res.json();
 
             if (data.status === "success") {
-                alert("Webtoon güncellendi!");
+                alert("Seri güncellendi!");
                 router.push("/admin/webtoons");
             } else {
                 alert("Hata: " + (data.detail || "Bilinmeyen hata"));
@@ -129,7 +133,9 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
 
     return (
         <div className="p-6 max-w-4xl">
-            <h1 className="text-3xl font-bold mb-6">Webtoon Düzenle: {webtoon.title}</h1>
+            <h1 className="text-3xl font-bold mb-6">
+                {formData.series_type === "MANGA" ? "Manga Düzenle" : "Webtoon Düzenle"}: {webtoon.title}
+            </h1>
 
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow space-y-6">
                 {/* Başlık */}
@@ -164,6 +170,19 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
                         selectedIds={selectedCategoryIds}
                         onChange={setSelectedCategoryIds}
                     />
+                </div>
+
+                {/* Tür */}
+                <div>
+                    <label className="block text-sm font-medium mb-2">Tür</label>
+                    <select
+                        value={formData.series_type}
+                        onChange={(e) => setFormData({ ...formData, series_type: e.target.value })}
+                        className="w-full px-4 py-2 border rounded-lg"
+                    >
+                        <option value="WEBTOON">Webtoon</option>
+                        <option value="MANGA">Manga</option>
+                    </select>
                 </div>
 
                 {/* Durum */}

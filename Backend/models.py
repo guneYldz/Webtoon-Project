@@ -6,6 +6,7 @@ import enum
 
 # --- İÇERİK TÜRÜ ENUM ---
 class ContentType(str, enum.Enum):
+    WEBTOON = "WEBTOON"
     MANGA = "MANGA"
     NOVEL = "NOVEL"
 
@@ -84,7 +85,7 @@ class Webtoon(Base):
     # 👇 DÜZELTME BURADA: SQL Server hatasını önlemek için String(255) yapıldı
     slug = Column(String(255), unique=True, index=True)
 
-    type = Column(Enum(ContentType), default=ContentType.MANGA)
+    type = Column(Enum(ContentType), default=ContentType.WEBTOON)
     source_url = Column(String(500), nullable=True)
 
     categories = relationship(

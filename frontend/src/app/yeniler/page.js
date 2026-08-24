@@ -56,7 +56,7 @@ export default function YenilerPage() {
         <section>
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
             <span className="w-1.5 h-6 bg-red-600 rounded-full"></span>
-            Yeni Eklenen Webtoonlar
+            Yeni Eklenen Webtoon & Manga
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-8">
             {webtoons.map((w, index) => (
@@ -79,7 +79,7 @@ export default function YenilerPage() {
                   <Link href={`/webtoon/${w.id}`} title={`${w.title} Webtoonunu Oku`}>
                     <h3 className="font-bold text-sm text-gray-100 truncate group-hover:text-red-400 transition">{w.title}</h3>
                   </Link>
-                  <p className="text-sm text-gray-500 mt-1">Webtoon • {new Date().toLocaleDateString('tr-TR')}</p>
+                  <p className="text-sm text-gray-500 mt-1">{String(w.type || "").toUpperCase() === "MANGA" ? "Manga" : "Webtoon"} • {new Date().toLocaleDateString('tr-TR')}</p>
                 </div>
               </div>
             ))}

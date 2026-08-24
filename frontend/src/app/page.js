@@ -45,7 +45,7 @@ async function getData() {
     // Verileri işle
     const formattedWebtoons = webtoonData.map(item => ({
       ...item,
-      typeLabel: "WEBTOON",
+      typeLabel: String(item.type || "").toUpperCase().includes("MANGA") ? "MANGA" : "WEBTOON",
       linkPath: "webtoon",
       latestChapters: item.episodes ? [...item.episodes].sort((a, b) => b.episode_number - a.episode_number).slice(0, 2) : []
     }));
@@ -153,7 +153,7 @@ export default async function Home() {
                   <span className="w-2 h-8 bg-gradient-to-b from-blue-600 to-purple-600 rounded-full inline-block"></span>
                   Son Güncellenenler
                 </h2>
-                <Link href="/seriler" title="Tüm Webtoon ve Novel Serilerini Gör" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
+                <Link href="/seriler" title="Tüm serileri gör" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
               </div>
 
               {/* KART GRİD YAPISI */}
@@ -175,7 +175,7 @@ export default async function Home() {
 
                       {/* Tür Etiketi */}
                       <div className="absolute top-2 left-2 z-10">
-                        <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'
+                        <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === "NOVEL" ? "bg-purple-600" : item.typeLabel === "MANGA" ? "bg-orange-600" : "bg-blue-600"
                           }`}>
                           {item.typeLabel}
                         </span>
@@ -251,7 +251,7 @@ export default async function Home() {
                         {w.title}
                       </h4>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-sm uppercase font-bold tracking-tighter ${w.typeLabel === 'WEBTOON' ? 'text-blue-500' : 'text-purple-500'}`}>
+                        <span className={`text-sm uppercase font-bold tracking-tighter ${w.typeLabel === "NOVEL" ? "text-purple-500" : w.typeLabel === "MANGA" ? "text-orange-400" : "text-blue-500"}`}>
                           {w.typeLabel}
                         </span>
                         <span className="text-sm text-gray-600">👁️ {w.view_count || 0}</span>
