@@ -42,6 +42,19 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async headers() {
+    return [
+      {
+        source: "/",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=0, s-maxage=60, stale-while-revalidate=120, must-revalidate",
+          },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       // www → non-www 301 (SEO: tek tercih edilen alan adı)
