@@ -43,6 +43,12 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   async headers() {
+    const privateNoStore = [
+      { key: "Cache-Control", value: "private, no-store, no-cache, max-age=0, must-revalidate" },
+      { key: "CDN-Cache-Control", value: "no-store" },
+      { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+      { key: "Pragma", value: "no-cache" },
+    ];
     return [
       {
         source: "/",
@@ -53,6 +59,10 @@ const nextConfig = {
           },
         ],
       },
+      { source: "/admin", headers: privateNoStore },
+      { source: "/admin/:path*", headers: privateNoStore },
+      { source: "/login-admin", headers: privateNoStore },
+      { source: "/login-admin/:path*", headers: privateNoStore },
     ];
   },
   async redirects() {

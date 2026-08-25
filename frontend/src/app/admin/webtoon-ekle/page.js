@@ -1,20 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function WebtoonEkle() {
+function WebtoonEkle() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const typeFromUrl = (searchParams.get("series_type") || "WEBTOON").toUpperCase();
   const [loading, setLoading] = useState(false);
   const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
   const [formData, setFormData] = useState({
     ad: "",
     ozet: "",
     durum: "Devam Ediyor",
-    series_type: "WEBTOON",
+    series_type: typeFromUrl === "MANGA" ? "MANGA" : "WEBTOON",
   });
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null); // Resim önizlemesi için
+
+  useEffect(() => {
+    const t = (searchParams.get("series_type") || "").toUpperCase();
+    if (t === "MANGA" || t === "WEBTOON") {
+      setFormData((prev) => (prev.series_type === t ? prev : { ...prev, series_type: t }));
+    }
+  }, [searchParams]);
 
   // Yazı alanları değişince çalışır
   const handleChange = (e) => {
@@ -84,7 +93,7 @@ export default function WebtoonEkle() {
       <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-lg border border-gray-700">
 
         <h1 className="text-3xl font-bold mb-6 text-blue-400 flex items-center gap-2 border-b border-gray-700 pb-4">
-          📚 Webtoon & Manga Ekle
+          {formData.series_type === "MANGA" ? "📙 Manga Ekle" : "📘 Webtoon Ekle"}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -180,5 +189,13 @@ export default function WebtoonEkle() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function WebtoonEklePage() {
+  return (
+    <Suspense fallback={<div className="text-gray-500 p-8">Yükleniyor...</div>}>
+      <WebtoonEkle />
+    </Suspense>
   );
 }
