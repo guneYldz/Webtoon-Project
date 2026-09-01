@@ -326,6 +326,57 @@ def call_gemini(prompt_text, label=""):
     return None
 
 
+# Gemini bazen telif gerekçesiyle çeviri yerine özet/sohbet basıyor.
+# İlk parça özet, sonrakiler çeviri olunca bölüm hem bozuk hem uzun duruyor;
+# eski --onar bunu "sağlam" sanıp geçiyordu.
+TRANSLATION_REFUSAL_MARKERS = (
+    "telif hakları kısıtlamaları",
+    "çevirisini sunamıyorum",
+    "doğrudan türkçe çevirisini",
+    "bölümün genel özeti",
+    "genel özetini sunmamı",
+    "due to copyright",
+    "copyright restrictions",
+    "i cannot provide a full",
+    "i'm unable to provide a verbatim",
+    "cannot provide a complete translation",
+    "cannot provide a direct translation",
+)
+
+
+def is_translation_refusal(text):
+    """Telif reddi / özet sohbeti mi, yoksa gerçek çeviri mi?"""
+    if not text:
+        return False
+    head = text.lower()[:2500]
+    return any(marker in head for marker in TRANSLATION_REFUSAL_MARKERS)
+
+
+def call_gemini_for_translation(prompt_text, label="", max_refusals=3):
+    """
+    Çeviri çağrısı. Telif/özet yanıtı gelirse key değiştirip tekrar dener.
+    Hâlâ özetse None döner — bozuk metin kaydedilmesin.
+    """
+    extra = ""
+    for attempt in range(max_refusals):
+        parca = call_gemini(prompt_text + extra, label=label)
+        if parca is None:
+            return None
+        if not is_translation_refusal(parca):
+            return parca
+        print(
+            f"   ⚠️ {label}: Gemini telif/özet yanıtı verdi "
+            f"(deneme {attempt + 1}/{max_refusals}), key değiştirilip tekrar denenecek..."
+        )
+        rotate_key()
+        extra = (
+            "\n\nKESİN KURAL: Telif uyarısı, özet, 'çevirisini sunamıyorum' "
+            "veya okuyucuya soru YAZMA. Sadece roman metninin Türkçe çevirisini yaz.\n"
+        )
+    print(f"   ❌ {label}: Gemini art arda telif/özet yanıtı verdi, bu parça kaydedilmeyecek.")
+    return None
+
+
 def split_text_into_chunks(text, max_chars=9000):
     """
     Metni paragraf sınırlarından bölerek max_chars'ı aşmayan parçalara ayırır.
@@ -392,10 +443,11 @@ ROMAN METNİ ÇEVİRİSİ KURALLARI (ZORUNLU):
 2. SADECE çevrilmiş roman metnini döndür — açıklama, not veya yorum EKLEME.
 3. Paragraf düzenini KORU: Orijinaldeki her paragraf ayrı paragraf olarak kalmalı.
 4. Metnin TAMAMINI çevir — hiçbir cümleyi veya paragrafı ATLAMA, özetleme.
-5. Kopuk, anlamsız veya yarım kalan cümle BIRAKMA — gerekirse önceki/sonraki cümleyle birleştir.
-6. "Ve...", "Ama..." ile başlayan tek başına duran kısa cümleleri önceki cümleye ekle.
-7. Bire bir sözcük çevirisi YAPMA; anlamı, duyguyu ve romanın akışını Türkçeye taşı.
-8. Her cümle akışkan, doğal, kitap okur gibi hissettirmeli.
+5. Telif uyarısı, "çevirisini sunamıyorum", "Bölümün Genel Özeti" veya okuyucuya soru YAZMA.
+6. Kopuk, anlamsız veya yarım kalan cümle BIRAKMA — gerekirse önceki/sonraki cümleyle birleştir.
+7. "Ve...", "Ama..." ile başlayan tek başına duran kısa cümleleri önceki cümleye ekle.
+8. Bire bir sözcük çevirisi YAPMA; anlamı, duyguyu ve romanın akışını Türkçeye taşı.
+9. Her cümle akışkan, doğal, kitap okur gibi hissettirmeli.
 
 ROMANIN TÜRÜNE ÖZEL TALİMATLAR:
 {config}
@@ -425,7 +477,7 @@ BAŞLIK satırı YAZMA — bu sadece metin devamıdır.
 ÇEVİRİLECEK METİN:
 {chunk}
 """
-        parca = call_gemini(translation_prompt, label=f"Çeviri {i}/{len(chunks)}")
+        parca = call_gemini_for_translation(translation_prompt, label=f"Çeviri {i}/{len(chunks)}")
         if parca is None:
             print("❌ Çeviri başarısız. Bot 1 saat uyuyor...")
             time.sleep(3600)
@@ -510,6 +562,9 @@ YAPAMAYACAKLARIN:
 {p_chunk}
 """
         parca_polish = call_gemini(polish_prompt, label=f"Editör {i}/{len(polish_chunks)}")
+        if parca_polish and is_translation_refusal(parca_polish):
+            print(f"   ⚠️ Editör {i}/{len(polish_chunks)}: telif/özet yanıtı, ham çeviri parçası korunuyor.")
+            parca_polish = None
         if parca_polish:
             # Giriş cümlesi varsa temizle
             for giris in ["İşte", "Elbette", "Düzeltilmiş", "Aşağıda", "Tabii"]:
@@ -561,7 +616,7 @@ YAPAMAYACAKLARIN:
 # ve tamamını yeniden çevirip günceller. Sağlam bölümlere DOKUNMAZ.
 # ==========================================
 ONARIM_CHECKPOINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint.json")
-ONARIM_SURUM = 2         # Tespit mantığı değişirse artır → eski checkpoint sıfırlanır, her şey yeniden kontrol edilir
+ONARIM_SURUM = 3         # Tespit mantığı değişirse artır → eski checkpoint sıfırlanır, her şey yeniden kontrol edilir
 ONARIM_EN_MIN = 8000     # İngilizce kaynak bundan kısaysa kırpma hatasından etkilenmemiştir
 ONARIM_ORAN_ESIK = 0.80  # TR/EN karakter oranı bunun altındaysa şüpheli (tam çeviri ~%85-110 olur)
 ONARIM_TR_SUPHE_MAX = 9200  # Kırpık çeviri en fazla ~8000×1.15 karakter olabilir.
@@ -695,6 +750,24 @@ def repair_mode(kesin=False):
             if tr_content is None:
                 print(f"   ⚠️ Bölüm {num}: Türkçe içerik okunamadı, atlanıyor.")
                 stats["hata"] += 1
+                continue
+
+            # Gemini telif/özet basmışsa uzun olsa bile bozuk say — eski --onar bunu kaçırıyordu
+            if is_translation_refusal(tr_content):
+                print(f"   🔧 Bölüm {num} TELİF/ÖZET YANITI içeriyor → yeniden çevriliyor...")
+                status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
+                if status == "SUCCESS":
+                    cp_novel[key] = "ok"
+                    save_onarim_checkpoint(checkpoint, checkpoint_file)
+                    stats["onarildi"] += 1
+                    consecutive_errors = 0
+                    time.sleep(5)
+                else:
+                    stats["hata"] += 1
+                    consecutive_errors += 1
+                    if consecutive_errors >= 3:
+                        print("   🛑 Art arda 3 hata — bu roman atlanıyor (checkpoint sayesinde sonraki çalıştırmada devam eder).")
+                        break
                 continue
 
             # İngilizce kaynak 8000 karakterden kısaysa kırpma hatası bu bölümü ETKİLEMEMİŞTİR
