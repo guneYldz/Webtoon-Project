@@ -674,7 +674,7 @@ def repair_mode(kesin=False):
     else:
         checkpoint_file = ONARIM_CHECKPOINT_FILE
         print("🔧 ONARIM MODU BAŞLATILDI (--onar)")
-        print("   Eksik çevrilmiş (8000 karakterde kırpılmış) bölümler tespit edilip yeniden çevrilecek.")
+        print("   Eksik çevrilmiş veya telif/özet basılmış bölümler tespit edilip yeniden çevrilecek.")
     print(f"   Checkpoint dosyası: {checkpoint_file}")
 
     token = get_auth_token()
