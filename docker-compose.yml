@@ -37,8 +37,11 @@ services:
       SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ./Backend:/app
+      - webtoon_covers:/app/static/covers
+      - webtoon_banners:/app/static/banners
+      - webtoon_images:/app/static/images
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     networks:
       - webtoon_network
 
@@ -46,6 +49,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
     container_name: webtoon_frontend
     restart: always
     depends_on:
@@ -53,6 +59,8 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=4096"
     networks:
       - webtoon_network
 
@@ -75,10 +83,10 @@ services:
     container_name: webtoon_pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: gunyz.62@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: 62Naruto62.
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     depends_on:
       - db
     networks:
@@ -86,6 +94,9 @@ services:
 
 volumes:
   postgres_data:
+  webtoon_covers:
+  webtoon_banners:
+  webtoon_images:
 
 networks:
   webtoon_network:

@@ -24,15 +24,21 @@ export default function ReadingHero({
         : `${API}/${coverImage}`;
 
     return (
-        <div className="relative w-full py-12 md:py-20 overflow-hidden bg-[#121212]" style={{ minHeight: '500px' }}>
+        <div className="relative w-full py-12 md:py-20 overflow-hidden bg-[#1a1a1a]" style={{ minHeight: '500px' }}>
 
-            {/* Arkadaki ışık efekti */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-blue-900/10 blur-[120px] rounded-full pointer-events-none"></div>
+            {/* Kapak renkleri arka plana yayılsın (novel okuma sayfası gibi) */}
+            {coverImage && (
+                <div
+                    className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110 pointer-events-none"
+                    style={{ backgroundImage: `url(${finalImage})`, backgroundColor: '#2d1b4e' }}
+                />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#161221] via-[#121212]/60 to-transparent pointer-events-none" />
 
             <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6" style={{ minHeight: '400px' }}>
 
-                {/* Navigasyon - DARK MODE İÇİN DÜZELTİLDİ */}
-                <div className="w-full bg-[#121212] py-2 px-4">
+                {/* Navigasyon */}
+                <div className="w-full py-2 px-4">
                     <nav className="text-sm md:text-sm text-gray-500 font-bold uppercase tracking-widest flex gap-2 items-center justify-center">
                         <Link href="/" className="hover:text-white transition">Anasayfa</Link>
                         <span>/</span>

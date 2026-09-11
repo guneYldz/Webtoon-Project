@@ -10,6 +10,7 @@ import models
 import schemas
 from database import get_db
 from routers.auth import get_current_admin
+from utils.chapter_title import default_chapter_title, chapter_display_label
 
 
 # --- YARDIMCI: DOĞAL SIRALAMA (1, 2, 10 SORUNU İÇİN) ---
@@ -28,7 +29,7 @@ router = APIRouter(
 @router.post("/ekle", status_code=status.HTTP_201_CREATED)
 def create_episode(
     webtoon_id: int = Form(...),
-    title: str = Form(...),
+    title: str = Form(""),
     episode_number: float = Form(...),
     content_text: str = Form(None), 
     
@@ -52,6 +53,8 @@ def create_episode(
     
     if var_mi:
         raise HTTPException(status_code=400, detail="Bu bölüm numarası zaten var!")
+
+    title = default_chapter_title(title, episode_number)
 
     # C. Bölümü Veritabanına Kaydet
     yeni_bolum = models.WebtoonEpisode(
@@ -101,6 +104,21 @@ def create_episode(
             db.add(db_img)
         
         db.commit()
+
+    # Favorisinde bu webtoon olanlara bildirim
+    try:
+        from routers.notifications import notify_favorite_users_new_chapter
+        ch_label = chapter_display_label(title, episode_number)
+        notify_favorite_users_new_chapter(
+            db,
+            webtoon_id=webtoon.id,
+            series_title=webtoon.title,
+            chapter_label=ch_label,
+            link=f"/webtoon/{webtoon.slug or webtoon.id}/bolum/{yeni_bolum.id}",
+        )
+        db.commit()
+    except Exception as e:
+        print(f"⚠️ Favori bildirim hatası (webtoon): {e}")
 
     return {
         "mesaj": "Bölüm Başarıyla Eklendi", 
@@ -204,6 +222,11 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         "webtoon_title": bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
         "webtoon_slug": bolum.webtoon.slug if bolum.webtoon else "",
         "webtoon_cover": f"{request.base_url}{bolum.webtoon.cover_image}" if bolum.webtoon and bolum.webtoon.cover_image else None,
+        "series_type": (
+            getattr(bolum.webtoon.type, "value", bolum.webtoon.type)
+            if bolum.webtoon and getattr(bolum.webtoon, "type", None)
+            else "WEBTOON"
+        ),
         "title": bolum.title,
         "episode_number": bolum.episode_number,
         "created_at": bolum.created_at,

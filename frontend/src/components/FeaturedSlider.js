@@ -3,22 +3,23 @@ import { API } from "@/api";
 import FavoriteButton from "./FavoriteButton";
 import Image from "next/image"; // Image import
 
-const FeaturedSlider = ({ webtoon }) => {
+const FeaturedSlider = ({ webtoon, isFirst = false }) => {
   if (!webtoon) return null;
 
   // --- 1. TÜR VE ROTA BELİRLEME ---
   // Backend'den gelen veriye göre Roman mı Webtoon mu karar verelim.
   // Hem 'type' parametresine hem de 'typeLabel'a bakıyoruz, garanti olsun.
   const isNovel = webtoon.type === 'novel' || (webtoon.typeLabel && webtoon.typeLabel.toUpperCase() === 'NOVEL');
+  const isManga = !isNovel && String(webtoon.typeLabel || webtoon.type || "").toUpperCase() === "MANGA";
 
   const routeType = isNovel ? 'novel' : 'webtoon';
-  const labelText = isNovel ? 'NOVEL' : 'WEBTOON';
+  const labelText = isNovel ? 'NOVEL' : isManga ? 'MANGA' : 'WEBTOON';
 
-  // --- 2. RENK AYARLARI ---
-  // Roman için Mor, Webtoon için Mavi tema
   const badgeClass = isNovel
     ? "bg-purple-600 shadow-purple-900/50"
-    : "bg-blue-600 shadow-blue-900/50";
+    : isManga
+      ? "bg-orange-600 shadow-orange-900/50"
+      : "bg-blue-600 shadow-blue-900/50";
 
   // --- 3. RESİM MANTIĞI (GÜÇLENDİRİLMİŞ) ---
   // Banner null ise, boş string ise veya uzantısı yoksa Cover kullan
@@ -42,9 +43,12 @@ const FeaturedSlider = ({ webtoon }) => {
             src={bgImage}
             alt={webtoon.title + " Banner"}
             fill
+            sizes="(max-width: 768px) 100vw, 1200px"
+            quality={60}
             className="object-cover object-center"
-            priority={true} // Slider'ın ilk resmi olduğu için öncelikli yükle
-            unoptimized={true} // Docker/Localhost sorunları yaşamamak için (Gerekirse kaldırılabilir)
+            priority={isFirst}
+            loading={isFirst ? undefined : "lazy"}
+            fetchPriority={isFirst ? "high" : "auto"}
           />
         </div>
         {/* Arka planı biraz karart ki yazılar okunsun */}
@@ -65,6 +69,8 @@ const FeaturedSlider = ({ webtoon }) => {
               src={`${API}/${webtoon.cover_image}`}
               alt={webtoon.title}
               fill
+              sizes="160px"
+              loading="lazy"
               className="object-cover"
             />
           </div>

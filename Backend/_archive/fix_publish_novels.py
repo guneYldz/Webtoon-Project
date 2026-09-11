@@ -8,14 +8,14 @@ db_url = os.getenv("DB_CONNECTION")
 
 # If running locally outside docker, 'db' host won't resolve. 
 # We need to use localhost and the exposed port (usually 5432 or mapped one).
-# From previous .env check: DB_CONNECTION="postgresql://webtoon_admin:gizlisifre123@db:5432/webtoon_db"
-# The bot uses: BOT_DB_CONNECTION="postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db" (in comment)
+# From previous .env check: DB_CONNECTION=os.getenv("DB_CONNECTION")
+# The bot uses: BOT_DB_CONNECTION=os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION") (in comment)
 # Let's try to parse and adapt, or just try localhost:5432 and 5433.
 
 # Try connecting to localhost:5432 first (default mapping)
 try:
     # Construct local URL manually to be safe
-    local_db_url = "postgresql://webtoon_admin:gizlisifre123@localhost:5432/webtoon_db"
+    local_db_url = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
     engine = create_engine(local_db_url)
     with engine.connect() as conn:
         print("Connected to DB via localhost:5432")
@@ -26,7 +26,7 @@ except Exception as e:
     print(f"Failed on 5432: {e}")
     try:
         # Try 5433 (common alternative)
-        local_db_url = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+        local_db_url = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
         engine = create_engine(local_db_url)
         with engine.connect() as conn:
             print("Connected to DB via localhost:5433")

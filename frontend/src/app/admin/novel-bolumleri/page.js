@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { API } from "@/api";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function NovelChaptersPage() {
     const [novels, setNovels] = useState([]);
@@ -162,7 +163,15 @@ export default function NovelChaptersPage() {
 
     return (
         <div className="space-y-8 relative">
-            <h1 className="text-3xl font-bold text-gray-800 border-b pb-4">Novel Bölüm Yönetimi</h1>
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 border-b pb-4">
+                <h1 className="text-3xl font-bold text-gray-800">Novel Bölüm Yönetimi</h1>
+                <Link
+                    href={selectedNovelId ? `/admin/novel-bolum-ekle?novel_id=${selectedNovelId}` : "/admin/novel-bolum-ekle"}
+                    className="inline-flex items-center justify-center bg-purple-600 text-white px-5 py-2 rounded-lg hover:bg-purple-700 font-semibold"
+                >
+                    + Bölüm Ekle
+                </Link>
+            </div>
 
             {/* Novel Selection */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -184,8 +193,14 @@ export default function NovelChaptersPage() {
             {/* Chapter List */}
             {selectedNovelId && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-center gap-3">
                         <h2 className="text-xl font-semibold text-gray-800">Bölümler ({chapters.length})</h2>
+                        <Link
+                            href={`/admin/novel-bolum-ekle?novel_id=${selectedNovelId}`}
+                            className="text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-lg"
+                        >
+                            + Bu seriye bölüm ekle
+                        </Link>
                     </div>
 
                     {loading ? (

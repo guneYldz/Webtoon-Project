@@ -8,6 +8,7 @@ from enum import Enum
 # ==========================================
 
 class ContentType(str, Enum):
+    WEBTOON = "WEBTOON"
     MANGA = "MANGA"
     NOVEL = "NOVEL"
 
@@ -47,6 +48,14 @@ class NovelChapterListSchema(BaseModel):
     class Config:
         from_attributes = True
 
+
+class CategoryOut(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 # ==========================================
 # 3. WEBTOON (MANGA) ŞEMALARI
 # ==========================================
@@ -57,7 +66,7 @@ class WebtoonBase(BaseModel):
     summary: Optional[str] = None
     cover_image: Optional[str] = None
     status: str = "ongoing"
-    type: ContentType = ContentType.MANGA 
+    type: ContentType = ContentType.WEBTOON 
     source_url: Optional[str] = None
     is_featured: bool = False 
 
@@ -76,7 +85,8 @@ class WebtoonCard(BaseModel):
     updated_at: Optional[datetime] = None
 
     # Anasayfada son bölümleri göstermek için
-    episodes: List[EpisodeListSchema] = [] 
+    episodes: List[EpisodeListSchema] = []
+    categories: List[CategoryOut] = []
     
     class Config:
         from_attributes = True
@@ -85,6 +95,7 @@ class WebtoonCard(BaseModel):
 class WebtoonDetail(WebtoonCard):
     summary: Optional[str] = None
     source_url: Optional[str] = None
+    categories: List[CategoryOut] = []
     # episodes zaten WebtoonCard'dan miras geliyor
 
     class Config:
@@ -109,6 +120,7 @@ class NovelCard(BaseModel):
     
     # Anasayfada son bölümleri göstermek için
     chapters: List[NovelChapterListSchema] = []
+    categories: List[CategoryOut] = []
 
     class Config:
         from_attributes = True
@@ -146,7 +158,8 @@ class NovelDetail(BaseModel):
     source_url: Optional[str] = None 
     
     # 🔥 DÜZELTİLDİ: NovelChapterBase yerine NovelChapterListSchema
-    chapters: List[NovelChapterListSchema] = [] 
+    chapters: List[NovelChapterListSchema] = []
+    categories: List[CategoryOut] = []
 
     class Config:
         from_attributes = True

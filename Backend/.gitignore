@@ -7,6 +7,6 @@ static/images/* # Resimleri de gönderme, çok yer kaplar
 static/profile_images/*
 static/novel_covers/*
 static/webtoon_covers/*
-static/banners/*
+static/announcements/*
 Backend/static/images/
 Backend/static/covers/

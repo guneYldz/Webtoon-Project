@@ -6,18 +6,47 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  themeColor: "#121212",
 };
 
 export const metadata = {
   metadataBase: new URL("https://kaosmanga.net"),
   title: {
-    default: "Kaos Manga | Webtoon ve Novel Oku",
+    default: "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku",
     template: "%s | Kaos Manga",
   },
+  // 140-160 karakter arası: arama sonucunda kesilmeden görünür
   description:
-    "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve tamamen ücretsiz oku. En yeni bölümler, trend seriler ve popüler romanlar seni bekliyor. Hemen keşfet!",
+    "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir. Hemen okumaya başla!",
+  keywords: [
+    "webtoon oku",
+    "manga oku",
+    "novel oku",
+    "türkçe webtoon",
+    "türkçe manga",
+    "türkçe novel",
+    "türkçe manga oku",
+    "manhwa oku",
+    "ücretsiz manga",
+    "ücretsiz webtoon",
+    "web roman",
+    "webnovel türkçe",
+    "kaos manga",
+  ],
   authors: [{ name: "Kaos Manga", url: "https://kaosmanga.net" }],
   publisher: "Kaos Manga",
+  applicationName: "Kaos Manga",
+  icons: {
+    icon: [
+      { url: "/favicon-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
   robots: {
     index: true,
     follow: true,
@@ -34,47 +63,94 @@ export const metadata = {
     locale: "tr_TR",
     url: "https://kaosmanga.net",
     siteName: "Kaos Manga",
-    title: "Kaos Manga | Webtoon ve Novel Oku",
+    title: "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku",
     description:
-      "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve tamamen ücretsiz oku. En yeni bölümler, trend seriler ve popüler romanlar seni bekliyor.",
+      "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Kaos Manga - Webtoon ve Novel Platformu",
+        alt: "Kaos Manga - Webtoon, Manga ve Novel Platformu",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
     site: "@kaosmanga",
-    title: "Kaos Manga | Webtoon ve Novel Oku",
+    title: "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku",
     description:
-      "Kaos Manga ile en sevilen Webtoon ve Novelleri Türkçe ve tamamen ücretsiz oku. En yeni bölümler, trend seriler ve popüler romanlar seni bekliyor.",
+      "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir.",
     images: ["/og-image.png"],
   },
 };
 
 import { Inter, Cinzel } from "next/font/google";
 
+// display: "optional" -> yazi tipi gecikirse tarayici yedek fontta kalir ve
+// sonradan takas yapmaz; "swap" metin kaymasina (CLS) yol aciyordu
 const inter = Inter({ subsets: ["latin"], display: "optional", preload: true });
+// Cinzel sadece baslik/logo yazisinda kullanildigi icin preload edilmiyor:
+// ilk boyamada Inter ile yaris etmesin (FCP/LCP)
 const cinzel = Cinzel({
   subsets: ["latin"],
-  weight: ["400", "700", "900"],
+  weight: ["700", "900"],
   variable: "--font-cinzel",
   display: "optional",
-  preload: true
+  preload: false,
+  fallback: ["Georgia", "serif"],
 }); // Manga/Fantasy font
+
+// Site geneli yapılandırılmış veri (Google zengin sonuçlar için)
+const siteJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://kaosmanga.net/#organization",
+      name: "Kaos Manga",
+      url: "https://kaosmanga.net",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://kaosmanga.net/logo.png",
+      },
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://kaosmanga.net/#website",
+      name: "Kaos Manga",
+      alternateName: [
+        "Kaos Manga - Türkçe Webtoon, Manga ve Novel",
+        "Kaos Manga - En İyi Webtoon, Manga ve Novelleri Türkçe Oku",
+      ],
+      description:
+        "Türkçe webtoon, manga ve novel oku. En yeni bölümler Kaos Manga'da ücretsiz.",
+      url: "https://kaosmanga.net",
+      inLanguage: "tr-TR",
+      publisher: { "@id": "https://kaosmanga.net/#organization" },
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: "https://kaosmanga.net/kesfet?q={search_term_string}",
+        },
+        "query-input": "required name=search_term_string",
+      },
+    },
+  ],
+};
 
 export default function RootLayout({ children }) {
   return (
     <html lang="tr">
       <head>
-        {/* Swiper CSS CDN - Fix for Docker Build Error */}
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+        />
       </head>
-      <body style={{ backgroundColor: '#121212', color: '#e0e0e0' }} className={`${inter.className} ${cinzel.variable}`}>
+      {/* Renkler globals.css'te tanımlı; inline stil SEO araçlarında uyarı veriyordu */}
+      <body className={`${inter.className} ${cinzel.variable}`}>
         <GoogleAnalytics gaId="G-JQ0YHH7PL5" />
         {/* 2. Navbar'ı en tepeye koyduk */}
         <Navbar />

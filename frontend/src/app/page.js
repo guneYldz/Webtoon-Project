@@ -2,9 +2,12 @@ import Link from "next/link";
 import Image from "next/image";
 import HomeSlider from "@/components/HomeSlider";
 
-// Force dynamic rendering to avoid build-time fetch errors
-export const dynamic = 'force-dynamic';
+// ISR: sayfa HTML'i 60 sn önbellekte tutulur. force-dynamic kullanildiginda
+// Next "no-store" gonderiyordu, bu yuzden ne tarayici ne de Cloudflare
+// sayfayi onbellekleyemiyordu (TTFB yuksek kaliyordu).
+export const revalidate = 60;
 import { API } from "@/api";
+import { formatChapterNumber } from "@/lib/chapterTitle";
 
 // Server-side fetching için URL (Docker içinden backend'e erişim)
 const SERVER_API = "http://backend:8000";
@@ -15,17 +18,21 @@ async function getData() {
     // Eğer localde çalışıyorsanız ve başarısız olursa localhost deneriz (fallback)
     let webtoonRes, novelRes;
 
+    // 60 sn veri önbelleği: her ziyarette backend'i beklemek yerine
+    // cache'ten servis edilir, TTFB ciddi şekilde düşer (hız/SEO)
+    const fetchOpts = { next: { revalidate: 60 } };
+
     try {
       [webtoonRes, novelRes] = await Promise.all([
-        fetch(`${SERVER_API}/webtoons/`, { cache: 'no-store' }), // Güncel veri için no-store
-        fetch(`${SERVER_API}/novels/`, { cache: 'no-store' })
+        fetch(`${SERVER_API}/webtoons/`, fetchOpts),
+        fetch(`${SERVER_API}/novels/`, fetchOpts)
       ]);
     } catch (error) {
       console.log("Docker backend erişimi başarısız, localhost deneniyor...");
       // Fallback to localhost if backend service is not found (e.g. running locally without docker-compose)
       [webtoonRes, novelRes] = await Promise.all([
-        fetch(`https://kaosmanga.net/api/webtoons/`, { cache: 'no-store' }),
-        fetch(`https://kaosmanga.net/api/novels/`, { cache: 'no-store' })
+        fetch(`https://kaosmanga.net/api/webtoons/`, fetchOpts),
+        fetch(`https://kaosmanga.net/api/novels/`, fetchOpts)
       ]);
     }
 
@@ -39,7 +46,7 @@ async function getData() {
     // Verileri işle
     const formattedWebtoons = webtoonData.map(item => ({
       ...item,
-      typeLabel: "WEBTOON",
+      typeLabel: String(item.type || "").toUpperCase().includes("MANGA") ? "MANGA" : "WEBTOON",
       linkPath: "webtoon",
       latestChapters: item.episodes ? [...item.episodes].sort((a, b) => b.episode_number - a.episode_number).slice(0, 2) : []
     }));
@@ -72,7 +79,7 @@ async function getData() {
     // Ancak optimize olsun diye direk vitrin endpointini de çekelim.
     let vitrinData = [];
     try {
-      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, { cache: 'no-store' }).catch(() => fetch(`https://kaosmanga.net/api/vitrin`, { cache: 'no-store' }));
+      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, fetchOpts).catch(() => fetch(`https://kaosmanga.net/api/vitrin`, fetchOpts));
       if (vitrinRes.ok) {
         vitrinData = await vitrinRes.json();
       }
@@ -90,32 +97,34 @@ async function getData() {
   }
 }
 
+// 140-160 karakter arası açıklama: arama sonucunda kesilmeden görünür
+const HOME_TITLE = "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku";
+const HOME_DESCRIPTION =
+  "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir. Hemen okumaya başla!";
+
 export const metadata = {
-  title: "Kaos Manga | Ana Sayfa",
-  description:
-    "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler, popüler romanlar ve sürekli güncellenen bölümlerle dolu platformumuzu keşfet.",
+  title: { absolute: HOME_TITLE },
+  description: HOME_DESCRIPTION,
   alternates: {
     canonical: "https://kaosmanga.net",
   },
   openGraph: {
-    title: "Kaos Manga | Ana Sayfa",
-    description:
-      "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler, popüler romanlar ve sürekli güncellenen bölümlerle dolu platformumuzu keşfet.",
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
     url: "https://kaosmanga.net",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Kaos Manga - Webtoon ve Novel Platformu",
+        alt: "Kaos Manga - Webtoon, Manga ve Novel Platformu",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kaos Manga | Ana Sayfa",
-    description:
-      "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler ve popüler romanlar seni bekliyor.",
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
     images: ["/og-image.png"],
   },
 };
@@ -124,9 +133,9 @@ export default async function Home() {
   const { allSeries, popularList, vitrinData } = await getData();
 
   return (
-    <div className="min-h-screen font-sans bg-[#121212] pb-20">
+    <div className="min-h-screen font-sans pb-20">
       {/* SEO H1 - Hidden from view but accessible to search engines */}
-      <h1 className="sr-only">Kaos Manga - En İyi Webtoon ve Novelleri Türkçe Oku</h1>
+      <h1 className="sr-only">Kaos Manga - En İyi Webtoon, Manga ve Novelleri Türkçe Oku</h1>
 
       <div className="container mx-auto max-w-7xl px-4 py-8">
 
@@ -145,7 +154,7 @@ export default async function Home() {
                   <span className="w-2 h-8 bg-gradient-to-b from-blue-600 to-purple-600 rounded-full inline-block"></span>
                   Son Güncellenenler
                 </h2>
-                <Link href="/seriler" title="Tüm Webtoon ve Novel Serilerini Gör" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
+                <Link href="/seriler" title="Tüm webtoon, manga ve novel serilerini gör" className="text-sm font-medium text-gray-500 hover:text-white transition">Tümünü Gör →</Link>
               </div>
 
               {/* KART GRİD YAPISI */}
@@ -162,13 +171,12 @@ export default async function Home() {
                           fill
                           className="object-cover transition duration-500 group-hover:scale-110"
                           sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
-                          unoptimized={true} // Docker network safe
                         />
                       </Link>
 
                       {/* Tür Etiketi */}
                       <div className="absolute top-2 left-2 z-10">
-                        <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === 'WEBTOON' ? 'bg-blue-600' : 'bg-purple-600'
+                        <span className={`text-sm font-black px-2 py-0.5 rounded shadow-lg text-white border border-white/10 ${item.typeLabel === "NOVEL" ? "bg-purple-600" : item.typeLabel === "MANGA" ? "bg-orange-600" : "bg-blue-600"
                           }`}>
                           {item.typeLabel}
                         </span>
@@ -192,12 +200,12 @@ export default async function Home() {
                           item.latestChapters.map((chap, idx) => (
                             <Link
                               key={idx}
-                              href={`/${item.linkPath}/${item.slug || item.id}/bolum/${chap.id}`}
-                              title={`${item.title} - ${item.typeLabel === 'NOVEL' ? 'Bölüm' : 'Bölüm'} ${chap.chapter_number || chap.episode_number}`}
+                              href={`/${item.linkPath}/${item.slug || item.id}/bolum/${item.typeLabel === 'NOVEL' ? (chap.chapter_number || chap.id) : chap.id}`}
+                              title={`${item.title} - Bölüm ${formatChapterNumber(chap.chapter_number || chap.episode_number)}`}
                               className="flex items-center justify-between text-sm bg-[#1a1a1a] hover:bg-[#252525] border border-gray-800 rounded px-2 py-1.5 transition text-gray-300 hover:text-white hover:border-gray-600"
                             >
                               <span>
-                                {item.typeLabel === 'NOVEL' ? 'Bölüm' : '#'} {chap.chapter_number || chap.episode_number}
+                                Bölüm {formatChapterNumber(chap.chapter_number || chap.episode_number)}
                               </span>
                               <span className="text-sm text-gray-500">
                                 Yeni
@@ -233,9 +241,10 @@ export default async function Home() {
                       <Image
                         src={`${API}/${w.cover_image}`}
                         alt={w.title}
-                        fill
-                        className="object-cover"
-                        unoptimized={true}
+                        width={48}
+                        height={64}
+                        loading="lazy"
+                        className="object-cover w-full h-full"
                       />
                     </div>
                     <div className="flex flex-col justify-center min-w-0">
@@ -243,7 +252,7 @@ export default async function Home() {
                         {w.title}
                       </h4>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className={`text-sm uppercase font-bold tracking-tighter ${w.typeLabel === 'WEBTOON' ? 'text-blue-500' : 'text-purple-500'}`}>
+                        <span className={`text-sm uppercase font-bold tracking-tighter ${w.typeLabel === "NOVEL" ? "text-purple-500" : w.typeLabel === "MANGA" ? "text-orange-400" : "text-blue-500"}`}>
                           {w.typeLabel}
                         </span>
                         <span className="text-sm text-gray-600">👁️ {w.view_count || 0}</span>
@@ -256,6 +265,89 @@ export default async function Home() {
           </div>
 
         </div>
+
+        {/* SEO / PLATFORM TANITIM BÖLÜMÜ */}
+        <section className="mt-20 border-t border-gray-800 pt-12">
+          <div className="grid md:grid-cols-2 gap-10 text-gray-400 text-sm leading-relaxed">
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4">
+                Kaos Manga: Türkçe Webtoon, Manga ve Novel Platformu
+              </h2>
+              <p className="mb-4">
+                Kaos Manga, en popüler <strong className="text-gray-200">webtoon</strong>,{" "}
+                <strong className="text-gray-200">manga</strong>,{" "}
+                <strong className="text-gray-200">manhwa</strong> ve{" "}
+                <strong className="text-gray-200">web novel</strong> serilerini Türkçe ve tamamen
+                ücretsiz sunan bir dijital okuma platformudur. Aksiyon, fantastik, romantizm,
+                komedi ve daha birçok türde sürekli büyüyen arşivimizle, sevdiğin serilerin en
+                yeni bölümlerine tek tıkla ulaşabilirsin.
+              </p>
+              <p className="mb-4">
+                Titiz çeviri kalitesi ve düzenli bölüm güncellemeleriyle her gün yeni içerik
+                yayınlıyoruz. Okuma deneyimini kişiselleştirebileceğin gelişmiş okuyucu,
+                favori listesi, bölüm bildirimleri ve yorum sistemiyle topluluğun bir parçası
+                olabilirsin.
+              </p>
+              <p>
+                Yeni başlıyorsan{" "}
+                <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                  Keşfet
+                </Link>{" "}
+                sayfasından türe göre arama yapabilir,{" "}
+                <Link href="/seriler" title="Tüm Seriler" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                  Tüm Seriler
+                </Link>{" "}
+                listesinden arşivin tamamına göz atabilir veya yukarıdaki{" "}
+                <strong className="text-gray-200">Trend Listesi</strong>&apos;nden en çok okunan
+                serilere başlayabilirsin.
+              </p>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white mb-4">
+                Neden Kaos Manga&apos;da Okumalısın?
+              </h2>
+              <ul className="space-y-3">
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Güncel bölümler:</strong> Takip ettiğin
+                    webtoon, manga ve novel serileri düzenli olarak güncellenir; yeni bölümler anında
+                    yayında olur.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Tamamen ücretsiz:</strong> Tüm webtoon,
+                    manga, manhwa ve novel bölümlerini üyelik zorunluluğu olmadan okuyabilirsin.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Kişisel okuma deneyimi:</strong> Novel
+                    okuyucuda yazı boyutu, satır aralığı ve genişlik gibi ayarları kendine göre
+                    düzenleyebilirsin.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Aktif topluluk:</strong> Bölümlere yorum
+                    yapabilir, favorilerine ekleyebilir ve yeni bölüm bildirimleri alabilirsin.
+                  </span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="text-purple-500 font-bold">•</span>
+                  <span>
+                    <strong className="text-gray-200">Mobil uyumlu tasarım:</strong> Telefon,
+                    tablet veya bilgisayardan kesintisiz okuma deneyimi sunar.
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
       </div >
     </div >
   );

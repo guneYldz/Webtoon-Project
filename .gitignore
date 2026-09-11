@@ -11,6 +11,12 @@ env/
 # Çevre Değişkenleri 
 .env
 .env.local
+.env.*
+!.env.example
+
+# Yedek / editör kalıntıları (şifre içerebilir)
+*.save
+*.bak
 
 # Veritabanı Dosyaları 
 *.db
