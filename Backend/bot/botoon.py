@@ -19,7 +19,9 @@ import json
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.dirname(CURRENT_DIR)
+REPO_ROOT = os.path.dirname(BACKEND_DIR)
 
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 import platform as _platform

@@ -28,8 +28,10 @@ if sys.stdout.encoding != 'utf-8':
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Bir üst klasör (Backend)
 BACKEND_DIR = os.path.dirname(CURRENT_DIR)
+REPO_ROOT = os.path.dirname(BACKEND_DIR)
 
-# .env dosyasını yükle
+# Asıl dosya: repo kökündeki .env (docker-compose'un yanı). Backend/.env varsa eksikleri doldurur.
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
