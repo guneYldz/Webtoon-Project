@@ -75,8 +75,8 @@ services:
     container_name: webtoon_pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: gunyz.62@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: 62Naruto62.
+      PGADMIN_DEFAULT_EMAIL: None
+      PGADMIN_DEFAULT_PASSWORD: None
     ports:
       - "5050:80"
     depends_on:
