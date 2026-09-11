@@ -9,8 +9,11 @@ import models
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from typing import Optional
 import os
+from dotenv import load_dotenv
 import shutil
 import uuid
+
+load_dotenv()
 
 router = APIRouter(
     prefix="/auth",
@@ -18,7 +21,9 @@ router = APIRouter(
 )
 
 # --- AYARLAR ---
-SECRET_KEY = "cok_gizli_ve_uzun_bir_sifre_buraya_yazilir"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment değişkeni bulunamadı!")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000 # Süreyi biraz uzattım rahat test et diye
 

@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, text
 from PIL import Image, ImageDraw, ImageFont
 
 # Connect to DB
-DATABASE_URL = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+DATABASE_URL = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
 engine = create_engine(DATABASE_URL)
 
 def create_placeholder(path, text_content="MISSING", width=800, height=1200, color=(50, 50, 50)):

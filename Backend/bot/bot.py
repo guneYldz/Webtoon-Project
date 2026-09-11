@@ -68,7 +68,9 @@ def rotate_key():
     print(f"🔄 API Key rotasyonu: Key #{_current_key_index + 1} aktif")
 
 # 🔥 KRİTİK AYAR: Docker PostgreSQL Bağlantısı (DIŞARIDAN ERİŞİM)
-DB_CONNECTION = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+DB_CONNECTION = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
+if not DB_CONNECTION:
+    raise RuntimeError("BOT_DB_CONNECTION veya DB_CONNECTION .env içinde olmalı")
 
 client = get_gemini_client()
 # Gemini 1.5 Flash (Zeki ve Hızlı)

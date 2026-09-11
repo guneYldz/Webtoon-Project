@@ -13,6 +13,9 @@ import re  # Bölüm başlığı regex için
 # ==========================================
 # ⚙️ AYARLAR VE YAPILANDIRMA
 # ==========================================
+_BOT_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_BOT_DIR, "..", "..", ".env"))
+load_dotenv(os.path.join(_BOT_DIR, "..", ".env"))
 load_dotenv()
 
 # 4 API Key Rotasyonu
@@ -44,8 +47,10 @@ client = get_gemini_client() if GOOGLE_API_KEYS else None
 # LOCALHOST AYARI: Docker'ın dışarı açtığı porta bağlanıyoruz.
 API_URL = "http://127.0.0.1:8000"
 
-BOT_USERNAME = os.getenv("BOT_USERNAME", "gunyz.62@gmail.com")
-BOT_PASSWORD = os.getenv("BOT_PASSWORD", "62dersim62")
+BOT_USERNAME = os.getenv("BOT_USERNAME")
+BOT_PASSWORD = os.getenv("BOT_PASSWORD")
+if not BOT_USERNAME or not BOT_PASSWORD:
+    raise RuntimeError("BOT_USERNAME ve BOT_PASSWORD .env içinde olmalı (repo'ya yazılmaz)")
 BEKLEME_SURESI = 15
 
 

@@ -5,8 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_URL = "http://127.0.0.1:8000"
-USERNAME = os.getenv("BOT_USERNAME", "bot123@gmail.com")
-PASSWORD = os.getenv("BOT_PASSWORD", "622662")
+USERNAME = os.getenv("BOT_USERNAME")
+PASSWORD = os.getenv("BOT_PASSWORD")
+if not USERNAME or not PASSWORD:
+    raise RuntimeError("BOT_USERNAME ve BOT_PASSWORD .env içinde olmalı")
 
 # Olası tüm giriş adresleri
 olasi_adresler = [
