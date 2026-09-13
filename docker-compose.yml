@@ -79,11 +79,19 @@ services:
     image: dpage/pgadmin4
     container_name: webtoon_pgadmin
     restart: always
+    # PGADMIN_DEFAULT_* sadece volume BOŞKEN (ilk açılış) yazılır.
+    # Dosyayı değiştirmek yetmez; eski giriş pgadmin_data içinde kalır.
+    # Yeni e-posta/şifre: ~/webtoon/.env güncelle, sonra:
+    #   docker compose stop pgadmin && docker compose rm -f pgadmin
+    #   docker volume rm webtoon_pgadmin_data
+    #   docker compose up -d pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
       - "127.0.0.1:5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     depends_on:
       - db
     networks:
@@ -91,6 +99,7 @@ services:
 
 volumes:
   postgres_data:
+  pgadmin_data:
 
 networks:
   webtoon_network:
