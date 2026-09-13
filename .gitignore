@@ -22,6 +22,9 @@ env/
 *.db
 *.sqlite3
 
+# Bot onarım checkpoint'leri (sunucuda kalır)
+Backend/bot/onar_checkpoint*.json
+
 # --- REACT & FRONTEND ---
 # Node Modülleri 
 node_modules/

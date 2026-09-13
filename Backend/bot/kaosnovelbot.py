@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import itertools
+import html
 from dotenv import load_dotenv
 import cloudscraper
 import re  # Bölüm başlığı regex için
@@ -332,9 +333,8 @@ def call_gemini(prompt_text, label=""):
 
 
 # Gemini bazen telif gerekçesiyle çeviri yerine özet/sohbet basıyor.
-# İlk parça özet, sonrakiler çeviri olunca bölüm hem bozuk hem uzun duruyor;
-# eski --onar bunu "sağlam" sanıp geçiyordu.
-# ONARIM_SURUM 4: "telif hakkı kısıtlamaları sebebiyle… birebir çeviremesem… Bölüm Özeti"
+# --onar bir kez "ok" yazınca o bölüme bir daha bakmıyordu; --onar --telif
+# ve checkpoint'teki ok kayıtlarının ucuz TR taraması bunu çözer.
 TRANSLATION_REFUSAL_MARKERS = (
     "telif hakkı kısıtlamaları",
     "telif hakları kısıtlamaları",
@@ -343,23 +343,31 @@ TRANSLATION_REFUSAL_MARKERS = (
     "telif hakları nedeniyle",
     "telif hakkı sebebiyle",
     "telif hakları sebebiyle",
+    "telif hakları gereği",
+    "telif hakkı düzenlemeleri",
+    "telif hakkıyla korunan",
+    "telif hakkı koruması",
     "çevirisini sunamıyorum",
+    "çevirisini sunamam",
+    "çevirisini yapamıyorum",
+    "çevirisini sağlayamıyorum",
     "doğrudan türkçe çevirisini",
+    "doğrudan çevirmem mümkün",
     "birebir çevirisini",
     "birebir çeviremesem",
     "birebir çeviremem",
+    "birebir çevirmek yerine",
     "bölümün genel özeti",
     "bölümün genel bir özeti",
     "genel bir özetini",
     "genel özetini sunmamı",
     "özetini sunabilirim",
     "özetini sunabilir",
+    "özetleyebilirim",
     "roman metnini birebir",
     "telif nedeniyle",
     "bölüm özeti:",
     "**bölüm özeti",
-    "bir sonraki bölümün özetini",
-    "özetini de hazırlamamı",
     "due to copyright",
     "copyright restrictions",
     "i cannot provide a full",
@@ -368,21 +376,88 @@ TRANSLATION_REFUSAL_MARKERS = (
     "cannot provide a direct translation",
 )
 
+REFUSAL_VERB_MARKERS = (
+    "sunamıyorum",
+    "sunamamaktayım",
+    "sunamıyor",
+    "sunamasam",
+    "sunamam",
+    "yapamıyorum",
+    "çeviremem",
+    "çeviremesem",
+    "çeviresem",
+    "sunulamamakta",
+    "çeviremiyorum",
+    "sağlayamıyorum",
+    "çevirmem mümkün",
+    "sunmam mümkün",
+)
+
+SUMMARY_HEADING_MARKERS = (
+    "bölüm özeti",
+    "bölümün genel özeti",
+    "genel özeti:",
+    "bölüm genel özeti",
+)
+
+# İyi çevirinin sonuna eklenen Gemini sohbeti — bölümü baştan çevirme, satırı kes.
+GEMINI_CHAT_FOOTER_RE = re.compile(
+    r"(?:\n\s*)+"
+    r"(?:"
+    r"(?:bir sonraki bölümün|metnin bir sonraki|bu hikâyenin bir sonraki|bu hikayenin bir sonraki)"
+    r"[^\n]{0,140}ister misiniz\??"
+    r"|"
+    r"[^\n]{0,120}özet(?:ini|ine|e)?[^\n]{0,80}ister misiniz\??"
+    r")"
+    r"\s*$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_chapter_text(text):
+    if not text:
+        return ""
+    text = html.unescape(text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return text.replace("\xa0", " ")
+
+
+def strip_gemini_chat_footer(text):
+    """Çevirinin sonundaki 'ister misiniz?' sohbet cümlesini keser."""
+    if not text:
+        return text, False
+    cleaned, n = GEMINI_CHAT_FOOTER_RE.subn("", text)
+    if n:
+        return cleaned.rstrip(), True
+    return text, False
+
 
 def is_translation_refusal(text):
     """Telif reddi / özet sohbeti mi, yoksa gerçek çeviri mi?"""
     if not text:
         return False
-    head = text.lower()[:3000]
+    head = _normalize_chapter_text(text).lower()[:4000]
     if any(marker in head for marker in TRANSLATION_REFUSAL_MARKERS):
         return True
-    # Yeni Gemini kalıpları: girişte hem telif hem özet
-    intro = head[:1800]
-    if "telif" in intro and "özet" in intro and any(
-        w in intro for w in ("kısıtlam", "çevir", "birebir", "sebebiyle", "nedeniyle")
-    ):
+    if any(h in head for h in SUMMARY_HEADING_MARKERS):
+        return True
+    intro = head[:2000]
+    has_verb = any(v in intro for v in REFUSAL_VERB_MARKERS)
+    if has_verb and any(w in intro for w in ("özet", "birebir", "eksiksiz", "telif", "tam çeviri")):
+        return True
+    if "telif" in intro and "özet" in intro:
         return True
     return False
+
+
+def classify_tr_content(text):
+    """ok | refusal | footer — footer, sağlam çeviri + Gemini sohbet satırı."""
+    if not text:
+        return "ok"
+    if is_translation_refusal(text):
+        return "refusal"
+    _, had_footer = strip_gemini_chat_footer(text)
+    return "footer" if had_footer else "ok"
 
 
 def call_gemini_for_translation(prompt_text, label="", max_refusals=3):
@@ -649,20 +724,25 @@ YAPAMAYACAKLARIN:
 # ve tamamını yeniden çevirip günceller. Sağlam bölümlere DOKUNMAZ.
 # ==========================================
 ONARIM_CHECKPOINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint.json")
-ONARIM_SURUM = 4         # Tespit mantığı değişirse artır → eski checkpoint sıfırlanır, her şey yeniden kontrol edilir
+ONARIM_SURUM = 4         # Telif taraması dosyasında artırınca --onar --telif baştan tarar
 ONARIM_EN_MIN = 8000     # İngilizce kaynak bundan kısaysa kırpma hatasından etkilenmemiştir
 ONARIM_ORAN_ESIK = 0.80  # TR/EN karakter oranı bunun altındaysa şüpheli (tam çeviri ~%85-110 olur)
 ONARIM_TR_SUPHE_MAX = 9200  # Kırpık çeviri en fazla ~8000×1.15 karakter olabilir.
                             # TR bundan uzunsa bölüm kesin tam çevrilmiştir.
 
-def load_onarim_checkpoint(checkpoint_file):
+def load_onarim_checkpoint(checkpoint_file, sifirla_surum_farkinda=False):
     """Daha önce doğrulanan bölümleri diskten yükle (bot yarıda kesilirse kaldığı yerden devam eder)."""
     try:
         with open(checkpoint_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         if data.get("_surum") != ONARIM_SURUM:
-            print("   ♻️ Tespit mantığı güncellendi — eski checkpoint sıfırlanıyor, tüm bölümler yeniden kontrol edilecek.")
-            return {"_surum": ONARIM_SURUM}
+            if sifirla_surum_farkinda:
+                print("   ♻️ Telif taraması güncellendi — tarama baştan.")
+                return {"_surum": ONARIM_SURUM}
+            # Uzunluk "ok" kayıtlarını silme: 3000+ bölümü yeniden scrape etme.
+            # Telif/özet, döngüde checkpoint'ten bağımsız ucuz TR bakışıyla yakalanır.
+            print("   ♻️ Tespit güncellendi — önceki 'ok' kayıtları duruyor; telif/özet yine de kontrol edilecek.")
+            data["_surum"] = ONARIM_SURUM
         return data
     except Exception:
         return {"_surum": ONARIM_SURUM}
@@ -696,8 +776,28 @@ def get_chapter_content(novel_slug, chapter_number):
         pass
     return None
 
-def repair_mode(kesin=False):
-    if kesin:
+
+def update_chapter_content(token, novel, chapter_num, content):
+    """Sadece Türkçe içeriği günceller (başlığa dokunmaz)."""
+    headers = {"Authorization": f"Bearer {token}"}
+    res = requests.put(
+        f"{API_URL}/novels/{novel['slug']}/chapters/{chapter_num}",
+        data={"content": content},
+        headers=headers,
+    )
+    if res.status_code == 200:
+        return True
+    print(f"   ❌ Güncelleme Hatası: {res.status_code} - {res.text}")
+    return False
+
+
+def repair_mode(kesin=False, sadece_telif=False):
+    if sadece_telif:
+        checkpoint_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint_telif.json")
+        print("🔧 TELİF/ÖZET TARAMA (--onar --telif)")
+        print("   Eski onar_checkpoint.json YOK SAYILIR — 'ok' yazılmış bölümler de taranır.")
+        print("   İngilizce kaynak ancak özet/telif bulunursa çekilir.")
+    elif kesin:
         # KESİN MOD: Oran tahminine güvenme. İngilizcesi 8000 karakterden uzun
         # olan (yani kırpma hatasından etkilenmiş OLABİLECEK) her bölümü,
         # Türkçesi zaten kesin-tam olanlar (TR ≥ 9200) hariç, yeniden çevir.
@@ -708,6 +808,7 @@ def repair_mode(kesin=False):
         checkpoint_file = ONARIM_CHECKPOINT_FILE
         print("🔧 ONARIM MODU BAŞLATILDI (--onar)")
         print("   Eksik çevrilmiş veya telif/özet basılmış bölümler tespit edilip yeniden çevrilecek.")
+        print("   Checkpoint'te 'ok' olsa bile Türkçe metin telif/özet için tekrar bakılır.")
     print(f"   Checkpoint dosyası: {checkpoint_file}")
 
     token = get_auth_token()
@@ -723,8 +824,14 @@ def repair_mode(kesin=False):
     ]
     print(f"🎯 Kontrol edilecek roman sayısı: {len(active_novels)}")
 
-    checkpoint = load_onarim_checkpoint(checkpoint_file)
-    stats = {"saglam": 0, "onarildi": 0, "eklendi": 0, "kaynak_yok": 0, "hata": 0}
+    checkpoint = load_onarim_checkpoint(checkpoint_file, sifirla_surum_farkinda=sadece_telif)
+    stats = {"saglam": 0, "onarildi": 0, "eklendi": 0, "kaynak_yok": 0, "hata": 0, "footer": 0}
+
+    def scrape_source(num):
+        target_url = novel['source_url'].format(num)
+        eng_title, eng_text = scrape_chapter(target_url, num)
+        time.sleep(2)
+        return eng_title, eng_text
 
     for novel in active_novels:
         slug = novel['slug']
@@ -739,20 +846,85 @@ def repair_mode(kesin=False):
         max_ch = int(max(mevcut_numaralar))
         cp_novel = checkpoint.setdefault(slug, {})
         kalan = sum(1 for n in range(1, max_ch + 1) if str(n) not in cp_novel)
-        print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). Kontrol edilecek: {kalan}")
+        if sadece_telif:
+            print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). Telif taraması: {kalan} kaldı.")
+        else:
+            print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). İlk kez bakılacak: {kalan}")
+            print("   (Checkpoint'te ok olanlar da telif/özet için ucuz TR kontrolünden geçer.)")
 
         consecutive_errors = 0
 
         for num in range(1, max_ch + 1):
             key = str(num)
-            if key in cp_novel:
-                continue  # Bu bölüm daha önce doğrulandı/işlendi
+            already = key in cp_novel
+            in_db = float(num) in mevcut_numaralar
 
-            # ── 1. İngilizce kaynağı çek ─────────────────────────
-            target_url = novel['source_url'].format(num)
-            eng_title, eng_text = scrape_chapter(target_url, num)
-            time.sleep(2)  # Kaynak siteyi yormamak için bekleme
+            # --telif: bu geçişte işlenmişse atla. Normal --onar: ok olsa bile TR'ye bak.
+            if already and sadece_telif:
+                continue
 
+            if in_db:
+                tr_content = get_chapter_content(slug, num)
+                if tr_content is None:
+                    if already and not sadece_telif:
+                        continue
+                    print(f"   ⚠️ Bölüm {num}: Türkçe içerik okunamadı, atlanıyor.")
+                    stats["hata"] += 1
+                    continue
+
+                kind = classify_tr_content(tr_content)
+                if kind == "refusal":
+                    print(f"   🔧 Bölüm {num} TELİF/ÖZET YANITI içeriyor → yeniden çevriliyor...")
+                    eng_title, eng_text = scrape_source(num)
+                    if eng_title in ("SERIES_END", "GHOST") or not eng_text:
+                        print(f"   ⏭️  Bölüm {num}: kaynak alınamadı, atlanıyor.")
+                        stats["kaynak_yok"] += 1
+                        continue
+                    status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
+                    if status == "SUCCESS":
+                        cp_novel[key] = "ok"
+                        save_onarim_checkpoint(checkpoint, checkpoint_file)
+                        stats["onarildi"] += 1
+                        consecutive_errors = 0
+                        time.sleep(5)
+                    else:
+                        stats["hata"] += 1
+                        consecutive_errors += 1
+                        if consecutive_errors >= 3:
+                            print("   🛑 Art arda 3 hata — bu roman atlanıyor (checkpoint sayesinde sonraki çalıştırmada devam eder).")
+                            break
+                    continue
+
+                if kind == "footer":
+                    cleaned, _ = strip_gemini_chat_footer(tr_content)
+                    print(f"   ✂️  Bölüm {num}: sonundaki Gemini sohbet satırı kesiliyor...")
+                    if update_chapter_content(token, novel, num, cleaned):
+                        cp_novel[key] = "ok"
+                        save_onarim_checkpoint(checkpoint, checkpoint_file)
+                        stats["footer"] += 1
+                    else:
+                        stats["hata"] += 1
+                    continue
+
+                # Sağlam Türkçe
+                if sadece_telif:
+                    cp_novel[key] = "temiz"
+                    if num % 50 == 0:
+                        save_onarim_checkpoint(checkpoint, checkpoint_file)
+                    if num % 200 == 0:
+                        print(f"   … {num}/{max_ch} tarandı (özet yok)")
+                    stats["saglam"] += 1
+                    continue
+                if already:
+                    continue
+                # İlk kez --onar: aşağıda EN uzunluk kontrolü için kaynağı çek
+            elif already:
+                continue
+            elif sadece_telif:
+                continue
+
+            # ── İngilizce kaynağı çek (eksik bölüm veya ilk uzunluk kontrolü) ──
+            eng_title, eng_text = scrape_source(num)
             if eng_title in ("SERIES_END", "GHOST") or not eng_text:
                 print(f"   ⏭️  Bölüm {num}: kaynak alınamadı (hayalet/yönlendirme), atlanıyor.")
                 cp_novel[key] = "kaynak_yok"
@@ -760,39 +932,14 @@ def repair_mode(kesin=False):
                 stats["kaynak_yok"] += 1
                 continue
 
-            # ── 2. Bölüm veritabanında hiç yoksa → çevir ve EKLE ──
-            if float(num) not in mevcut_numaralar:
+            # ── Bölüm veritabanında hiç yoksa → çevir ve EKLE ──
+            if not in_db:
                 print(f"   ➕ Bölüm {num} veritabanında YOK → çevrilip ekleniyor...")
                 status = translate_and_upload(token, novel, num, eng_title, eng_text)
                 if status in ("SUCCESS", "SKIP"):
                     cp_novel[key] = "ok"
                     save_onarim_checkpoint(checkpoint, checkpoint_file)
                     stats["eklendi"] += 1
-                    consecutive_errors = 0
-                    time.sleep(5)
-                else:
-                    stats["hata"] += 1
-                    consecutive_errors += 1
-                    if consecutive_errors >= 3:
-                        print("   🛑 Art arda 3 hata — bu roman atlanıyor (checkpoint sayesinde sonraki çalıştırmada devam eder).")
-                        break
-                continue
-
-            # ── 3. Bölüm varsa → Türkçe içeriğin uzunluğunu kontrol et ──
-            tr_content = get_chapter_content(slug, num)
-            if tr_content is None:
-                print(f"   ⚠️ Bölüm {num}: Türkçe içerik okunamadı, atlanıyor.")
-                stats["hata"] += 1
-                continue
-
-            # Gemini telif/özet basmışsa uzun olsa bile bozuk say — eski --onar bunu kaçırıyordu
-            if is_translation_refusal(tr_content):
-                print(f"   🔧 Bölüm {num} TELİF/ÖZET YANITI içeriyor → yeniden çevriliyor...")
-                status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
-                if status == "SUCCESS":
-                    cp_novel[key] = "ok"
-                    save_onarim_checkpoint(checkpoint, checkpoint_file)
-                    stats["onarildi"] += 1
                     consecutive_errors = 0
                     time.sleep(5)
                 else:
@@ -832,7 +979,7 @@ def repair_mode(kesin=False):
                 stats["saglam"] += 1
                 continue
 
-            # ── 4. EKSİK/ŞÜPHELİ bölüm → tamamını yeniden çevir, üzerine yaz ──
+            # ── EKSİK/ŞÜPHELİ bölüm → tamamını yeniden çevir, üzerine yaz ──
             sebep = "şüpheli (kesin mod)" if (kesin and oran >= ONARIM_ORAN_ESIK) else "EKSİK"
             print(f"   🔧 Bölüm {num} {sebep}! (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}) → yeniden çevriliyor...")
             status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
@@ -849,10 +996,13 @@ def repair_mode(kesin=False):
                     print("   🛑 Art arda 3 hata — bu roman atlanıyor (checkpoint sayesinde sonraki çalıştırmada devam eder).")
                     break
 
+        save_onarim_checkpoint(checkpoint, checkpoint_file)
+
     print("\n" + "=" * 50)
     print("🏁 ONARIM TAMAMLANDI — ÖZET:")
     print(f"   ✅ Sağlam (dokunulmadı) : {stats['saglam']}")
-    print(f"   🔧 Onarıldı (güncellendi): {stats['onarildi']}")
+    print(f"   🔧 Onarıldı (yeniden çeviri): {stats['onarildi']}")
+    print(f"   ✂️  Sohbet satırı kesildi : {stats['footer']}")
     print(f"   ➕ Yeni eklendi          : {stats['eklendi']}")
     print(f"   ⏭️  Kaynak yok/hayalet    : {stats['kaynak_yok']}")
     print(f"   ❌ Hata                  : {stats['hata']}")
@@ -863,7 +1013,10 @@ def repair_mode(kesin=False):
 # ==========================================
 if __name__ == "__main__":
     if "--onar" in sys.argv:
-        repair_mode(kesin=("--kesin" in sys.argv))
+        repair_mode(
+            kesin=("--kesin" in sys.argv),
+            sadece_telif=("--telif" in sys.argv),
+        )
         sys.exit(0)
 
     print("🚀 KAOS BOT YEREL TEST MODU BAŞLATILDI")
