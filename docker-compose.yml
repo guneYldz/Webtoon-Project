@@ -37,9 +37,6 @@ services:
       SECRET_KEY: ${SECRET_KEY}
     volumes:
       - ./Backend:/app
-      - webtoon_covers:/app/static/covers
-      - webtoon_banners:/app/static/banners
-      - webtoon_images:/app/static/images
     ports:
       - "127.0.0.1:8000:8000"
     networks:
@@ -94,9 +91,6 @@ services:
 
 volumes:
   postgres_data:
-  webtoon_covers:
-  webtoon_banners:
-  webtoon_images:
 
 networks:
   webtoon_network:
