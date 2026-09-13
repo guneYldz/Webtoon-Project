@@ -334,12 +334,32 @@ def call_gemini(prompt_text, label=""):
 # Gemini bazen telif gerekçesiyle çeviri yerine özet/sohbet basıyor.
 # İlk parça özet, sonrakiler çeviri olunca bölüm hem bozuk hem uzun duruyor;
 # eski --onar bunu "sağlam" sanıp geçiyordu.
+# ONARIM_SURUM 4: "telif hakkı kısıtlamaları sebebiyle… birebir çeviremesem… Bölüm Özeti"
 TRANSLATION_REFUSAL_MARKERS = (
+    "telif hakkı kısıtlamaları",
     "telif hakları kısıtlamaları",
+    "telif kısıtlamaları",
+    "telif hakkı nedeniyle",
+    "telif hakları nedeniyle",
+    "telif hakkı sebebiyle",
+    "telif hakları sebebiyle",
     "çevirisini sunamıyorum",
     "doğrudan türkçe çevirisini",
+    "birebir çevirisini",
+    "birebir çeviremesem",
+    "birebir çeviremem",
     "bölümün genel özeti",
+    "bölümün genel bir özeti",
+    "genel bir özetini",
     "genel özetini sunmamı",
+    "özetini sunabilirim",
+    "özetini sunabilir",
+    "roman metnini birebir",
+    "telif nedeniyle",
+    "bölüm özeti:",
+    "**bölüm özeti",
+    "bir sonraki bölümün özetini",
+    "özetini de hazırlamamı",
     "due to copyright",
     "copyright restrictions",
     "i cannot provide a full",
@@ -353,8 +373,16 @@ def is_translation_refusal(text):
     """Telif reddi / özet sohbeti mi, yoksa gerçek çeviri mi?"""
     if not text:
         return False
-    head = text.lower()[:2500]
-    return any(marker in head for marker in TRANSLATION_REFUSAL_MARKERS)
+    head = text.lower()[:3000]
+    if any(marker in head for marker in TRANSLATION_REFUSAL_MARKERS):
+        return True
+    # Yeni Gemini kalıpları: girişte hem telif hem özet
+    intro = head[:1800]
+    if "telif" in intro and "özet" in intro and any(
+        w in intro for w in ("kısıtlam", "çevir", "birebir", "sebebiyle", "nedeniyle")
+    ):
+        return True
+    return False
 
 
 def call_gemini_for_translation(prompt_text, label="", max_refusals=3):
@@ -621,7 +649,7 @@ YAPAMAYACAKLARIN:
 # ve tamamını yeniden çevirip günceller. Sağlam bölümlere DOKUNMAZ.
 # ==========================================
 ONARIM_CHECKPOINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint.json")
-ONARIM_SURUM = 3         # Tespit mantığı değişirse artır → eski checkpoint sıfırlanır, her şey yeniden kontrol edilir
+ONARIM_SURUM = 4         # Tespit mantığı değişirse artır → eski checkpoint sıfırlanır, her şey yeniden kontrol edilir
 ONARIM_EN_MIN = 8000     # İngilizce kaynak bundan kısaysa kırpma hatasından etkilenmemiştir
 ONARIM_ORAN_ESIK = 0.80  # TR/EN karakter oranı bunun altındaysa şüpheli (tam çeviri ~%85-110 olur)
 ONARIM_TR_SUPHE_MAX = 9200  # Kırpık çeviri en fazla ~8000×1.15 karakter olabilir.
