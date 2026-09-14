@@ -691,6 +691,13 @@ YAPAMAYACAKLARIN:
     else:
         print(f"   ✅ Editör tamamladı.")
 
+    ceviri_metin, had_footer = strip_gemini_chat_footer(ceviri_metin)
+    if had_footer:
+        print("   ✂️ Gemini sohbet satırı kayıttan önce kesildi.")
+    if is_translation_refusal(ceviri_metin):
+        print("   ❌ Birleşen metin hâlâ telif/özet — kaydedilmeyecek.")
+        return "ERROR"
+
     # ==================================================
     # KAYDET  (tr_title Pass 1'den kilitli, asla değişmedi)
     # ==================================================
