@@ -83,6 +83,21 @@ NOVEL_CONFIGS = {
         11. Karakter adlarını (varsa özel isimler) ASLA çevirme.
         12. Ton: Gerilimli ama ana karakterin işine bağlılığını hissettiren, hafif absürt ve edebi bir dil.
     """,
+    "Lord of the Mysteries": """
+        1. "Beyonder" -> "Yabancı"
+        2. "Sequence" -> "Sıra"
+        3. "Pathway" -> "Yol"
+        4. "Potion" -> "İksir"
+        5. "The Fool" -> "Aptal"
+        6. "Klein" -> "Klein", "Audrey" -> "Audrey", "Dunn" -> "Dunn"
+        7. "Nighthawk" -> "Gece Şahini"
+        8. "Evernight Goddess" -> "Sonsuz Gece Tanrıçası"
+        9. "Spirit World" -> "Ruh Dünyası"
+        10. "Sealed Artifact" -> "Mühürlü Eser"
+        11. "Acting Method" -> "Rol Yapma Yöntemi"
+        12. Karakter adlarını ASLA çevirme.
+        13. Ton: Gizemli, ağır, edebi; kilise ve tarikat dilini resmi tut.
+    """,
     "default": """
         1. Özel isimleri (Karakter adları, şehir adları) ASLA çevirme.
         2. Büyü isimlerini mümkünse Türkçe karşılığıyla, parantez içinde İngilizcesi olacak şekilde çevir.
@@ -519,6 +534,8 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text, guncell
     novel_key = "default"
     if "Shadow Slave" in novel['title']: novel_key = "Shadow Slave"
     elif "Ghost Story" in novel['title']: novel_key = "Ghost Story"
+    elif "Lord of the Mysteries" in novel['title'] or "Lorm" in novel['title']:
+        novel_key = "Lord of the Mysteries"
 
     config = NOVEL_CONFIGS[novel_key]
 
