@@ -84,19 +84,20 @@ NOVEL_CONFIGS = {
         12. Ton: Gerilimli ama ana karakterin işine bağlılığını hissettiren, hafif absürt ve edebi bir dil.
     """,
     "Lord of the Mysteries": """
-        1. "Beyonder" -> "Yabancı"
-        2. "Sequence" -> "Sıra"
-        3. "Pathway" -> "Yol"
-        4. "Potion" -> "İksir"
-        5. "The Fool" -> "Aptal"
-        6. "Klein" -> "Klein", "Audrey" -> "Audrey", "Dunn" -> "Dunn"
-        7. "Nighthawk" -> "Gece Şahini"
-        8. "Evernight Goddess" -> "Sonsuz Gece Tanrıçası"
-        9. "Spirit World" -> "Ruh Dünyası"
-        10. "Sealed Artifact" -> "Mühürlü Eser"
-        11. "Acting Method" -> "Rol Yapma Yöntemi"
-        12. Karakter adlarını ASLA çevirme.
-        13. Ton: Gizemli, ağır, edebi; kilise ve tarikat dilini resmi tut.
+        1. "Lord of the Mysteries" -> "Gizemlerin Efendisi"
+        2. "Beyonder" -> "Ötekin" (Serinin terminolojisine göre "Beyonder" olarak da bırakılabilir)
+        3. "Sequence" -> "Sekans"
+        4. "Pathway" -> "Yol" (Örn: Seer Pathway -> Kahin Yolu)
+        5. "Potion" -> "İksir"
+        6. "Acting Method" -> "Rol Yapma Metodu"
+        7. "Sealed Artifact" -> "Mühürlü Eser"
+        8. "Spirituality" -> "Ruhsallık"
+        9. "The Fool" -> "Deli" (Tarot kartı referansı olarak büyük harfle)
+        10. "Tarot Club" -> "Tarot Kulübü"
+        11. "Nighthawks" -> "Gece Kuşları"
+        12. "Beyonder Characteristics" -> "Ötekin Karakteristiği"
+        13. "Klein", "Tingen", "Backlund" gibi özel isimleri, karakter adlarını ve şehirleri ASLA çevirme.
+        14. Ton: Viktorya dönemi estetiğini yansıtan, Lovecraftian kozmik korku gerilimini hissettiren, resmi, detaycı ve gizemli bir edebi dil.
     """,
     "default": """
         1. Özel isimleri (Karakter adları, şehir adları) ASLA çevirme.
