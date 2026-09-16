@@ -13,6 +13,10 @@ _KIND_TO_KEY = {
     "anlatim": "anlatim",
     "ui": "ui",
     "sfx": "sfx",
+    "bagirma": "bagirma",
+    "shout": "bagirma",
+    "yell": "bagirma",
+    "scream": "bagirma",
 }
 
 _SYSTEM_FALLBACKS = [
@@ -42,6 +46,29 @@ def resolve_font_file(name):
         if os.path.isfile(fb):
             return fb
     raise FileNotFoundError(f"Font bulunamadı: {name}")
+
+
+def looks_like_shout(text, source=""):
+    """Bağırma: ünlemli kısa replik veya asıl metin büyük harf."""
+    t = (text or "").strip()
+    src = (source or "").strip()
+    if t.endswith("!") and len(t) <= 96:
+        return True
+    letters = [c for c in src if c.isalpha()]
+    if len(letters) >= 4:
+        upper = sum(1 for c in letters if c.isupper())
+        if upper / len(letters) >= 0.72:
+            return True
+    return False
+
+
+def effective_kind(kind, text="", source=""):
+    k = (kind or "diyalog").lower()
+    if k in ("bagirma", "shout", "yell", "scream"):
+        return "bagirma"
+    if k in ("dialogue", "diyalog") and looks_like_shout(text, source):
+        return "bagirma"
+    return k
 
 
 def font_for_kind(kind, ayar):

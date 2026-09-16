@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-from google import genai
 import time
 import os
 import sys
@@ -10,6 +9,7 @@ import html
 from dotenv import load_dotenv
 import cloudscraper
 import re  # Bölüm başlığı regex için
+from llm import active_key_hint, call_text, has_keys, rotate_key
 
 # ==========================================
 # ⚙️ AYARLAR VE YAPILANDIRMA
@@ -19,31 +19,8 @@ load_dotenv(os.path.join(_BOT_DIR, "..", "..", ".env"))
 load_dotenv(os.path.join(_BOT_DIR, "..", ".env"))
 load_dotenv()
 
-# 4 API Key Rotasyonu
-GOOGLE_API_KEYS = [
-    k for k in [
-        os.getenv("GOOGLE_API_KEY"),
-        os.getenv("GOOGLE_API_KEY_2"),
-        os.getenv("GOOGLE_API_KEY_3"),
-        os.getenv("GOOGLE_API_KEY_4"),
-        os.getenv("GOOGLE_API_KEY_5"),
-        os.getenv("GOOGLE_API_KEY_6"),
-        os.getenv("GOOGLE_API_KEY_7")
-
-    ] if k
-]
-
-_current_key_index = 0
-
-def get_gemini_client():
-    return genai.Client(api_key=GOOGLE_API_KEYS[_current_key_index])
-
-def rotate_key():
-    global _current_key_index
-    _current_key_index = (_current_key_index + 1) % len(GOOGLE_API_KEYS)
-    print(f"🔄 API Key rotasyonu: Key #{_current_key_index + 1} aktif")
-
-client = get_gemini_client() if GOOGLE_API_KEYS else None
+if not has_keys():
+    print("⚠️ DEEPSEEK_API_KEY yok. .env içine yaz (GitHub'a koyma).")
 
 # LOCALHOST AYARI: Docker'ın dışarı açtığı porta bağlanıyoruz.
 API_URL = "http://127.0.0.1:8000"
@@ -277,75 +254,9 @@ def scrape_chapter(url, current_ch_num):
 # 🤖 ÇEVİRİ VE YÜKLEME
 # ==========================================
 
-# Kalıcı olarak reddedilen (ban yemiş / geçersiz) key'lerin indexleri.
-# Bu key'ler oturum boyunca bir daha denenmez.
-_dead_keys = set()
-
-# 🤖 MODEL LİSTESİ (öncelik sırasıyla):
-# gemini-2.5-flash yeni projelere KAPATILDI (404 "no longer available to new users").
-# Google'ın resmi önerisi: gemini-3.6-flash. Bir model 404 verirse sıradakine geçilir.
-GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]
-_current_model_index = 0
-
 def call_gemini(prompt_text, label=""):
-    """
-    Gemini'yi çağır. 429/rate limit üzerinde key rotasyonu uygular.
-    403/PERMISSION_DENIED veren key'i ölü sayıp kalıcı olarak atlar.
-    404 "model kullanılamıyor" hatasında listedeki sıradaki modele geçer.
-    Başarılıysa metin döndürür, tüm denemeler biterse None döndürür.
-    """
-    global client, _current_model_index
-    max_cycles = 3
-    for cycle in range(max_cycles):
-        for _ in range(len(GOOGLE_API_KEYS)):
-            # Ölü olduğu bilinen key'i deneme, direkt sonrakine geç
-            if _current_key_index in _dead_keys:
-                if len(_dead_keys) >= len(GOOGLE_API_KEYS):
-                    print("❌ TÜM KEY'LER ÖLÜ (403/geçersiz)! Yeni key gerekiyor.")
-                    return None
-                rotate_key()
-                continue
-            try:
-                client = get_gemini_client()
-                response = client.models.generate_content(
-                    model=GEMINI_MODELS[_current_model_index],
-                    contents=prompt_text
-                )
-                return response.text.strip()
-            except Exception as e:
-                err = str(e)
-                if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    print(f"⚠️ Rate limit ({label}) - Key #{_current_key_index + 1} doldu, sonraki key'e geçiliyor...")
-                    rotate_key()
-                elif "404" in err and ("no longer available" in err or "NOT_FOUND" in err or "not found" in err):
-                    # Model bu key/proje için kullanılamıyor → sıradaki modele geç
-                    if _current_model_index + 1 < len(GEMINI_MODELS):
-                        _current_model_index += 1
-                        print(f"🔁 Model kullanılamıyor ({label}) → '{GEMINI_MODELS[_current_model_index]}' modeline geçiliyor...")
-                    else:
-                        print(f"   ❌ Listedeki hiçbir model kullanılamıyor ({label}): {e}")
-                        return None
-                elif "403" in err or "PERMISSION_DENIED" in err or "API_KEY_INVALID" in err or "API key not valid" in err:
-                    # KALICI key hatası: Google bu key'in projesini reddetmiş.
-                    # Bu key'i ölü işaretle, kalan key'lerle devam et.
-                    print(f"💀 Key #{_current_key_index + 1} ÖLÜ (403/geçersiz — Google erişimi reddetti). Bu key artık atlanacak.")
-                    _dead_keys.add(_current_key_index)
-                    rotate_key()
-                elif "503" in err or "UNAVAILABLE" in err or "500" in err or "INTERNAL" in err or "DEADLINE" in err:
-                    # GEÇİCİ Google sunucu hatası (model yoğun vb.) — pes etme, bekle ve tekrar dene
-                    print(f"⚠️ Geçici sunucu hatası ({label}): model yoğun/erişilemez. 30sn beklenip tekrar denenecek...")
-                    time.sleep(30)
-                    rotate_key()  # farklı key farklı kapasiteye düşebilir, denemeye değer
-                else:
-                    print(f"   ❌ API Hatası ({label}): {e}")
-                    return None
-        if len(_dead_keys) >= len(GOOGLE_API_KEYS):
-            print("❌ TÜM KEY'LER ÖLÜ (403/geçersiz)! Yeni key gerekiyor.")
-            return None
-        print(f"⏳ Kullanılabilir key'ler rate limit'e çarptı. 65sn bekleniyor... (Döngü {cycle+1}/{max_cycles})")
-        time.sleep(65)
-    print("❌ Tüm API denemeleri başarısız.")
-    return None
+    """DeepSeek metin çağrısı (eski Gemini sarmalayıcı adı)."""
+    return call_text(prompt_text, label=label)
 
 
 # Gemini bazen telif gerekçesiyle çeviri yerine özet/sohbet basıyor.
@@ -489,7 +400,7 @@ def call_gemini_for_translation(prompt_text, label="", max_refusals=3):
         if not is_translation_refusal(parca):
             return parca
         print(
-            f"   ⚠️ {label}: Gemini telif/özet yanıtı verdi "
+            f"   ⚠️ {label}: DeepSeek telif/özet yanıtı verdi "
             f"(deneme {attempt + 1}/{max_refusals}), key değiştirilip tekrar denenecek..."
         )
         rotate_key()
@@ -551,7 +462,7 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text, guncell
     # Eski kod eng_text[:8000] ile kırpıyordu → bölüm sonu kayboluyordu.
     # ==================================================
     chunks = split_text_into_chunks(eng_text)
-    print(f"   🤖 AI ({novel_key}) Çeviriyor... ({len(eng_text)} karakter, {len(chunks)} parça) (Key: {GOOGLE_API_KEYS[_current_key_index][:5]}...)")
+    print(f"   🤖 AI ({novel_key}) Çeviriyor... ({len(eng_text)} karakter, {len(chunks)} parça) (Key: {active_key_hint()}...)")
 
     if eng_isim:
         baslik_talimati = f"""

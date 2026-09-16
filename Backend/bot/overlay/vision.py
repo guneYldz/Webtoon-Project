@@ -1,8 +1,14 @@
-"""Gemini Vision: balon kutuları, asıl metin, Türkçe çeviri."""
+"""DeepSeek Vision: balon kutuları, asıl metin, Türkçe çeviri."""
 
 import json
-import os
 import re
+import sys
+
+from .ayar import bot_dir
+
+_bot = bot_dir()
+if _bot not in sys.path:
+    sys.path.insert(0, _bot)
 
 PROMPT = """Sen Kaos Manga için manga/webtoon dizgicisisin. Görseldeki TÜM yazıları oku.
 
@@ -32,8 +38,9 @@ kind:
 - dialogue: konuşma balonu
 - thought: düşünce balonu
 - narration: kutu/anlatıcı
-- ui: sistem/menü/loot/ipucu paneli
-- sfx: ses efekti (웅성 vb.)
+- ui: sistem/menü/loot/ipucu paneli (süslü çerçeve). Bağırma değil.
+- sfx: ses efekti (웅성, BOOM)
+- bagirma: bağırma / haykırış (büyük harf, ünlem: "NE Mİ İSTİYORUM?", "Söyleme!")
 
 Çeviri kuralları:
 - Özel isimleri çevirme (AnyTNG, Molmont). "Master AnyTNG" → "Usta AnyTNG" (bitiştirme YASAK).
@@ -171,66 +178,22 @@ def offset_regions(regions, dy=0, dx=0):
     return out
 
 
-def has_gemini_keys():
-    return bool(_gemini_keys())
-
-
-def _gemini_keys():
-    keys = []
-    for name in (
-        "GOOGLE_API_KEY",
-        "GOOGLE_API_KEY_2",
-        "GOOGLE_API_KEY_3",
-        "GOOGLE_API_KEY_4",
-        "GOOGLE_API_KEY_5",
-        "GOOGLE_API_KEY_6",
-        "GOOGLE_API_KEY_7",
-    ):
-        v = os.getenv(name)
-        if v:
-            keys.append(v)
-    return keys
+def has_llm_keys():
+    from llm import has_keys
+    return has_keys()
 
 
 def detect_regions(image_bytes, mime="image/png"):
-    """Gemini Vision ile bölgeler. Key yoksa None."""
-    keys = _gemini_keys()
-    if not keys:
-        return None
-    try:
-        from google import genai
-        from google.genai import types
-    except ImportError:
-        print("      ⚠️ google-genai yok, overlay tespiti atlandı.")
-        return None
+    """DeepSeek Vision ile bölgeler. Key yoksa None."""
+    from llm import call_vision, has_keys
 
-    models = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]
-    last_err = None
-    for key in keys:
-        client = genai.Client(api_key=key)
-        for model in models:
-            try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=[
-                        types.Part.from_bytes(data=image_bytes, mime_type=mime),
-                        PROMPT,
-                    ],
-                )
-                raw = (response.text or "").strip()
-                data = _parse_json(raw)
-                if data is None:
-                    last_err = "JSON ayrıştırılamadı"
-                    continue
-                return data
-            except Exception as e:
-                last_err = str(e)
-                err = last_err.lower()
-                if "429" in err or "resource_exhausted" in err:
-                    break
-                if "403" in err or "permission_denied" in err or "api key" in err:
-                    break
-                continue
-    if last_err:
-        print(f"      ⚠️ Overlay Gemini: {last_err[:160]}")
-    return None
+    if not has_keys():
+        return None
+    raw = call_vision(image_bytes, PROMPT, mime=mime, label="overlay")
+    if not raw:
+        return None
+    data = _parse_json(raw)
+    if data is None:
+        print("      ⚠️ Overlay: JSON ayrıştırılamadı")
+        return None
+    return data

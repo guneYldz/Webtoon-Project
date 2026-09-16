@@ -138,6 +138,11 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("NotoSerif", os.path.basename(ui))
         sfx = font_for_kind("sfx", ayar)
         self.assertIn("NotoSansDisplay", os.path.basename(sfx))
+        shout = font_for_kind("bagirma", ayar)
+        self.assertIn("NotoSansDisplay", os.path.basename(shout))
+        from overlay.fonts import effective_kind
+        self.assertEqual(effective_kind("dialogue", "Öyle saçmalıklar söyleme!", ""), "bagirma")
+        self.assertEqual(effective_kind("ui", "Usta. 10'lu çağrı", "SUMMONS"), "ui")
 
 
 if __name__ == "__main__":
