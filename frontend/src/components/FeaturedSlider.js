@@ -44,7 +44,7 @@ const FeaturedSlider = ({ webtoon, isFirst = false }) => {
             alt={webtoon.title + " Banner"}
             fill
             sizes="(max-width: 768px) 100vw, 1200px"
-            quality={60}
+            quality={90}
             className="object-cover object-center"
             priority={isFirst}
             loading={isFirst ? undefined : "lazy"}
@@ -70,6 +70,7 @@ const FeaturedSlider = ({ webtoon, isFirst = false }) => {
               alt={webtoon.title}
               fill
               sizes="160px"
+              quality={90}
               loading="lazy"
               className="object-cover"
             />

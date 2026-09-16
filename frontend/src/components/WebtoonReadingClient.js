@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import CommentSection from "@/components/CommentSection";
 import ChapterReactions from "@/components/ChapterReactions";
 import Link from "next/link";
-import Image from "next/image";
 import { Lato } from "next/font/google";
 import ReadingHero from "@/components/ReadingHero";
 import { API } from "@/api";
@@ -187,10 +186,9 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
                             key={index}
                             src={imgUrl.startsWith("http") ? imgUrl : `${API}/${imgUrl}`}
                             alt={`Sayfa ${index + 1}`}
-                            width="800"
-                            height="2000"
                             className="w-full h-auto block"
                             loading={index < 2 ? "eager" : "lazy"}
+                            decoding={index < 2 ? "sync" : "async"}
                         />
                     ))
                 ) : (

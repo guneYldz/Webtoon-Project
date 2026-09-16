@@ -171,6 +171,7 @@ export default async function Home() {
                           fill
                           className="object-cover transition duration-500 group-hover:scale-110"
                           sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+                          quality={90}
                         />
                       </Link>
 

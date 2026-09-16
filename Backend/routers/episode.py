@@ -9,7 +9,7 @@ from fastapi import Response
 import models
 import schemas
 from database import get_db
-from routers.auth import get_current_admin
+from routers.auth import get_current_admin, get_current_editor
 from utils.chapter_title import default_chapter_title, chapter_display_label
 
 
@@ -236,4 +236,46 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         "next_episode_id": sonraki_bolum.id if sonraki_bolum else None,
         "prev_episode_id": onceki_bolum.id if onceki_bolum else None
     }
+
+
+@router.delete("/{episode_id}")
+def bolum_sil(
+    episode_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_editor),
+):
+    bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == episode_id).first()
+    if not bolum:
+        raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
+
+    webtoon_id = bolum.webtoon_id
+    slug = bolum.webtoon.slug if bolum.webtoon else None
+    ep_num = bolum.episode_number
+    title = bolum.title
+
+    db.query(models.Comment).filter(
+        models.Comment.webtoon_episode_id == episode_id,
+        models.Comment.parent_id.isnot(None),
+    ).delete(synchronize_session=False)
+    db.query(models.Comment).filter(models.Comment.webtoon_episode_id == episode_id).delete(synchronize_session=False)
+    db.query(models.Like).filter(models.Like.episode_id == episode_id).delete(synchronize_session=False)
+    db.query(models.ChapterReaction).filter(
+        models.ChapterReaction.content_type == "webtoon",
+        models.ChapterReaction.target_id == episode_id,
+    ).delete(synchronize_session=False)
+
+    db.delete(bolum)
+    db.commit()
+
+    klasor = f"static/images/{webtoon_id}/{episode_id}"
+    if os.path.isdir(klasor):
+        shutil.rmtree(klasor, ignore_errors=True)
+
+    if slug and ep_num is not None:
+        chap_num = str(int(ep_num)) if float(ep_num).is_integer() else str(ep_num)
+        bot_folder = f"static/images/{slug}/bolum-{chap_num}"
+        if os.path.isdir(bot_folder):
+            shutil.rmtree(bot_folder, ignore_errors=True)
+
+    return {"status": "success", "message": f"'{title}' silindi"}
 
