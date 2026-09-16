@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import time
 import requests
 import undetected_chromedriver as uc
@@ -53,6 +54,16 @@ SERI_ARASI_BEKLEME = 5
 TUR_ARASI_BEKLEME = 1800
 
 engine = create_engine(DB_CONNECTION)
+
+
+def apply_overlay_if_enabled(full_path):
+    """Kalıntıyı silip Türkçe metni doğru font/balonla yeniden dizer."""
+    try:
+        from overlay.pipeline import process_saved_page
+        process_saved_page(full_path)
+    except Exception as e:
+        print(f"      ⚠️ Overlay hatası: {e}")
+
 
 def get_chrome_version():
     """Yüklü Chrome sürümünü tespit et (Linux + Windows)."""
@@ -132,7 +143,8 @@ def process_and_save_image(img_url, folder_path, file_name, cookies=None, refere
             full_path = os.path.join(folder_path, file_name)
             if image.mode in ("RGBA", "P"):
                 image = image.convert("RGB")
-            image.save(full_path, "WEBP", quality=80)
+            image.save(full_path, "WEBP", quality=90)
+            apply_overlay_if_enabled(full_path)
             print(f"      ✅ Kaydedildi: {file_name}")
             relative_path = os.path.relpath(full_path, BACKEND_DIR)
             return relative_path.replace("\\", "/")
@@ -588,7 +600,7 @@ class AutoBot:
                 image = image.convert("RGB")
             os.makedirs(episode_folder, exist_ok=True)
             full_path = os.path.join(episode_folder, fname)
-            image.save(full_path, "WEBP", quality=85)
+            image.save(full_path, "WEBP", quality=90)
             return full_path, w, h
 
         try:
@@ -674,6 +686,7 @@ class AutoBot:
                             continue
                         saved = os.path.relpath(full_path, BACKEND_DIR).replace("\\", "/")
                         print(f"      ✅ [{method}] Kaydedildi ({w}x{h}): {fname}")
+                        apply_overlay_if_enabled(full_path)
                         saved_paths.append(saved)
                     except Exception as e:
                         print(f"      ⚠️ Görsel işleme hatası (sayfa {i+1}): {e}")
@@ -902,6 +915,10 @@ class AutoBot:
 
 
 def main():
+    if "--overlay-kapali" in sys.argv:
+        os.environ["OVERLAY_KAPALI"] = "1"
+        print("🖋️ Overlay dizgisi kapalı (--overlay-kapali)")
+
     if not os.path.exists(SERI_DOSYASI):
         with open(SERI_DOSYASI, "w", encoding="utf-8") as f:
             f.write("# Her satıra bir URL ekle\n")

@@ -1,0 +1,24 @@
+{
+  "aktif": true,
+  "min_punto": 13,
+  "max_punto": 64,
+  "ic_bosluk": 0.11,
+  "satir_araligi": 1.16,
+  "ui_harf_araligi": 0.045,
+  "kontur_orani": 0.0,
+  "sfx_kontur_orani": 0.11,
+  "yayilma_px": 26,
+  "renk_esigi": 36,
+  "birlestirme_iou": 0.30,
+  "serit_max_yukseklik": 1700,
+  "serit_ortusme": 150,
+  "webp_kalite": 90,
+  "sadece_kirli": false,
+  "fontlar": {
+    "diyalog": "ComicNeue-Bold.ttf",
+    "dusunce": "ComicNeue-Bold.ttf",
+    "anlatim": "NotoSans-Bold.ttf",
+    "ui": "NotoSerif-Bold.ttf",
+    "sfx": "NotoSansDisplay-Bold.ttf"
+  }
+}

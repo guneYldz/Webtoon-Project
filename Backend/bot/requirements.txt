@@ -1,2 +1,7 @@
 beautifulsoup4
 requests
+pillow
+numpy
+opencv-python-headless
+google-genai
+python-dotenv
