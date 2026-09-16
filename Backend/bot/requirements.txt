@@ -5,3 +5,9 @@ numpy
 opencv-python-headless
 google-genai
 python-dotenv
+cloudscraper
+undetected-chromedriver
+selenium
+sqlalchemy
+python-slugify
+psycopg2-binary
