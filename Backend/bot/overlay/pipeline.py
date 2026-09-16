@@ -2,6 +2,7 @@
 
 import io
 import os
+import re
 
 import numpy as np
 from PIL import Image
@@ -18,6 +19,21 @@ def _inset_box(box, ratio):
     dx = (x2 - x1) * ratio
     dy = (y2 - y1) * ratio
     return (int(x1 + dx), int(y1 + dy), int(x2 - dx), int(y2 - dy))
+
+
+_HANGUL_KANA = re.compile(r"[\uac00-\ud7af\u3040-\u30ff]")
+_EN_LEFTOVER = re.compile(
+    r"\b(THE|YOU|HAS|HAVE|THIS|THAT|SUMMON|OBTAINED|WEAPON|MASTER|WILL|THEY)\b",
+    re.I,
+)
+
+
+def _is_dirty(region):
+    src = region.get("source") or ""
+    text = region.get("text") or ""
+    if _HANGUL_KANA.search(src) or _HANGUL_KANA.search(text):
+        return True
+    return bool(_EN_LEFTOVER.search(src))
 
 
 def _to_png_bytes(image):
@@ -127,6 +143,8 @@ def process_image(path, ayar=None, regions=None, out_path=None):
     image = Image.open(path).convert("RGB")
     found = collect_regions(image, ayar, ready_regions=regions)
     if not found:
+        return path, 0
+    if ayar.get("sadece_kirli") and not any(_is_dirty(r) for r in found):
         return path, 0
     out, drawn = apply_regions(image, found, ayar)
     dest = out_path or path
