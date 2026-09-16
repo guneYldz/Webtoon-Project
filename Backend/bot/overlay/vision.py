@@ -24,7 +24,7 @@ Görevin — JSON döndür:
   "regions": [
     {
       "x1": 0, "y1": 0, "x2": 1000, "y2": 1000,
-      "kind": "dialogue|thought|narration|ui|sfx",
+      "kind": "dialogue|thought|narration|ui|sfx|bagirma",
       "source": "asıl dildeki metin",
       "text": "doğal Türkçe",
       "erase_only": false

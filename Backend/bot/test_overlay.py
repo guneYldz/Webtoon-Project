@@ -9,7 +9,7 @@ from overlay.mask import auto_text_color, grow_mask, inner_box, sample_bg
 from overlay.pipeline import apply_regions
 from overlay.typeset import fit_text, wrap_text
 from overlay.vision import iou, merge_regions, normalize_regions
-from overlay.fonts import font_for_kind, resolve_font_file
+from overlay.fonts import effective_kind, font_for_kind, looks_like_shout, resolve_font_file
 
 
 class WrapTests(unittest.TestCase):
@@ -140,9 +140,36 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("NotoSansDisplay", os.path.basename(sfx))
         shout = font_for_kind("bagirma", ayar)
         self.assertIn("NotoSansDisplay", os.path.basename(shout))
-        from overlay.fonts import effective_kind
-        self.assertEqual(effective_kind("dialogue", "Öyle saçmalıklar söyleme!", ""), "bagirma")
+        self.assertEqual(effective_kind("dialogue", "NE Mİ İSTİYORUM?", "WHAT DO I WANT"), "bagirma")
+        self.assertEqual(effective_kind("dialogue", "Söyleme!!", "SHUT UP!!"), "bagirma")
+        self.assertEqual(effective_kind("dialogue", "Tamam, geliyorum.", "Okay, I'm coming."), "dialogue")
+        self.assertEqual(effective_kind("dialogue", "Öyle saçmalıklar söyleme!", "Don't say such nonsense!"), "dialogue")
         self.assertEqual(effective_kind("ui", "Usta. 10'lu çağrı", "SUMMONS"), "ui")
+        self.assertEqual(effective_kind("bagirma", "Söyleme!", "Don't say that!"), "bagirma")
+        self.assertTrue(looks_like_shout("NE Mİ İSTİYORUM?", "WHAT DO YOU WANT?"))
+        self.assertFalse(looks_like_shout("Merhaba!", "Hello!"))
+
+    def test_shout_region_redraws(self):
+        img = Image.new("RGB", (400, 220), (245, 245, 245))
+        draw = ImageDraw.Draw(img)
+        draw.ellipse((40, 30, 360, 190), fill=(18, 18, 18))
+        ayar = load_ayar()
+        regions = [
+            {
+                "box": [70, 50, 330, 170],
+                "kind": "dialogue",
+                "text": "NE Mİ İSTİYORUM?",
+                "source": "WHAT DO I WANT?",
+                "erase_only": False,
+            }
+        ]
+        out, drawn = apply_regions(img, regions, ayar)
+        self.assertEqual(drawn, 1)
+        self.assertEqual(out.size, img.size)
+        self.assertEqual(
+            effective_kind(regions[0]["kind"], regions[0]["text"], regions[0]["source"]),
+            "bagirma",
+        )
 
 
 if __name__ == "__main__":

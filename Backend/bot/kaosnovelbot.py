@@ -408,7 +408,7 @@ def call_gemini_for_translation(prompt_text, label="", max_refusals=3):
             "\n\nKESİN KURAL: Telif uyarısı, özet, 'çevirisini sunamıyorum' "
             "veya okuyucuya soru YAZMA. Sadece roman metninin Türkçe çevirisini yaz.\n"
         )
-    print(f"   ❌ {label}: Gemini art arda telif/özet yanıtı verdi, bu parça kaydedilmeyecek.")
+    print(f"   ❌ {label}: DeepSeek art arda telif/özet yanıtı verdi, bu parça kaydedilmeyecek.")
     return None
 
 
@@ -437,10 +437,8 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text, guncell
     guncelle=False → yeni bölüm ekler (POST /novels/bolum-ekle)
     guncelle=True  → mevcut bölümün İÇERİĞİNİ günceller (PUT), Türkçe başlık korunur.
     """
-    global client
-
-    if not client:
-        print("❌ HATA: Gemini client başlatılamadı!")
+    if not has_keys():
+        print("❌ HATA: DEEPSEEK_API_KEY yok. .env dosyasını kontrol et.")
         return "ERROR"
 
     novel_key = "default"
@@ -622,7 +620,7 @@ YAPAMAYACAKLARIN:
 
     ceviri_metin, had_footer = strip_gemini_chat_footer(ceviri_metin)
     if had_footer:
-        print("   ✂️ Gemini sohbet satırı kayıttan önce kesildi.")
+        print("   ✂️ AI sohbet satırı kayıttan önce kesildi.")
     if is_translation_refusal(ceviri_metin):
         print("   ❌ Birleşen metin hâlâ telif/özet — kaydedilmeyecek.")
         return "ERROR"
@@ -833,7 +831,7 @@ def repair_mode(kesin=False, sadece_telif=False):
 
                 if kind == "footer":
                     cleaned, _ = strip_gemini_chat_footer(tr_content)
-                    print(f"   ✂️  Bölüm {num}: sonundaki Gemini sohbet satırı kesiliyor...")
+                    print(f"   ✂️  Bölüm {num}: sonundaki AI sohbet satırı kesiliyor...")
                     if update_chapter_content(token, novel, num, cleaned):
                         cp_novel[key] = "ok"
                         save_onarim_checkpoint(checkpoint, checkpoint_file)
