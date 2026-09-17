@@ -13,7 +13,6 @@ _DEFAULTS = {
     "ui_harf_araligi": 0.045,
     "kontur_orani": 0.0,
     "sfx_kontur_orani": 0.11,
-    "bagirma_kontur_orani": 0.10,
     "yayilma_px": 26,
     "renk_esigi": 36,
     "birlestirme_iou": 0.30,
@@ -27,7 +26,6 @@ _DEFAULTS = {
         "anlatim": "NotoSans-Bold.ttf",
         "ui": "NotoSerif-Bold.ttf",
         "sfx": "NotoSansDisplay-Bold.ttf",
-        "bagirma": "NotoSansDisplay-Bold.ttf",
     },
 }
 

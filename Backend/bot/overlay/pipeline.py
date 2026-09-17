@@ -8,10 +8,10 @@ import numpy as np
 from PIL import Image
 
 from .ayar import load_ayar
-from .fonts import effective_kind, font_for_kind
+from .fonts import font_for_kind
 from .mask import auto_text_color, erase_mask, grow_mask, inner_box
 from .typeset import draw_block
-from .vision import detect_regions, has_llm_keys, merge_regions, normalize_regions, offset_regions
+from .vision import detect_regions, has_gemini_keys, merge_regions, normalize_regions, offset_regions
 
 
 def _inset_box(box, ratio):
@@ -100,7 +100,6 @@ def apply_regions(image, regions, ayar):
     ui_track = float(ayar.get("ui_harf_araligi", 0.045))
     stroke_ratio = float(ayar.get("kontur_orani", 0.0))
     sfx_stroke = float(ayar.get("sfx_kontur_orani", 0.11))
-    shout_stroke = float(ayar.get("bagirma_kontur_orani", 0.10))
 
     for r, inner, bg in prepared:
         if r.get("erase_only"):
@@ -108,16 +107,11 @@ def apply_regions(image, regions, ayar):
         text = (r.get("text") or "").strip()
         if not text:
             continue
-        kind = effective_kind(r.get("kind") or "dialogue", text, r.get("source") or "")
+        kind = r.get("kind") or "dialogue"
         font_path = font_for_kind(kind, ayar)
         fill = auto_text_color(bg)
         tracking = ui_track if kind == "ui" else 0.0
-        if kind == "sfx":
-            stroke = sfx_stroke
-        elif kind == "bagirma":
-            stroke = shout_stroke
-        else:
-            stroke = stroke_ratio
+        stroke = sfx_stroke if kind == "sfx" else stroke_ratio
         max_lines = 1 if kind == "sfx" else None
         if kind == "sfx":
             inner = _inset_box(r["box"], 0.04)
@@ -173,8 +167,8 @@ def process_saved_page(path, ayar=None):
         return 0
     if not path or not os.path.isfile(path):
         return 0
-    if not has_llm_keys():
-        print("      ⚠️ Overlay: DEEPSEEK_API_KEY yok — dizgi atlandı")
+    if not has_gemini_keys():
+        print("      ⚠️ Overlay: GOOGLE_API_KEY yok — dizgi atlandı")
         return 0
     dest, drawn = process_image(path, ayar=ayar)
     if drawn:

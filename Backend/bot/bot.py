@@ -10,8 +10,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
+from google import genai
 from slugify import slugify
-from llm import call_text, has_keys
 
 # Force UTF-8 for console output
 if sys.stdout.encoding != 'utf-8':
@@ -34,17 +34,48 @@ REPO_ROOT = os.path.dirname(BACKEND_DIR)
 load_dotenv(os.path.join(REPO_ROOT, ".env"))
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
-if not has_keys():
-    print("❌ HATA: DEEPSEEK_API_KEY bulunamadı! .env dosyasını kontrol et.")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+BEKLEME_SURESI = 10
+
+# 🔑 API KEY ROTATION: 429 alınca otomatik sonraki key'e geç
+GOOGLE_API_KEYS = [
+    k for k in [
+        os.getenv("GOOGLE_API_KEY"),
+        os.getenv("GOOGLE_API_KEY_2"),
+        os.getenv("GOOGLE_API_KEY_3"),
+        os.getenv("GOOGLE_API_KEY_4"),
+        os.getenv("GOOGLE_API_KEY_5"),
+        os.getenv("GOOGLE_API_KEY_6"),
+        os.getenv("GOOGLE_API_KEY_7")
+    ] if k  # None olanları filtrele
+]
+
+if not GOOGLE_API_KEYS:
+    print("❌ HATA: Hiçbir API Anahtarı bulunamadı! .env dosyasını kontrol et.")
     exit()
 
-print(f"🔑 DeepSeek API key yüklendi.")
-BEKLEME_SURESI = 10
+print(f"🔑 {len(GOOGLE_API_KEYS)} API key yüklendi.")
+
+# Aktif key index'i (global, rotation için)
+_current_key_index = 0
+
+def get_gemini_client():
+    """Aktif key ile Gemini client döndür"""
+    return genai.Client(api_key=GOOGLE_API_KEYS[_current_key_index])
+
+def rotate_key():
+    """Bir sonraki key'e geç, döngüsel"""
+    global _current_key_index
+    _current_key_index = (_current_key_index + 1) % len(GOOGLE_API_KEYS)
+    print(f"🔄 API Key rotasyonu: Key #{_current_key_index + 1} aktif")
 
 # 🔥 KRİTİK AYAR: Docker PostgreSQL Bağlantısı (DIŞARIDAN ERİŞİM)
 DB_CONNECTION = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
 if not DB_CONNECTION:
     raise RuntimeError("BOT_DB_CONNECTION veya DB_CONNECTION .env içinde olmalı")
+
+client = get_gemini_client()
+# Gemini 1.5 Flash (Zeki ve Hızlı)
 
 # PostgreSQL için motor oluşturuluyor
 engine = create_engine(DB_CONNECTION)
@@ -1013,7 +1044,7 @@ class AutoNovelBot:
 
     def translate_and_upload(self, novel, chapter_num, eng_title, eng_text):
         """
-        DeepSeek ile çevir ve DB'ye kaydet.
+        Gemini ile çevir ve DB'ye kaydet.
         Başarılıysa True, kota/hata nedeniyle yapılamadıysa False döner.
         """
         print(f"🤖 AI Çeviriyor: {eng_title}...")
@@ -1040,34 +1071,64 @@ GÖREV: Aşağıdaki metni Türkçeye çevir:
 {eng_text}
 """
 
-        raw_ceviri = call_text(system_instruction, label="çeviri")
-        if not raw_ceviri:
-            print("❌ HATA: DeepSeek çeviri döndürmedi. İngilizce kaydedilmiyor.")
+        ceviri = None
+        max_cycles = 3 # Tüm keyler bittikten sonra max 3 kez 65sn bekle
+        
+        for cycle in range(max_cycles):
+            for i in range(len(GOOGLE_API_KEYS)):
+                try:
+                    print(f"🔑 Key #{_current_key_index + 1} ile çeviriliyor... (Döngü {cycle+1}/{max_cycles})")
+                    active_client = get_gemini_client()
+                    response = active_client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=system_instruction
+                    )
+                    raw_ceviri = response.text.strip()
+                    
+                    # AI sohbet temizliği
+                    lines = raw_ceviri.split('\n')
+                    cleaned_lines = []
+                    found_story_start = False
+                    chat_keywords = ["elbette", "tabii", "işte", "çeviri", "sure,", "certainly", "here is", "ok,", "tamam", "çevirdim", "kimliğimle"]
+                    
+                    for idx, line in enumerate(lines):
+                        l_strip = line.strip().lower()
+                        if found_story_start:
+                            cleaned_lines.append(line)
+                            continue
+                        if idx < 5:
+                            if any(k in l_strip for k in chat_keywords) or not l_strip:
+                                continue
+                            found_story_start = True
+                            cleaned_lines.append(line)
+                        else:
+                            cleaned_lines.append(line)
+                    
+                    ceviri = '\n'.join(cleaned_lines).strip()
+                    
+                    if len(ceviri) > 50:
+                        print(f"✅ Çeviri başarılı! ({len(ceviri)} karakter)")
+                        break # İç döngüden çık (key döngüsü)
+                    
+                except Exception as e:
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        print(f"⚠️ Key #{_current_key_index + 1} kota aşıldı.")
+                        rotate_key()
+                    else:
+                        print(f"❌ Çeviri hatası: {e}")
+                        return False # Kritik hata
+
+            if ceviri:
+                break # Dış döngüden çık (cycle döngüsü)
+                
+            # Eğer buradaysak tüm keyler 429 verdi
+            wait_time = 65
+            print(f"⏳ Tüm API anahtarları doldu. {wait_time} saniye bekleniyor... ({cycle+1}/{max_cycles})")
+            time.sleep(wait_time)
+
+        if not ceviri:
+            print("❌ HATA: Tüm denemeler sonunda çeviri yapılamadı. İngilizce kaydedilmiyor, işlem durdurulacak.")
             return False
-
-        lines = raw_ceviri.split('\n')
-        cleaned_lines = []
-        found_story_start = False
-        chat_keywords = ["elbette", "tabii", "işte", "çeviri", "sure,", "certainly", "here is", "ok,", "tamam", "çevirdim", "kimliğimle"]
-
-        for idx, line in enumerate(lines):
-            l_strip = line.strip().lower()
-            if found_story_start:
-                cleaned_lines.append(line)
-                continue
-            if idx < 5:
-                if any(k in l_strip for k in chat_keywords) or not l_strip:
-                    continue
-                found_story_start = True
-                cleaned_lines.append(line)
-            else:
-                cleaned_lines.append(line)
-
-        ceviri = '\n'.join(cleaned_lines).strip()
-        if len(ceviri) <= 50:
-            print("❌ HATA: Çeviri çok kısa, kaydedilmiyor.")
-            return False
-        print(f"✅ Çeviri başarılı! ({len(ceviri)} karakter)")
 
         try:
             # Temizlik

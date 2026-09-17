@@ -3,6 +3,7 @@ requests
 pillow
 numpy
 opencv-python-headless
+google-genai
 python-dotenv
 cloudscraper
 undetected-chromedriver
