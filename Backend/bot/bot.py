@@ -430,7 +430,7 @@ class AutoNovelBot:
                     # İçerik bulundu ve işlendi (veya bulunamadı ama kota sorunu yok)
                     # translate_and_upload çağrıldıysa 60sn bekle, sadece atlandıysa 5sn bekle
                     if hasattr(self, '_last_translated') and self._last_translated:
-                        print("⏳ Sonraki bölüme geçiliyor... (60sn bekleniyor - DeepSeek kota)")
+                        print("⏳ Sonraki bölüme geçiliyor... (60sn bekleniyor - Gemini kota)")
                         time.sleep(60)
                         self._last_translated = False
                     else:

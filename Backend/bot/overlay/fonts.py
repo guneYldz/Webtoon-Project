@@ -48,25 +48,17 @@ def resolve_font_file(name):
     raise FileNotFoundError(f"Font bulunamadı: {name}")
 
 
-def _mostly_upper(s):
-    letters = [c for c in (s or "") if c.isalpha()]
-    if len(letters) < 4:
-        return False
-    upper = sum(1 for c in letters if c.isupper())
-    return upper / len(letters) >= 0.72
-
-
 def looks_like_shout(text, source=""):
-    """Bağırma: büyük harf haykırış veya birden fazla ünlem.
-
-    Her 'Merhaba!' diyalogu bağırma değildir; UI/sistem yazısına da dokunma.
-    """
+    """Bağırma: ünlemli kısa replik veya asıl metin büyük harf."""
     t = (text or "").strip()
     src = (source or "").strip()
-    if _mostly_upper(src) or _mostly_upper(t):
+    if t.endswith("!") and len(t) <= 96:
         return True
-    if t.count("!") >= 2 and len(t) <= 96:
-        return True
+    letters = [c for c in src if c.isalpha()]
+    if len(letters) >= 4:
+        upper = sum(1 for c in letters if c.isupper())
+        if upper / len(letters) >= 0.72:
+            return True
     return False
 
 

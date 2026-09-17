@@ -36,10 +36,10 @@ def _is_dirty(region):
     return bool(_EN_LEFTOVER.search(src))
 
 
-def _to_jpeg_bytes(image):
+def _to_png_bytes(image):
     buf = io.BytesIO()
     rgb = image.convert("RGB")
-    rgb.save(buf, format="JPEG", quality=92, optimize=True)
+    rgb.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
 
 
@@ -66,7 +66,7 @@ def collect_regions(image, ayar, ready_regions=None):
     overlap = int(ayar.get("serit_ortusme", 150))
     all_regions = []
     for dy, chunk in _split_strips(image, max_h, overlap):
-        data = detect_regions(_to_jpeg_bytes(chunk), mime="image/jpeg")
+        data = detect_regions(_to_png_bytes(chunk), mime="image/png")
         if not data:
             continue
         if data.get("already_clean") and not data.get("regions"):
@@ -142,7 +142,7 @@ def apply_regions(image, regions, ayar):
 
 
 def process_image(path, ayar=None, regions=None, out_path=None):
-    """Tek sayfa. regions verilirse vision çağrılmaz (test/onarım)."""
+    """Tek sayfa. regions verilirse Gemini çağrılmaz (test/onarım)."""
     ayar = ayar or load_ayar()
     if not ayar.get("aktif", True) and regions is None:
         return path, 0

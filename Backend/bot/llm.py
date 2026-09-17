@@ -1,4 +1,4 @@
-"""DeepSeek API (OpenAI uyumlu). Roman çevirisi + manga overlay vision."""
+"""DeepSeek API (OpenAI uyumlu). Gemini yerine roman + overlay."""
 
 import base64
 import os
@@ -13,13 +13,11 @@ load_dotenv(os.path.join(_BOT_DIR, "..", ".env"))
 load_dotenv()
 
 DEEPSEEK_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-# Geçerli id'ler: deepseek-flash, deepseek-v4-pro. deepseek-chat artık yok.
 MODELS = [
     m.strip()
-    for m in (os.getenv("DEEPSEEK_MODEL") or "deepseek-flash,deepseek-v4-pro").split(",")
+    for m in (os.getenv("DEEPSEEK_MODEL") or "deepseek-flash,deepseek-chat").split(",")
     if m.strip()
 ]
-DEFAULT_MAX_TOKENS = int(os.getenv("DEEPSEEK_MAX_TOKENS") or "32768")
 
 _keys = [
     k for k in (
@@ -74,34 +72,17 @@ def _extract_text(data):
         return ""
     msg = choices[0].get("message") or {}
     content = msg.get("content")
-    text = ""
     if isinstance(content, str):
-        text = content.strip()
-    elif isinstance(content, list):
+        return content.strip()
+    if isinstance(content, list):
         parts = []
         for block in content:
             if isinstance(block, dict) and block.get("type") in ("text", "output_text"):
                 parts.append(block.get("text") or "")
             elif isinstance(block, str):
                 parts.append(block)
-        text = "".join(parts).strip()
-    elif content:
-        text = str(content).strip()
-    if text:
-        return text
-    reasoning = msg.get("reasoning_content")
-    if isinstance(reasoning, str):
-        return reasoning.strip()
-    return ""
-
-
-def _model_missing(err):
-    low = err.lower()
-    if "404" in err or "not found" in low:
-        return True
-    return "model" in low and any(
-        tok in low for tok in ("does not exist", "unknown", "invalid", "not supported")
-    )
+        return "".join(parts).strip()
+    return (str(content or "")).strip()
 
 
 def _post(payload, key):
@@ -135,7 +116,7 @@ def _post(payload, key):
     return text
 
 
-def _complete(messages, label="", json_mode=False, max_tokens=None):
+def _complete(messages, label="", json_mode=False):
     global _model_index
     if not _keys:
         print("❌ DEEPSEEK_API_KEY yok. .env dosyasına ekle (repo'ya yazma).")
@@ -144,7 +125,6 @@ def _complete(messages, label="", json_mode=False, max_tokens=None):
         "messages": messages,
         "stream": False,
         "thinking": {"type": "disabled"},
-        "max_tokens": int(max_tokens or DEFAULT_MAX_TOKENS),
     }
     if json_mode:
         payload_base["response_format"] = {"type": "json_object"}
@@ -179,16 +159,7 @@ def _complete(messages, label="", json_mode=False, max_tokens=None):
                     except Exception as e2:
                         err = str(e2)
                         low = err.lower()
-                if json_mode and (
-                    "response_format" in low or "json_object" in low or "json" in low
-                ):
-                    payload.pop("response_format", None)
-                    try:
-                        return _post(payload, _keys[_key_index])
-                    except Exception as e3:
-                        err = str(e3)
-                        low = err.lower()
-                if _model_missing(err):
+                if "404" in err or "not found" in low or "model" in low and "not" in low:
                     if _model_index + 1 < len(MODELS):
                         _model_index += 1
                         print(f"🔁 Model '{model}' yok → '{MODELS[_model_index]}'")
@@ -209,15 +180,15 @@ def _complete(messages, label="", json_mode=False, max_tokens=None):
     return None
 
 
-def call_text(prompt_text, label="", system=None, max_tokens=None):
+def call_text(prompt_text, label="", system=None):
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt_text})
-    return _complete(messages, label=label, max_tokens=max_tokens)
+    return _complete(messages, label=label)
 
 
-def call_vision(image_bytes, prompt_text, mime="image/jpeg", label="overlay"):
+def call_vision(image_bytes, prompt_text, mime="image/png", label="overlay"):
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime};base64,{b64}"
     messages = [
