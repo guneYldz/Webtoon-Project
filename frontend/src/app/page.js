@@ -1,89 +1,57 @@
 import Link from "next/link";
 import Image from "next/image";
 import HomeSlider from "@/components/HomeSlider";
+import { serverFetch, siteUrl, PUBLIC_API } from "@/lib/serverApi";
 
-// Force dynamic rendering to avoid build-time fetch errors
-export const dynamic = 'force-dynamic';
-import { API } from "@/api";
-
-// Server-side fetching için URL (Docker içinden backend'e erişim)
-const SERVER_API = "http://backend:8000";
+export const dynamic = "force-dynamic";
 
 async function getData() {
   try {
-    // Docker ortamında backend servisine istek atıyoruz
-    // Eğer localde çalışıyorsanız ve başarısız olursa localhost deneriz (fallback)
-    let webtoonRes, novelRes;
+    const [webtoonData, novelData, vitrinData] = await Promise.all([
+      serverFetch("/webtoons/?limit=100"),
+      serverFetch("/novels/?limit=100"),
+      serverFetch("/vitrin"),
+    ]);
 
-    try {
-      [webtoonRes, novelRes] = await Promise.all([
-        fetch(`${SERVER_API}/webtoons/`, { cache: 'no-store' }), // Güncel veri için no-store
-        fetch(`${SERVER_API}/novels/`, { cache: 'no-store' })
-      ]);
-    } catch (error) {
-      console.log("Docker backend erişimi başarısız, localhost deneniyor...");
-      // Fallback to localhost if backend service is not found (e.g. running locally without docker-compose)
-      [webtoonRes, novelRes] = await Promise.all([
-        fetch(`https://kaosmanga.net/api/webtoons/`, { cache: 'no-store' }),
-        fetch(`https://kaosmanga.net/api/novels/`, { cache: 'no-store' })
-      ]);
-    }
-
-    if (!webtoonRes.ok || !novelRes.ok) {
-      throw new Error("API hatasi");
-    }
-
-    const webtoonData = await webtoonRes.json();
-    const novelData = await novelRes.json();
-
-    // Verileri işle
-    const formattedWebtoons = webtoonData.map(item => ({
+    const formattedWebtoons = (Array.isArray(webtoonData) ? webtoonData : []).map((item) => ({
       ...item,
       typeLabel: "WEBTOON",
       linkPath: "webtoon",
-      latestChapters: item.episodes ? [...item.episodes].sort((a, b) => b.episode_number - a.episode_number).slice(0, 2) : []
+      latestChapters: item.episodes
+        ? [...item.episodes].sort((a, b) => b.episode_number - a.episode_number).slice(0, 2)
+        : [],
     }));
 
-    const formattedNovels = novelData.map(item => ({
+    const formattedNovels = (Array.isArray(novelData) ? novelData : []).map((item) => ({
       ...item,
       typeLabel: "NOVEL",
       linkPath: "novel",
-      latestChapters: item.chapters ? [...item.chapters].sort((a, b) => b.chapter_number - a.chapter_number).slice(0, 2) : []
+      latestChapters: item.chapters
+        ? [...item.chapters].sort((a, b) => b.chapter_number - a.chapter_number).slice(0, 2)
+        : [],
     }));
 
     const combinedData = [...formattedWebtoons, ...formattedNovels];
 
-    // Sıralama: EN SON BÖLÜM yüklenme tarihine göre.
-    // (Serinin kendi created_at'i siteye EKLENME tarihidir, güncellenme değil.
-    //  updated_at kolonu ise veritabanında yok, hep null gelir.)
     const getLastUpdate = (item) => {
       const chapterDates = (item.latestChapters || [])
-        .map(c => new Date(c.created_at || 0).getTime())
-        .filter(t => t > 0);
+        .map((c) => new Date(c.created_at || 0).getTime())
+        .filter((t) => t > 0);
       if (chapterDates.length > 0) return Math.max(...chapterDates);
-      // Hiç bölümü yoksa serinin eklenme tarihine düş
       return new Date(item.updated_at || item.created_at || 0).getTime() || 0;
     };
 
     combinedData.sort((a, b) => getLastUpdate(b) - getLastUpdate(a));
 
-    // Vitrin (Slider) verisi (HomeSlider artık prop alıyor, ama biz yine de tüm veriyi gönderelim, o filtrelesin veya direk vitrin endpointinden çekelim)
-    // HomeSlider.js mantığı değişti, Vitrin endpointini burada çekip ona yollamalıyız.
-    // Ancak optimize olsun diye direk vitrin endpointini de çekelim.
-    let vitrinData = [];
-    try {
-      const vitrinRes = await fetch(`${SERVER_API}/vitrin`, { cache: 'no-store' }).catch(() => fetch(`https://kaosmanga.net/api/vitrin`, { cache: 'no-store' }));
-      if (vitrinRes.ok) {
-        vitrinData = await vitrinRes.json();
-      }
-    } catch (e) { console.error("Vitrin fetch error", e); }
+    const popularList = [...combinedData]
+      .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
+      .slice(0, 10);
 
-
-    // Trend Listesi (Görüntülenmeye göre)
-    const popularList = [...combinedData].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 10);
-
-    return { allSeries: combinedData, popularList, vitrinData };
-
+    return {
+      allSeries: combinedData,
+      popularList,
+      vitrinData: Array.isArray(vitrinData) ? vitrinData : [],
+    };
   } catch (err) {
     console.error("Veri çekme hatası:", err);
     return { allSeries: [], popularList: [], vitrinData: [] };
@@ -95,7 +63,7 @@ export const metadata = {
   description:
     "Kaos Manga'ya hoş geldin! En yeni Webtoon ve Novelleri Türkçe ve ücretsiz oku. Trend seriler, popüler romanlar ve sürekli güncellenen bölümlerle dolu platformumuzu keşfet.",
   alternates: {
-    canonical: "https://kaosmanga.net",
+    canonical: siteUrl("/"),
   },
   openGraph: {
     title: "Kaos Manga | Ana Sayfa",
@@ -157,7 +125,7 @@ export default async function Home() {
                     <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-gray-600 transition-all duration-300">
                       <Link href={`/${item.linkPath}/${item.slug || item.id}`} title={item.title || 'Seri'} className="relative block w-full h-full">
                         <Image
-                          src={item.cover_image ? `${API}/${item.cover_image}` : '/placeholder.jpg'}
+                          src={item.cover_image ? `${PUBLIC_API}/${item.cover_image}` : '/placeholder.jpg'}
                           alt={item.title || 'İsimsiz'}
                           fill
                           className="object-cover transition duration-500 group-hover:scale-110"
@@ -231,7 +199,7 @@ export default async function Home() {
                     <div className="w-12 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-gray-800 group-hover:border-blue-500 transition-colors relative">
                       {/* CSS img yerine Next Image */}
                       <Image
-                        src={`${API}/${w.cover_image}`}
+                        src={`${PUBLIC_API}/${w.cover_image}`}
                         alt={w.title}
                         fill
                         className="object-cover"

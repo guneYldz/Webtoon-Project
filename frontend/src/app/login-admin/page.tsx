@@ -140,8 +140,14 @@ export default function AdminLoginPage() {
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
                 {/* Logo ve Başlık */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
-                        <span className="text-3xl">🔐</span>
+                    <div className="flex justify-center mb-4">
+                        <img
+                            src="/logo.png"
+                            alt="Kaos Manga Logo"
+                            width={80}
+                            height={80}
+                            className="w-20 h-20 object-contain"
+                        />
                     </div>
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Panel</h1>
                     <p className="text-gray-500">Sadece admin kullanıcılar girebilir</p>

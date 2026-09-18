@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
@@ -59,6 +60,16 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-[#121212] p-8 rounded-3xl border border-gray-800 shadow-2xl">
+            <div className="flex justify-center mb-6">
+                <Image
+                    src="/logo.png"
+                    alt="Kaos Manga Logo"
+                    width={96}
+                    height={96}
+                    className="w-24 h-24 object-contain"
+                    priority
+                />
+            </div>
             <h2 className="text-2xl font-black text-white text-center mb-2">Şifremi Unuttum 🆘</h2>
             <p className="text-gray-500 text-center text-sm mb-8">Hesabını kurtaralım.</p>
 

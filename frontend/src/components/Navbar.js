@@ -129,15 +129,15 @@ export default function Navbar() {
             </svg>
           </button>
 
-          <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-4 group">
-            {/* Logo - Optimized size */}
-            <div className="relative w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-105 transition duration-300">
+          <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-3 sm:gap-4 group">
+            {/* Logo — 1:1 square so the KM emblem stays circular */}
+            <div className="relative aspect-square w-12 h-12 sm:w-16 sm:h-16 shrink-0 group-hover:scale-105 transition duration-300">
               <Image
                 src="/logo.png"
                 alt="Kaos Manga Logo"
                 fill
                 className="object-contain"
-                sizes="64px"
+                sizes="(max-width: 640px) 48px, 64px"
                 quality={100}
                 priority
               />
@@ -153,18 +153,21 @@ export default function Navbar() {
         </div>
 
         {/* ORTA: LİNKLER */}
-        <div className="hidden md:flex items-center gap-6 text-base font-medium text-gray-400">
-          <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+        <div className="hidden md:flex items-center gap-2 lg:gap-6 text-sm lg:text-base font-medium text-gray-400">
+          <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Ana Sayfa
           </Link>
-          <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Keşfet
           </Link>
-          <Link href="/seriler" title="Tüm Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/seriler" title="Tüm Seriler" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Seriler
           </Link>
-          <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Yeniler
+          </Link>
+          <Link href="/baglantilar" title="Discord ve Sosyal Medya" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
+            Bağlantılar
           </Link>
         </div>
 
@@ -300,13 +303,22 @@ export default function Navbar() {
       {/* MOBİL MENÜ YAN PANEL */}
       <div className={`fixed top-0 left-0 w-[280px] h-full bg-[#1a1a1a] border-r border-gray-800 z-[2001] md:hidden transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-8">
-            <span
-              className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500"
-              style={{ fontFamily: 'var(--font-cinzel), serif' }}
-            >
-              KAOS MANGA
-            </span>
+          <div className="flex items-center justify-between mb-8 gap-2">
+            <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 min-w-0">
+              <Image
+                src="/logo.png"
+                alt="Kaos Manga Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8 object-contain shrink-0"
+              />
+              <span
+                className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 whitespace-nowrap"
+                style={{ fontFamily: 'var(--font-cinzel), serif' }}
+              >
+                KAOS MANGA
+              </span>
+            </Link>
             <button
               onClick={() => setIsMobileMenuOpen(false)}
               className="text-gray-400 hover:text-white p-1"
@@ -330,6 +342,9 @@ export default function Navbar() {
             </Link>
             <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               ✨ Yeniler
+            </Link>
+            <Link href="/baglantilar" title="Discord ve Sosyal Medya" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              🔗 Bağlantılar
             </Link>
           </div>
 

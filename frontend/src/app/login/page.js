@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
@@ -79,12 +80,13 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           {/* Logo */}
           <div className="flex justify-center mb-6">
-            <img
+            <Image
               src="/logo.png"
-              alt="Logo"
-              width={150}
-              height={150}
-              className="object-contain"
+              alt="Kaos Manga Logo"
+              width={160}
+              height={160}
+              className="w-32 h-32 sm:w-40 sm:h-40 object-contain"
+              priority
             />
           </div>
           <h2 className="text-3xl font-bold text-white tracking-tight" style={{ fontFamily: 'var(--font-cinzel), serif' }}>Tekrar Hoşgeldin! 👋</h2>
