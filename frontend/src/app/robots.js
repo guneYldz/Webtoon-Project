@@ -5,10 +5,11 @@ export default function robots() {
         rules: {
             userAgent: '*', // Tüm botlar (Google, Bing, Yandex...)
             allow: '/',     // Her yere girebilirsin
-            disallow: [     // Ama buralara girme:
-                '/admin/',    // Admin paneli
-                '/private/',  // Özel klasörler (varsa)
-                '/api/',      // API rotaları
+            disallow: [
+                '/admin/',
+                '/login-admin',
+                '/private/',
+                '/api/',
             ],
         },
         sitemap: `${baseUrl}/sitemap.xml`, // Haritamız burada, al kullan

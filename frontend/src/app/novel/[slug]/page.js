@@ -1,63 +1,44 @@
 import Link from "next/link";
 import Image from "next/image";
 import FavoriteButton from "@/components/FavoriteButton";
+import { serverFetch, siteUrl, PUBLIC_API } from "@/lib/serverApi";
 
-// --- 1. SEO AYARLARI (DİNAMİK METADATA) ---
 export async function generateMetadata({ params }) {
   const { slug } = params;
+  const novel = await serverFetch(`/novels/${slug}`);
 
-  try {
-    const clientApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net";
-    const apiUrl = typeof window === 'undefined' ? 'http://backend:8000' : clientApiUrl;
-    const res = await fetch(`${apiUrl}/novels/${slug}`);
-    const novel = await res.json();
-
-    if (!novel || novel.detail) {
-      return { title: "Roman Bulunamadı" };
-    }
-
+  if (!novel || novel.detail) {
     return {
-      title: `${novel.title} Oku - Türkçe Novel`,
-      description: novel.summary ? novel.summary.slice(0, 160) + "..." : "Türkçe Novel Oku",
-      openGraph: {
-        title: novel.title,
-        description: novel.summary,
-        images: [novel.cover_image ? `${process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net"}/${novel.cover_image}` : ''],
-      },
+      title: "Roman | Kaos Manga",
+      alternates: { canonical: siteUrl(`/novel/${slug}`) },
     };
-  } catch (error) {
-    return { title: "Hata" };
   }
+
+  return {
+    title: `${novel.title} Oku - Türkçe Novel`,
+    description: novel.summary ? novel.summary.slice(0, 160) + "..." : "Türkçe Novel Oku",
+    alternates: {
+      canonical: siteUrl(`/novel/${slug}`),
+    },
+    openGraph: {
+      title: novel.title,
+      description: novel.summary,
+      images: [novel.cover_image ? `${PUBLIC_API}/${novel.cover_image}` : ""],
+    },
+  };
 }
 
-// --- 2. SAYFA TASARIMI (SERVER COMPONENT) ---
 export default async function NovelDetail({ params }) {
   const { slug } = params;
+  const novel = await serverFetch(`/novels/${slug}`);
 
-  let novel = null;
-
-  try {
-    // 🔥 DOCKER FIX: Server Component Docker network'te çalışıyor
-    // Client-side: localhost:8000 ✅
-    // Server-side (SSR): backend:8000 ✅
-    const clientApiUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.kaosmanga.net";
-    const apiUrl = typeof window === 'undefined'
-      ? 'http://backend:8000'  // Server-side (Docker network)
-      : clientApiUrl;                  // Client-side (browser)
-
-    const res = await fetch(`${apiUrl}/novels/${slug}`, {
-      cache: 'no-store',
-      credentials: typeof window === 'undefined' ? 'omit' : 'include'
-    });
-    if (res.ok) {
-      novel = await res.json();
-    }
-  } catch (err) {
-    console.error("Bağlantı hatası:", err);
+  if (!novel || novel.detail) {
+    return (
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">
+        Roman Bulunamadı 😔
+      </div>
+    );
   }
-
-  // Eğer roman bulunamadıysa:
-  if (!novel) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">Roman Bulunamadı 😔</div>;
 
   // 👇 İLK BÖLÜMÜ BULMA MANTIĞI
   const firstChapter = novel.chapters && novel.chapters.length > 0
