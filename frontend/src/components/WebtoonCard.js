@@ -1,8 +1,11 @@
 "use client";
 import Link from "next/link";
+import { seriesTypeLabel, seriesTypeTextClass } from "@/lib/seriesType";
 
 export default function WebtoonCard({ webtoon }) {
   if (!webtoon) return null;
+
+  const typeLabel = seriesTypeLabel(webtoon.type, webtoon.typeLabel);
 
   return (
     <div className="group flex flex-col gap-2">
@@ -37,8 +40,8 @@ export default function WebtoonCard({ webtoon }) {
         </Link>
 
         <div className="flex justify-between items-center mt-1">
-          <span className="text-base text-gray-500 uppercase tracking-wide font-medium">
-            {webtoon.type || "MANGA"}
+          <span className={`text-base uppercase tracking-wide font-medium ${seriesTypeTextClass(webtoon.type, webtoon.typeLabel)}`}>
+            {typeLabel}
           </span>
           <span className="text-base text-gray-500 flex items-center gap-1">
             👁️ {(webtoon.view_count || 0).toLocaleString()}

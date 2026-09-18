@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status, Request, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import desc, asc
 from typing import List
 import shutil
@@ -10,7 +10,8 @@ import uuid
 from database import get_db
 import models 
 import schemas
-from routers.auth import get_current_user 
+from routers.auth import get_current_user
+from utils.chapter_title import default_chapter_title, chapter_display_label 
 
 router = APIRouter(
     prefix="/novels",
@@ -30,7 +31,10 @@ def get_novels_logic(db: Session, limit: int, skip: int):
     # O P T I M İ Z A S Y O N EKLENDİ (N+1 Sorunu Çözümü)
     from sqlalchemy.orm import selectinload
 
-    query = db.query(models.Novel).filter(models.Novel.is_published == True).options(selectinload(models.Novel.chapters))
+    query = db.query(models.Novel).filter(models.Novel.is_published == True).options(
+        selectinload(models.Novel.chapters),
+        selectinload(models.Novel.categories),
+    )
     novels = query.order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
     
     # 🚀 Frontend Performans Yaması:
@@ -60,9 +64,9 @@ def novelleri_getir_no_slash(db: Session = Depends(get_db), limit: int = 100, sk
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
 def novel_detay(slug_or_id: str, response: Response, request: Request, db: Session = Depends(get_db)):
     if slug_or_id.isdigit():
-        novel = db.query(models.Novel).filter(models.Novel.id == int(slug_or_id), models.Novel.is_published == True).first()
+        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == int(slug_or_id), models.Novel.is_published == True).first()
     else:
-        novel = db.query(models.Novel).filter(models.Novel.slug == slug_or_id, models.Novel.is_published == True).first()
+        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.slug == slug_or_id, models.Novel.is_published == True).first()
 
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
@@ -136,7 +140,7 @@ def novel_ekle(
 def novel_bolum_ekle(
     novel_id: int = Form(...),
     chapter_number: float = Form(...),
-    title: str = Form(...),
+    title: str = Form(""),
     content: str = Form(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -154,6 +158,8 @@ def novel_bolum_ekle(
             detail=f"Bu roman için zaten Bölüm {chapter_number} mevcut!"
         )
 
+    title = default_chapter_title(title, chapter_number)
+
     yeni_bolum = models.NovelChapter(
         novel_id=novel_id,
         chapter_number=chapter_number,
@@ -166,6 +172,24 @@ def novel_bolum_ekle(
     db.add(yeni_bolum)
     db.commit()
     db.refresh(yeni_bolum)
+
+    # Favorisinde bu roman olanlara bildirim
+    try:
+        from routers.notifications import notify_favorite_users_new_chapter
+        novel = db.query(models.Novel).filter(models.Novel.id == novel_id).first()
+        if novel:
+            ch_label = chapter_display_label(title, chapter_number)
+            notify_favorite_users_new_chapter(
+                db,
+                novel_id=novel.id,
+                series_title=novel.title,
+                chapter_label=ch_label,
+                link=f"/novel/{novel.slug}/bolum/{chapter_number}",
+            )
+            db.commit()
+    except Exception as e:
+        print(f"⚠️ Favori bildirim hatası (novel): {e}")
+
     return {"durum": "Başarılı", "mesaj": "Bölüm eklendi"}
 
 # 5. OKUMA SAYFASI (🔥 FİNAL VERSİYON: KORUMALI & HYBRID LOCATOR 🔥)
@@ -297,7 +321,8 @@ def novel_bolum_guncelle(
 
     # Güncellemeler
     if title is not None:
-        chapter.title = title
+        num = new_chapter_number if new_chapter_number is not None else chapter.chapter_number
+        chapter.title = default_chapter_title(title, num)
     if content is not None:
         chapter.content = content
     if is_published is not None:

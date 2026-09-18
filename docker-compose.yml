@@ -38,7 +38,7 @@ services:
     volumes:
       - ./Backend:/app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     networks:
       - webtoon_network
 
@@ -46,6 +46,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
     container_name: webtoon_frontend
     restart: always
     depends_on:
@@ -53,6 +56,8 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=4096"
     networks:
       - webtoon_network
 
@@ -74,11 +79,19 @@ services:
     image: dpage/pgadmin4
     container_name: webtoon_pgadmin
     restart: always
+    # PGADMIN_DEFAULT_* sadece volume BOŞKEN (ilk açılış) yazılır.
+    # Dosyayı değiştirmek yetmez; eski giriş pgadmin_data içinde kalır.
+    # Yeni e-posta/şifre: ~/webtoon/.env güncelle, sonra:
+    #   docker compose stop pgadmin && docker compose rm -f pgadmin
+    #   docker volume rm webtoon_pgadmin_data
+    #   docker compose up -d pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: None
-      PGADMIN_DEFAULT_PASSWORD: None
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     depends_on:
       - db
     networks:
@@ -86,6 +99,7 @@ services:
 
 volumes:
   postgres_data:
+  pgadmin_data:
 
 networks:
   webtoon_network:

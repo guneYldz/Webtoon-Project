@@ -102,11 +102,16 @@ export default function NovelsListPage() {
 
     return (
         <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
                 <h1 className="text-3xl font-bold">Tüm Noveller</h1>
-                <Link href="/admin/novel-ekle" className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
-                    + Yeni Novel
-                </Link>
+                <div className="flex gap-2 flex-wrap">
+                    <Link href="/admin/novel-bolum-ekle" className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700">
+                        + Bölüm Ekle
+                    </Link>
+                    <Link href="/admin/novel-ekle" className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+                        + Yeni Novel
+                    </Link>
+                </div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow mb-6">
@@ -135,7 +140,7 @@ export default function NovelsListPage() {
             {loading && <div className="text-center py-8"><p className="text-gray-500">Yükleniyor...</p></div>}
 
             {!loading && (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>

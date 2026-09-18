@@ -86,7 +86,7 @@ export default function WebtoonsListPage() {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm("Bu webtoon'u silmek istediğinden emin misin?")) return;
+        if (!confirm("Bu seriyi silmek istediğinden emin misin?")) return;
 
         try {
             // ÇİFT API HATASI DÜZELTİLDİ: /api/admin yerine /admin kullanıldı
@@ -109,14 +109,22 @@ export default function WebtoonsListPage() {
 
     return (
         <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Tüm Webtoonlar</h1>
-                <Link
-                    href="/admin/webtoon-ekle"
-                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-                >
-                    + Yeni Webtoon
-                </Link>
+            <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
+                <h1 className="text-3xl font-bold">Webtoon & Manga</h1>
+                <div className="flex gap-2 flex-wrap">
+                    <Link
+                        href="/admin/bolum-ekle"
+                        className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+                    >
+                        + Bölüm Ekle
+                    </Link>
+                    <Link
+                        href="/admin/webtoon-ekle"
+                        className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+                    >
+                        + Webtoon & Manga Ekle
+                    </Link>
+                </div>
             </div>
 
             {/* Arama ve Filtreler */}
@@ -174,7 +182,7 @@ export default function WebtoonsListPage() {
 
             {/* Tablo */}
             {!loading && (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50">
                             <tr>
@@ -183,6 +191,9 @@ export default function WebtoonsListPage() {
                                 </th>
                                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     Başlık
+                                </th>
+                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
+                                    Tür
                                 </th>
                                 <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">
                                     Durum
@@ -210,6 +221,16 @@ export default function WebtoonsListPage() {
                                         <div className="text-sm text-gray-500 truncate max-w-xs">
                                             {webtoon.summary}
                                         </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span
+                                            className={`px-2 py-1 text-sm rounded-full font-semibold ${String(webtoon.type || "").toUpperCase().includes("MANGA")
+                                                ? "bg-orange-100 text-orange-800"
+                                                : "bg-blue-100 text-blue-800"
+                                                }`}
+                                        >
+                                            {String(webtoon.type || "").toUpperCase().includes("MANGA") ? "Manga" : "Webtoon"}
+                                        </span>
                                     </td>
                                     <td className="px-6 py-4">
                                         <span
@@ -259,7 +280,7 @@ export default function WebtoonsListPage() {
 
                     {webtoons.length === 0 && (
                         <div className="text-center py-8 text-gray-500">
-                            Henüz webtoon yok.
+                            Henüz webtoon veya manga yok.
                         </div>
                     )}
                 </div>

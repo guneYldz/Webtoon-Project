@@ -30,6 +30,9 @@ ENV NODE_ENV=production
 
 # Standart çalıştırma modu için dosyalar
 COPY --from=builder /app/package.json .
+# next.config.mjs SART: kopyalanmazsa images.remotePatterns calisma
+# aninda yok sayilir ve tum dis gorseller /_next/image'dan 400 alir
+COPY --from=builder /app/next.config.mjs .
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
