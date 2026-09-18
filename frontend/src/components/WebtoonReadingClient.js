@@ -4,9 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import CommentSection from "@/components/CommentSection";
 import Link from "next/link";
-import Image from "next/image";
 import { Lato } from "next/font/google";
-import ReadingHero from "@/components/ReadingHero";
 import { API } from "@/api";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import RecommendedSeries from "@/components/RecommendedSeries";
@@ -130,30 +128,27 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
     return (
         <div className={`min-h-screen bg-[#121212] text-gray-200 pb-24 ${lato.className}`} style={{ paddingBottom: '64px' }}>
 
-            {/* BREADCRUMBS (Sayfanın en tepesinde) */}
-            <div className="container mx-auto px-4 mt-4" style={{ minHeight: '60px' }}>
-                <Breadcrumbs items={[
-                    { label: "Anasayfa", href: "/" },
-                    { label: "Webtoonlar", href: "/seriler" },
-                    { label: episode.webtoon_title, href: `/webtoon/${seriesId}` },
-                    { label: `Bölüm ${episode.episode_number}`, href: null }
-                ]} />
-            </div>
+            <Breadcrumbs items={[
+                { label: "Anasayfa", href: "/" },
+                { label: "Webtoonlar", href: "/seriler" },
+                { label: episode.webtoon_title, href: `/webtoon/${seriesId}` },
+                { label: `Bölüm ${episode.episode_number}`, href: null }
+            ]} />
 
-
-
-            <ReadingHero
-                title={`Bölüm ${episode.episode_number}`}
-                seriesTitle={episode.webtoon_title}
-                coverImage={episode.webtoon_cover}
-                viewCount={episode.view_count}
-                date={episode.created_at}
-                slug={episode.webtoon_slug || seriesId}
-                type="webtoon"
-            />
+            <header className="max-w-4xl mx-auto px-4 pt-6 pb-4 text-center">
+                <Link
+                    href={`/webtoon/${episode.webtoon_slug || seriesId}`}
+                    className="text-sm text-gray-400 hover:text-purple-400 transition"
+                >
+                    {episode.webtoon_title}
+                </Link>
+                <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">
+                    Bölüm {episode.episode_number}
+                </h1>
+            </header>
 
             {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
-            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mt-8 mb-8">
+            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mb-6">
                 <div className="flex justify-center">
                     <div className="relative w-full max-w-xs">
                         <select

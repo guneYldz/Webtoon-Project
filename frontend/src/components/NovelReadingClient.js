@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation"; // useParams'ı props olarak alacağız
 import CommentSection from "@/components/CommentSection";
 import Link from "next/link";
-import Image from "next/image";
 import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
 import { API } from "@/api";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -121,7 +120,7 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
     if (loading) return (
         <div className="min-h-screen bg-[#121212] font-sans pb-40 overflow-x-hidden">
             {/* Loading Header Preservation */}
-            <div className="relative bg-[#1a1a1a] shadow-2xl border-b border-gray-800 mb-12 h-[400px] flex items-center justify-center">
+            <div className="border-b border-gray-800 mb-8 h-32 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
                     <p className="text-gray-400 text-sm animate-pulse tracking-widest">Bölüm Yükleniyor...</p>
@@ -141,46 +140,28 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
 
     return (
         <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40 overflow-x-hidden`}>
-            {/* 1. ÜST KAPAK ALANI */}
-            <div className="relative bg-[#1a1a1a] text-white shadow-2xl border-b border-gray-800 mb-12">
-                <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110" style={{ backgroundImage: chapter.novel_cover ? `url(${API}/${chapter.novel_cover})` : 'none', backgroundColor: '#2d1b4e' }}></div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/60 to-transparent"></div>
-                <div className="relative container mx-auto max-w-6xl px-6 py-16 flex flex-col items-center gap-8 z-10 text-center">
+            <Breadcrumbs items={[
+                { label: "Anasayfa", href: "/" },
+                { label: "Romanlar", href: "/seriler" },
+                { label: chapter.novel_title, href: `/novel/${slug}` },
+                { label: `Bölüm ${chapter.chapter_number}`, href: null }
+            ]} />
 
-                    {/* Breadcrumbs En Üstte */}
-                    <div className="absolute top-4 left-4 sm:left-8 z-20">
-                        <Breadcrumbs items={[
-                            { label: "Anasayfa", href: "/" },
-                            { label: "Romanlar", href: "/seriler" },
-                            { label: chapter.novel_title, href: `/novel/${slug}` },
-                            { label: `Bölüm ${chapter.chapter_number}`, href: null }
-                        ]} />
-                    </div>
-
-                    {chapter.novel_cover && (
-                        <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl hover:scale-105 transition-transform duration-500">
-                            <img
-                                src={`${API}/${chapter.novel_cover}`}
-                                alt={chapter.novel_title}
-                                className="w-full h-auto object-cover"
-                            />
-                        </div>
-                    )}
-                    <div className="flex-1 pb-2">
-                        <Link href={`/novel/${slug}`} className="inline-block mb-4 px-4 py-1.5 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-300 text-sm font-bold tracking-widest uppercase hover:bg-purple-600 hover:text-white transition">
-                            {chapter.novel_title || "Roman Serisi"}
-                        </Link>
-                        <h1 className={`${cinzel.className} text-3xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-2xl leading-tight mb-4`}>
-                            {chapter.title}
-                        </h1>
-                        <div className="flex flex-wrap items-center justify-center gap-4 text-gray-400 text-sm font-medium">
-                            <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">Bölüm #{chapter.chapter_number}</span>
-                            <span className="flex items-center gap-1">📅 {formatDate(chapter.created_at)}</span>
-                            <span className="flex items-center gap-1 text-purple-400 bg-purple-900/20 px-2 py-1 rounded">👁️ {chapter.view_count || 0}</span>
-                        </div>
-                    </div>
+            <header className="max-w-4xl mx-auto px-4 pt-6 pb-2 text-center">
+                <Link href={`/novel/${slug}`} className="text-sm text-gray-400 hover:text-purple-400 transition">
+                    {chapter.novel_title || "Roman Serisi"}
+                </Link>
+                <h1 className={`${cinzel.className} text-2xl md:text-3xl font-black text-white leading-tight mt-2 mb-3`}>
+                    {chapter.title}
+                </h1>
+                <div className="flex flex-wrap items-center justify-center gap-3 text-gray-400 text-sm font-medium">
+                    <span>Bölüm {chapter.chapter_number}</span>
+                    <span className="text-gray-700">/</span>
+                    <span>📅 {formatDate(chapter.created_at)}</span>
+                    <span className="text-gray-700">/</span>
+                    <span>👁️ {chapter.view_count || 0}</span>
                 </div>
-            </div>
+            </header>
 
             {/* 2. OKUMA ALANI */}
             <main className="container mx-auto max-w-4xl px-4 md:px-8 relative z-10">

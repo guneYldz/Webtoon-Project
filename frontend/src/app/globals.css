@@ -33,21 +33,6 @@ body {
   background: #555;
 }
 
-/* Breadcrumb links */
-nav[aria-label="breadcrumb"] a,
-.breadcrumb a,
-.breadcrumbs a,
-div[class*="breadcrumb"] a {
-  color: #9ca3af !important;
-}
-
-nav[aria-label="breadcrumb"] a:hover,
-.breadcrumb a:hover,
-.breadcrumbs a:hover,
-div[class*="breadcrumb"] a:hover {
-  color: #ffffff !important;
-}
-
 /* Remove any white backgrounds that might leak through */
 * {
   box-sizing: border-box;
