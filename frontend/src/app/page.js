@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import HomeSlider from "@/components/HomeSlider";
-import { serverFetch, siteUrl } from "@/lib/serverApi";
+import { serverFetch, siteUrl, PUBLIC_API } from "@/lib/serverApi";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +125,7 @@ export default async function Home() {
                     <div className="relative aspect-[2/3] rounded-xl overflow-hidden border border-gray-800 shadow-lg group-hover:border-gray-600 transition-all duration-300">
                       <Link href={`/${item.linkPath}/${item.slug || item.id}`} title={item.title || 'Seri'} className="relative block w-full h-full">
                         <Image
-                          src={item.cover_image ? `${API}/${item.cover_image}` : '/placeholder.jpg'}
+                          src={item.cover_image ? `${PUBLIC_API}/${item.cover_image}` : '/placeholder.jpg'}
                           alt={item.title || 'İsimsiz'}
                           fill
                           className="object-cover transition duration-500 group-hover:scale-110"
@@ -199,7 +199,7 @@ export default async function Home() {
                     <div className="w-12 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-gray-800 group-hover:border-blue-500 transition-colors relative">
                       {/* CSS img yerine Next Image */}
                       <Image
-                        src={`${API}/${w.cover_image}`}
+                        src={`${PUBLIC_API}/${w.cover_image}`}
                         alt={w.title}
                         fill
                         className="object-cover"
