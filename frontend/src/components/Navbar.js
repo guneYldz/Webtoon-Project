@@ -129,15 +129,15 @@ export default function Navbar() {
             </svg>
           </button>
 
-          <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-4 group">
-            {/* Logo - Optimized size */}
-            <div className="relative w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-105 transition duration-300">
+          <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-3 sm:gap-4 group">
+            {/* Logo — 1:1 square so the KM emblem stays circular */}
+            <div className="relative aspect-square w-12 h-12 sm:w-16 sm:h-16 shrink-0 group-hover:scale-105 transition duration-300">
               <Image
                 src="/logo.png"
                 alt="Kaos Manga Logo"
                 fill
                 className="object-contain"
-                sizes="64px"
+                sizes="(max-width: 640px) 48px, 64px"
                 quality={100}
                 priority
               />
@@ -301,12 +301,21 @@ export default function Navbar() {
       <div className={`fixed top-0 left-0 w-[280px] h-full bg-[#1a1a1a] border-r border-gray-800 z-[2001] md:hidden transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6 flex flex-col h-full">
           <div className="flex items-center justify-between mb-8">
-            <span
-              className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500"
-              style={{ fontFamily: 'var(--font-cinzel), serif' }}
-            >
-              KAOS MANGA
-            </span>
+            <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 min-w-0">
+              <Image
+                src="/logo.png"
+                alt="Kaos Manga Logo"
+                width={40}
+                height={40}
+                className="w-10 h-10 object-contain shrink-0"
+              />
+              <span
+                className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 truncate"
+                style={{ fontFamily: 'var(--font-cinzel), serif' }}
+              >
+                KAOS MANGA
+              </span>
+            </Link>
             <button
               onClick={() => setIsMobileMenuOpen(false)}
               className="text-gray-400 hover:text-white p-1"

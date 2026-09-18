@@ -77,10 +77,21 @@ export default function AdminLayout({
                     }`}
             >
                 <div className="p-6 border-b border-gray-800">
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-                        Admin Panel
-                    </h1>
-                    <p className="text-sm text-gray-400 mt-1">Webtoon & Novel Manager</p>
+                    <div className="flex items-center gap-3">
+                        <img
+                            src="/logo.png"
+                            alt="Kaos Manga Logo"
+                            width={40}
+                            height={40}
+                            className="w-10 h-10 object-contain shrink-0"
+                        />
+                        <div>
+                            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                                Admin Panel
+                            </h1>
+                            <p className="text-sm text-gray-400 mt-1">Webtoon & Novel Manager</p>
+                        </div>
+                    </div>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
