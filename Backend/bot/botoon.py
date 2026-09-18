@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 from PIL import Image
 from io import BytesIO
 import json
-from chapter_banner import prepend_webtoon_banner
 
 # ==========================================
 # ⚙️ AYARLAR
@@ -686,7 +685,6 @@ class AutoBot:
                 print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
                 return
 
-            saved_paths = prepend_webtoon_banner(episode_folder, saved_paths, BACKEND_DIR)
             print(f"      🖼️ {len(saved_paths)} sayfa tamamlandı.")
             with engine.connect() as conn:
                 check = conn.execute(
@@ -874,11 +872,6 @@ class AutoBot:
                 saved = process_and_save_image(src, episode_folder, fname)
                 if saved:
                     saved_paths.append(saved)
-
-            if not saved_paths:
-                print("      ⚠️ RESİM KAYDEDİLEMEDİ!")
-                return
-            saved_paths = prepend_webtoon_banner(episode_folder, saved_paths, BACKEND_DIR)
 
             with engine.connect() as conn:
                 check = conn.execute(

@@ -273,14 +273,8 @@ class NovelChapterAdmin(ModelView, model=models.NovelChapter):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-for d in [os.path.join(STATIC_DIR, "covers"), os.path.join(STATIC_DIR, "banners"), os.path.join(STATIC_DIR, "images"), os.path.join(STATIC_DIR, "branding")]:
+for d in [os.path.join(STATIC_DIR, "covers"), os.path.join(STATIC_DIR, "banners"), os.path.join(STATIC_DIR, "images")]:
     if not os.path.exists(d): os.makedirs(d, exist_ok=True)
-
-_banner_src = os.path.join(BASE_DIR, "bot", "assets", "kaos-bolum-baslangic.webp")
-_banner_dst = os.path.join(STATIC_DIR, "branding", "kaos-bolum-baslangic.webp")
-if os.path.isfile(_banner_src):
-    import shutil
-    shutil.copy2(_banner_src, _banner_dst)
 
 # 2. Resimler için MUTLAK VE ÇİFT MOUNT AYARI
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

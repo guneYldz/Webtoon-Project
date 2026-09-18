@@ -12,7 +12,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from dotenv import load_dotenv
 from google import genai
 from slugify import slugify
-from chapter_banner import with_text_banner
 
 # Force UTF-8 for console output
 if sys.stdout.encoding != 'utf-8':
@@ -1135,9 +1134,7 @@ GÖREV: Aşağıdaki metni Türkçeye çevir:
             # Temizlik
             if "İşte çeviriniz" in ceviri or "Çeviri:" in ceviri:
                 ceviri = ceviri.replace("İşte çeviriniz:", "").replace("Çeviri:", "").strip()
-
-            ceviri = with_text_banner(ceviri)
-
+            
             with engine.connect() as conn:
                 result = conn.execute(
                     text("""

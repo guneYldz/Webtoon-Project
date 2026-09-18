@@ -7,7 +7,7 @@ import ChapterReactions from "@/components/ChapterReactions";
 import Link from "next/link";
 import Image from "next/image";
 import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
-import { API, CHAPTER_BANNER_MARK, CHAPTER_BANNER_SRC } from "@/api";
+import { API } from "@/api";
 
 // --- FONTLAR ---
 const crimson = Crimson_Pro({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
@@ -97,19 +97,7 @@ export default function ClientNovelReadingPage() {
     const formatContent = (text) => {
         if (!text) return null;
         return text.split('\n').map((para, index) => {
-            const trimmed = para.trim();
-            if (!trimmed) return <br key={index} className="mb-4" />;
-            if (trimmed === CHAPTER_BANNER_MARK || trimmed.includes("kaos-bolum-baslangic")) {
-                return (
-                    <figure key={index} className="mb-10 mx-auto max-w-lg">
-                        <img
-                            src={CHAPTER_BANNER_SRC}
-                            alt="Kaos Mangadan Okuyunuz"
-                            className="w-full h-auto rounded-md shadow-[0_0_40px_rgba(168,85,247,0.28)]"
-                        />
-                    </figure>
-                );
-            }
+            if (!para.trim()) return <br key={index} className="mb-4" />;
             return (
                 <p key={index} className="mb-8 indent-8 text-justify leading-loose">
                     {para}

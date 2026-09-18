@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { API, CHAPTER_BANNER_MARK, CHAPTER_BANNER_SRC } from "@/api";
 
 export default function NovelReadingPage() {
   const params = useParams();
@@ -107,12 +106,7 @@ export default function NovelReadingPage() {
         */}
         <div
           className="novel-content text-gray-200 text-lg md:text-xl leading-[2] font-serif tracking-wide select-text text-justify"
-          dangerouslySetInnerHTML={{
-            __html: (data.content || "").replace(
-              CHAPTER_BANNER_MARK,
-              `<p class="kaos-bolum-banner-wrap"><img class="kaos-bolum-banner" src="${CHAPTER_BANNER_SRC}" alt="Kaos Mangadan Okuyunuz" /></p>`
-            ),
-          }}
+          dangerouslySetInnerHTML={{ __html: data.content }}
         />
 
         {/* Bölüm Sonu Butonları */}
@@ -139,19 +133,6 @@ export default function NovelReadingPage() {
         .novel-content p {
           margin-bottom: 2rem;
           text-indent: 1rem;
-        }
-        .novel-content .kaos-bolum-banner-wrap {
-          text-align: center;
-          text-indent: 0;
-          margin: 0 auto 2.5rem;
-        }
-        .novel-content .kaos-bolum-banner {
-          display: block;
-          width: 100%;
-          max-width: 32rem;
-          height: auto;
-          margin: 0 auto;
-          border-radius: 0.375rem;
         }
         .novel-content strong {
           color: #fff;

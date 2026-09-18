@@ -10,7 +10,6 @@ import html
 from dotenv import load_dotenv
 import cloudscraper
 import re  # Bölüm başlığı regex için
-from chapter_banner import with_text_banner
 
 # ==========================================
 # ⚙️ AYARLAR VE YAPILANDIRMA
@@ -716,8 +715,6 @@ YAPAMAYACAKLARIN:
     if is_translation_refusal(ceviri_metin):
         print("   ❌ Birleşen metin hâlâ telif/özet — kaydedilmeyecek.")
         return "ERROR"
-
-    ceviri_metin = with_text_banner(ceviri_metin)
 
     # ==================================================
     # KAYDET  (tr_title Pass 1'den kilitli, asla değişmedi)
