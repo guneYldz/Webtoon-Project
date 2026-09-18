@@ -54,29 +54,31 @@ function SocialCard({ link }) {
 
   const content = (
     <>
-      <div
-        className={`w-16 h-16 rounded-2xl flex items-center justify-center transition duration-300 ${
-          isLive ? style.iconWrap : "bg-white/5 text-gray-500"
-        }`}
-      >
-        <SocialIcon id={link.id} className="w-8 h-8" />
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-white">{link.name}</h2>
-          {!isLive && (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-gray-400">
-              Yakında
-            </span>
-          )}
+      <div className="flex items-start gap-4">
+        <div
+          className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 transition duration-300 ${
+            isLive ? style.iconWrap : "bg-white/5 text-gray-500"
+          }`}
+        >
+          <SocialIcon id={link.id} className="w-8 h-8" />
         </div>
-        <p className="text-sm text-gray-400 mt-1">{link.description}</p>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white">{link.name}</h2>
+            {!isLive && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-gray-400">
+                Yakında
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-400 mt-1 leading-relaxed">{link.description}</p>
+        </div>
       </div>
 
       {isLive ? (
         <span
-          className={`inline-flex items-center gap-2 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition ${style.button}`}
+          className={`inline-flex items-center justify-center gap-2 text-white text-sm font-bold px-4 py-3 rounded-xl transition w-full ${style.button}`}
         >
           {link.cta || "Aç"}
           <ExternalArrow />
@@ -87,7 +89,7 @@ function SocialCard({ link }) {
     </>
   );
 
-  const className = `group flex flex-col sm:flex-row sm:items-center gap-5 p-6 rounded-2xl border bg-[#1a1a1a] transition duration-300 ${
+  const className = `group flex flex-col gap-5 p-6 sm:p-8 rounded-2xl border bg-[#1a1a1a] transition duration-300 ${
     isLive
       ? `border-gray-800 ${style.border} hover:shadow-lg hover:-translate-y-0.5`
       : "border-gray-800/70 opacity-70 cursor-not-allowed"
