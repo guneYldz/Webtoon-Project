@@ -300,17 +300,17 @@ export default function Navbar() {
       {/* MOBİL MENÜ YAN PANEL */}
       <div className={`fixed top-0 left-0 w-[280px] h-full bg-[#1a1a1a] border-r border-gray-800 z-[2001] md:hidden transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-8 gap-2">
             <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 min-w-0">
               <Image
                 src="/logo.png"
                 alt="Kaos Manga Logo"
-                width={40}
-                height={40}
-                className="w-10 h-10 object-contain shrink-0"
+                width={32}
+                height={32}
+                className="w-8 h-8 object-contain shrink-0"
               />
               <span
-                className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 truncate"
+                className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 whitespace-nowrap"
                 style={{ fontFamily: 'var(--font-cinzel), serif' }}
               >
                 KAOS MANGA
