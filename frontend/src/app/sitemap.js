@@ -26,6 +26,8 @@ export default async function sitemap() {
     "",
     "/kesfet",
     "/seriler",
+    "/yeniler",
+    "/baglantilar",
   ].map((route) => ({
     url: `${baseUrl}${route}`,
     lastModified: new Date(),

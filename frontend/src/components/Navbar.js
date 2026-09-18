@@ -153,18 +153,21 @@ export default function Navbar() {
         </div>
 
         {/* ORTA: LİNKLER */}
-        <div className="hidden md:flex items-center gap-6 text-base font-medium text-gray-400">
-          <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+        <div className="hidden md:flex items-center gap-2 lg:gap-6 text-sm lg:text-base font-medium text-gray-400">
+          <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Ana Sayfa
           </Link>
-          <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Keşfet
           </Link>
-          <Link href="/seriler" title="Tüm Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/seriler" title="Tüm Seriler" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Seriler
           </Link>
-          <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Yeniler
+          </Link>
+          <Link href="/baglantilar" title="Discord ve Sosyal Medya" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
+            Bağlantılar
           </Link>
         </div>
 
@@ -339,6 +342,9 @@ export default function Navbar() {
             </Link>
             <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               ✨ Yeniler
+            </Link>
+            <Link href="/baglantilar" title="Discord ve Sosyal Medya" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              🔗 Bağlantılar
             </Link>
           </div>
 
