@@ -606,6 +606,55 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== COMMENTS ====================
+
+@router.get("/comments")
+async def list_comments(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    query = db.query(models.Comment).order_by(models.Comment.created_at.desc())
+    total = query.count()
+    offset = (page - 1) * limit
+    rows = query.offset(offset).limit(limit).all()
+    data = []
+    for row in rows:
+        user = db.query(models.User).filter(models.User.id == row.user_id).first()
+        data.append({
+            "id": row.id,
+            "content": row.content,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "user_id": row.user_id,
+            "username": user.username if user else "?",
+        })
+    return {
+        "status": "success",
+        "data": data,
+        "pagination": {"page": page, "limit": limit, "total": total},
+    }
+
+
+@router.delete("/comments/{comment_id}")
+async def delete_comment(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    row = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Yorum bulunamadı")
+    try:
+        db.query(models.Comment).filter(models.Comment.parent_id == row.id).delete(synchronize_session=False)
+        db.delete(row)
+        db.commit()
+        return {"status": "success", "message": "Yorum silindi"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== ANNOUNCEMENTS ====================
 
 def _announcement_payload(item: models.Announcement):
