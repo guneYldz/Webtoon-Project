@@ -74,9 +74,13 @@ services:
     image: dpage/pgadmin4
     container_name: webtoon_pgadmin
     restart: always
+    env_file:
+      - .env
     environment:
-      PGADMIN_DEFAULT_EMAIL: None
-      PGADMIN_DEFAULT_PASSWORD: None
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@kaosmanga.net}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-${POSTGRES_PASSWORD}}
+      PGADMIN_CONFIG_MAX_LOGIN_ATTEMPTS: 0
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
       - "5050:80"
     depends_on:
