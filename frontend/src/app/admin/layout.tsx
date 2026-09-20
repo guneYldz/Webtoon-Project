@@ -105,6 +105,7 @@ export default function AdminLayout({
                     <NavItem href="/admin/novels" icon="📖" label="Noveller" />
                     <NavItem href="/admin/novel-bolumleri" icon="📑" label="Novel Bölümleri" />
                     <NavItem href="/admin/categories" icon="📂" label="Kategoriler" />
+                    <NavItem href="/admin/duyurular" icon="📢" label="Duyurular" />
 
 
 

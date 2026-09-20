@@ -99,6 +99,10 @@ export default function AdminDashboard() {
                         <span className="text-3xl">📂</span>
                         <span className="font-semibold text-gray-700">Kategorileri Yönet</span>
                     </Link>
+                    <Link href="/admin/duyurular" className="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <span className="text-3xl">📢</span>
+                        <span className="font-semibold text-gray-700">Duyuruları Yönet</span>
+                    </Link>
                 </div>
             </div>
         </div>

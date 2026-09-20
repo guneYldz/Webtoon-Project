@@ -604,6 +604,69 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== ANNOUNCEMENTS ====================
+
+def _announcement_payload(item: models.Announcement):
+    return {
+        "id": item.id,
+        "title": item.title,
+        "message": item.message or "",
+    }
+
+
+@router.get("/announcements")
+async def list_announcements(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    items = db.query(models.Announcement).order_by(models.Announcement.id.asc()).all()
+    return {"status": "success", "data": [_announcement_payload(item) for item in items]}
+
+
+@router.post("/announcements")
+async def create_announcement(
+    title: str = Form(...),
+    message: str = Form(""),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    if not title.strip():
+        raise HTTPException(status_code=400, detail="Başlık zorunlu")
+    try:
+        item = models.Announcement(title=title.strip(), message=message.strip() if message else "")
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        return {
+            "status": "success",
+            "message": "Duyuru eklendi",
+            "data": _announcement_payload(item),
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(
+    announcement_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    item = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Duyuru bulunamadı")
+
+    title = item.title
+    try:
+        db.delete(item)
+        db.commit()
+        return {"status": "success", "message": f"'{title}' silindi"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== DASHBOARD STATS ====================
 
 @router.get("/stats")

@@ -222,6 +222,18 @@ class NovelChapterAdmin(ModelView, model=models.NovelChapter):
     column_list = [models.NovelChapter.novel, models.NovelChapter.chapter_number, models.NovelChapter.title]
     form_overrides = {"content": TextAreaField}
 
+class AnnouncementAdmin(ModelView, model=models.Announcement):
+    name = "Duyuru"
+    name_plural = "Duyurular"
+    icon = "fa-solid fa-bullhorn"
+    column_list = [models.Announcement.id, models.Announcement.title, models.Announcement.message]
+    column_labels = {models.Announcement.title: "Başlık", models.Announcement.message: "Metin"}
+    form_columns = ["title", "message"]
+    form_overrides = {"message": TextAreaField}
+    can_create = True
+    can_edit = True
+    can_delete = True
+
 # ==========================================
 # 🚀 BAŞLATMA VE KONFİGÜRASYON
 # ==========================================
@@ -249,6 +261,7 @@ admin.add_view(CategoryAdmin)
 admin.add_view(CommentAdmin)
 admin.add_view(NovelAdmin)
 admin.add_view(NovelChapterAdmin)
+admin.add_view(AnnouncementAdmin)
 
 # 5. Routerları Dahil Et
 app.include_router(webtoon.router)

@@ -250,3 +250,16 @@ class NovelChapter(Base):
 
     def __str__(self):
         return f"{self.title} (Bölüm {self.chapter_number})"
+
+
+# 11. DUYURULAR
+# Canlı veritabanında metin kolonu "massage" olarak kayıtlı (yazım hatası).
+class Announcement(Base):
+    __tablename__ = "announcements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    message = Column("massage", Text, nullable=True)
+
+    def __str__(self):
+        return self.title or f"Duyuru {self.id}"
