@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image"; // Image import edildi
 import { usePathname, useRouter } from "next/navigation";
 import { API } from "@/api";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
@@ -166,12 +167,17 @@ export default function Navbar() {
           <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Yeniler
           </Link>
+          <Link href="/duyurular" title="Duyurular" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
+            Duyurular
+          </Link>
           <Link href="/baglantilar" title="Discord ve Sosyal Medya" className="hover:text-white transition hover:bg-white/5 px-2 lg:px-3 py-2 rounded-md whitespace-nowrap">
             Bağlantılar
           </Link>
         </div>
 
         {/* SAĞ: PROFİL ALANI */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          <NotificationBell user={user} />
         <div className="relative">
           {user ? (
             <div>
@@ -290,6 +296,7 @@ export default function Navbar() {
             </button>
           )}
         </div>
+        </div>
       </div>
 
       {/* MOBİL MENÜ OVERLAY */}
@@ -342,6 +349,9 @@ export default function Navbar() {
             </Link>
             <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               ✨ Yeniler
+            </Link>
+            <Link href="/duyurular" title="Duyurular" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              📢 Duyurular
             </Link>
             <Link href="/baglantilar" title="Discord ve Sosyal Medya" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               🔗 Bağlantılar

@@ -22,7 +22,7 @@ import uuid
 import shutil
 
 # --- ROUTERLARI ÇAĞIR ---
-from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router
+from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications
 
 # 1. Tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
@@ -33,6 +33,11 @@ with engine.connect() as _conn:
     for _stmt in [
         "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
         "ALTER TABLE comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES comments(id)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS link VARCHAR(500)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image VARCHAR(500)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS author VARCHAR(50)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS image VARCHAR(500)",
     ]:
         try:
             _conn.execute(sql_text(_stmt))
@@ -228,7 +233,7 @@ class AnnouncementAdmin(ModelView, model=models.Announcement):
     icon = "fa-solid fa-bullhorn"
     column_list = [models.Announcement.id, models.Announcement.title, models.Announcement.message]
     column_labels = {models.Announcement.title: "Başlık", models.Announcement.message: "Metin"}
-    form_columns = ["title", "message"]
+    form_columns = ["title", "message", "link", "image", "author"]
     form_overrides = {"message": TextAreaField}
     can_create = True
     can_edit = True
@@ -242,7 +247,7 @@ class AnnouncementAdmin(ModelView, model=models.Announcement):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-for d in [os.path.join(STATIC_DIR, "covers"), os.path.join(STATIC_DIR, "banners"), os.path.join(STATIC_DIR, "images")]:
+for d in [os.path.join(STATIC_DIR, "covers"), os.path.join(STATIC_DIR, "banners"), os.path.join(STATIC_DIR, "images"), os.path.join(STATIC_DIR, "announcements")]:
     if not os.path.exists(d): os.makedirs(d, exist_ok=True)
 
 # 2. Resimler için MUTLAK VE ÇİFT MOUNT AYARI
@@ -272,6 +277,7 @@ app.include_router(favorites.router)
 app.include_router(likes.router)
 app.include_router(novel.router)
 app.include_router(admin_router.router)
+app.include_router(notifications.router)
 
 @app.get("/")
 def ana_sayfa():

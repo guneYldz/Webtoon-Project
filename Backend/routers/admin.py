@@ -17,9 +17,11 @@ router = APIRouter(
 
 UPLOAD_DIR = "static/covers"
 UPLOAD_DIR_BANNERS = "static/banners"
+UPLOAD_DIR_ANNOUNCEMENTS = "static/announcements"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR_BANNERS, exist_ok=True)
+os.makedirs(UPLOAD_DIR_ANNOUNCEMENTS, exist_ok=True)
 
 
 # ==================== WEBTOONS ====================
@@ -607,10 +609,15 @@ async def delete_user(
 # ==================== ANNOUNCEMENTS ====================
 
 def _announcement_payload(item: models.Announcement):
+    created = item.created_at.isoformat(sep=" ") if getattr(item, "created_at", None) else None
     return {
         "id": item.id,
         "title": item.title,
         "message": item.message or "",
+        "link": getattr(item, "link", None),
+        "image": getattr(item, "image", None),
+        "created_at": created,
+        "author": getattr(item, "author", None) or "admin",
     }
 
 
@@ -619,27 +626,61 @@ async def list_announcements(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
-    items = db.query(models.Announcement).order_by(models.Announcement.id.asc()).all()
+    items = db.query(models.Announcement).order_by(models.Announcement.id.desc()).all()
     return {"status": "success", "data": [_announcement_payload(item) for item in items]}
 
 
 @router.post("/announcements")
 async def create_announcement(
     title: str = Form(...),
-    message: str = Form(""),
+    message: str = Form(...),
+    link: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
-    if not title.strip():
-        raise HTTPException(status_code=400, detail="Başlık zorunlu")
+    if not title.strip() or not message.strip():
+        raise HTTPException(status_code=400, detail="Başlık ve mesaj zorunlu")
+
+    image_path = None
+    if image and image.filename:
+        ext = image.filename.rsplit(".", 1)[-1].lower()
+        if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+            raise HTTPException(status_code=400, detail="Desteklenmeyen görsel formatı")
+        new_name = f"{uuid.uuid4()}.{ext}"
+        file_path = f"{UPLOAD_DIR_ANNOUNCEMENTS}/{new_name}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        image_path = file_path.replace("\\", "/")
+
     try:
-        item = models.Announcement(title=title.strip(), message=message.strip() if message else "")
+        item = models.Announcement(
+            title=title.strip(),
+            message=message.strip(),
+            link=(link.strip() if link else None),
+            image=image_path,
+            author=current_admin.username,
+        )
         db.add(item)
+        db.flush()
+
+        dest = item.link or f"/duyurular#duyuru-{item.id}"
+        users = db.query(models.User).filter(models.User.is_active == True).all()
+        for user in users:
+            db.add(models.Notification(
+                user_id=user.id,
+                type="announcement",
+                title=item.title,
+                message=item.message or "",
+                link=dest,
+                image=item.image,
+            ))
+
         db.commit()
         db.refresh(item)
         return {
             "status": "success",
-            "message": "Duyuru eklendi",
+            "message": f"Duyuru gönderildi ({len(users)} kullanıcıya bildirim)",
             "data": _announcement_payload(item),
         }
     except Exception as e:
@@ -659,6 +700,10 @@ async def delete_announcement(
 
     title = item.title
     try:
+        db.query(models.Notification).filter(
+            models.Notification.type == "announcement",
+            models.Notification.link == f"/duyurular#duyuru-{item.id}",
+        ).delete(synchronize_session=False)
         db.delete(item)
         db.commit()
         return {"status": "success", "message": f"'{title}' silindi"}

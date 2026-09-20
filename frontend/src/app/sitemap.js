@@ -44,7 +44,7 @@ export default async function sitemap() {
     ),
   ]);
 
-  const staticRoutes = ["", "/kesfet", "/seriler", "/yeniler", "/baglantilar"].map(
+  const staticRoutes = ["", "/kesfet", "/seriler", "/yeniler", "/duyurular", "/baglantilar"].map(
     (route) => entry(route, new Date(), "daily", 1)
   );
 

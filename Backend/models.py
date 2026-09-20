@@ -260,6 +260,27 @@ class Announcement(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
     message = Column("massage", Text, nullable=True)
+    link = Column(String(500), nullable=True)
+    image = Column(String(500), nullable=True)
+    author = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     def __str__(self):
         return self.title or f"Duyuru {self.id}"
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    type = Column(String(50), default="announcement")
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=True)
+    link = Column(String(500), nullable=True)
+    image = Column(String(500), nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    def __str__(self):
+        return f"{self.type}:{self.title}"
