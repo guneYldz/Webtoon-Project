@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Lato } from "next/font/google";
 import CommentSection from "@/components/CommentSection";
-import ReadingHero from "@/components/ReadingHero";
 import { API } from "@/api";
 
 const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
@@ -127,18 +126,37 @@ export default function ClientWebtoonReadingPage() {
     return (
         <div className={`min-h-screen bg-[#121212] text-gray-200 pb-40 ${lato.className}`}>
 
-            <ReadingHero
-                title={`Bölüm ${episode.episode_number}`}
-                seriesTitle={episode.webtoon_title}
-                coverImage={episode.webtoon_cover}
-                viewCount={episode.view_count}
-                date={episode.created_at}
-                slug={episode.webtoon_slug || params.id}
-                type="webtoon"
-            />
+            <nav aria-label="Breadcrumb" className="w-full bg-[#161616] border-b border-white/5">
+                <ol className="container mx-auto max-w-7xl px-4 h-12 flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-sm overflow-x-auto whitespace-nowrap">
+                    <li className="flex items-center gap-2 shrink-0">
+                        <Link href="/" className="text-gray-400 hover:text-white transition-colors">Anasayfa</Link>
+                    </li>
+                    <li className="flex items-center gap-2 shrink-0">
+                        <span className="text-gray-600">/</span>
+                        <Link href="/seriler" className="text-gray-400 hover:text-white transition-colors">Webtoonlar</Link>
+                    </li>
+                    <li className="flex items-center gap-2 shrink-0">
+                        <span className="text-gray-600">/</span>
+                        <Link href={`/webtoon/${params.id}`} className="text-gray-400 hover:text-white transition-colors">{episode.webtoon_title}</Link>
+                    </li>
+                    <li className="flex items-center gap-2 shrink-0">
+                        <span className="text-gray-600">/</span>
+                        <span className="text-white font-medium">Bölüm {episode.episode_number}</span>
+                    </li>
+                </ol>
+            </nav>
+
+            <header className="max-w-4xl mx-auto px-4 pt-6 pb-4 text-center">
+                <Link href={`/webtoon/${episode.webtoon_slug || params.id}`} className="text-sm text-gray-400 hover:text-purple-400 transition">
+                    {episode.webtoon_title}
+                </Link>
+                <h1 className="text-xl sm:text-2xl font-bold text-white mt-1">
+                    Bölüm {episode.episode_number}
+                </h1>
+            </header>
 
             {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
-            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mt-8 mb-8">
+            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mb-6">
                 <div className="flex justify-center">
                     <div className="relative w-full max-w-xs">
                         <select

@@ -24,6 +24,17 @@ import shutil
 # --- ROUTERLARI ÇAĞIR ---
 from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router
 
+def _optional_router(module_name):
+    try:
+        module = __import__(f"routers.{module_name}", fromlist=["router"])
+        return getattr(module, "router", None)
+    except Exception as exc:
+        print(f"⚠️  routers.{module_name} yüklenemedi, atlanıyor: {exc}")
+        return None
+
+notifications_router = _optional_router("notifications")
+reactions_router = _optional_router("reactions")
+
 # 1. Tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
 
@@ -33,6 +44,11 @@ with engine.connect() as _conn:
     for _stmt in [
         "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
         "ALTER TABLE comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES comments(id)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS link VARCHAR(500)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image VARCHAR(500)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS author VARCHAR(50)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS image VARCHAR(500)",
     ]:
         try:
             _conn.execute(sql_text(_stmt))
@@ -222,6 +238,18 @@ class NovelChapterAdmin(ModelView, model=models.NovelChapter):
     column_list = [models.NovelChapter.novel, models.NovelChapter.chapter_number, models.NovelChapter.title]
     form_overrides = {"content": TextAreaField}
 
+class AnnouncementAdmin(ModelView, model=models.Announcement):
+    name = "Duyuru"
+    name_plural = "Duyurular"
+    icon = "fa-solid fa-bullhorn"
+    column_list = [models.Announcement.id, models.Announcement.title, models.Announcement.message]
+    column_labels = {models.Announcement.title: "Başlık", models.Announcement.message: "Metin"}
+    form_columns = ["title", "message", "link", "image", "author"]
+    form_overrides = {"message": TextAreaField}
+    can_create = True
+    can_edit = True
+    can_delete = True
+
 # ==========================================
 # 🚀 BAŞLATMA VE KONFİGÜRASYON
 # ==========================================
@@ -230,7 +258,7 @@ class NovelChapterAdmin(ModelView, model=models.NovelChapter):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-for d in [os.path.join(STATIC_DIR, "covers"), os.path.join(STATIC_DIR, "banners"), os.path.join(STATIC_DIR, "images")]:
+for d in [os.path.join(STATIC_DIR, "covers"), os.path.join(STATIC_DIR, "banners"), os.path.join(STATIC_DIR, "images"), os.path.join(STATIC_DIR, "announcements")]:
     if not os.path.exists(d): os.makedirs(d, exist_ok=True)
 
 # 2. Resimler için MUTLAK VE ÇİFT MOUNT AYARI
@@ -249,6 +277,7 @@ admin.add_view(CategoryAdmin)
 admin.add_view(CommentAdmin)
 admin.add_view(NovelAdmin)
 admin.add_view(NovelChapterAdmin)
+admin.add_view(AnnouncementAdmin)
 
 # 5. Routerları Dahil Et
 app.include_router(webtoon.router)
@@ -259,6 +288,10 @@ app.include_router(favorites.router)
 app.include_router(likes.router)
 app.include_router(novel.router)
 app.include_router(admin_router.router)
+if notifications_router is not None:
+    app.include_router(notifications_router)
+if reactions_router is not None:
+    app.include_router(reactions_router)
 
 @app.get("/")
 def ana_sayfa():

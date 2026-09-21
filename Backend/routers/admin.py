@@ -17,9 +17,11 @@ router = APIRouter(
 
 UPLOAD_DIR = "static/covers"
 UPLOAD_DIR_BANNERS = "static/banners"
+UPLOAD_DIR_ANNOUNCEMENTS = "static/announcements"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR_BANNERS, exist_ok=True)
+os.makedirs(UPLOAD_DIR_ANNOUNCEMENTS, exist_ok=True)
 
 
 # ==================== WEBTOONS ====================
@@ -599,6 +601,161 @@ async def delete_user(
         db.delete(user)
         db.commit()
         return {"status": "success", "message": f"'{user.username}' silindi"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== COMMENTS ====================
+
+@router.get("/comments")
+async def list_comments(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    query = db.query(models.Comment).order_by(models.Comment.created_at.desc())
+    total = query.count()
+    offset = (page - 1) * limit
+    rows = query.offset(offset).limit(limit).all()
+    data = []
+    for row in rows:
+        user = db.query(models.User).filter(models.User.id == row.user_id).first()
+        data.append({
+            "id": row.id,
+            "content": row.content,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "user_id": row.user_id,
+            "username": user.username if user else "?",
+        })
+    return {
+        "status": "success",
+        "data": data,
+        "pagination": {"page": page, "limit": limit, "total": total},
+    }
+
+
+@router.delete("/comments/{comment_id}")
+async def delete_comment(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    row = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Yorum bulunamadı")
+    try:
+        db.query(models.Comment).filter(models.Comment.parent_id == row.id).delete(synchronize_session=False)
+        db.delete(row)
+        db.commit()
+        return {"status": "success", "message": "Yorum silindi"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== ANNOUNCEMENTS ====================
+
+def _announcement_payload(item: models.Announcement):
+    created = item.created_at.isoformat(sep=" ") if getattr(item, "created_at", None) else None
+    return {
+        "id": item.id,
+        "title": item.title,
+        "message": item.message or "",
+        "link": getattr(item, "link", None),
+        "image": getattr(item, "image", None),
+        "created_at": created,
+        "author": getattr(item, "author", None) or "admin",
+    }
+
+
+@router.get("/announcements")
+async def list_announcements(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    items = db.query(models.Announcement).order_by(models.Announcement.id.desc()).all()
+    return {"status": "success", "data": [_announcement_payload(item) for item in items]}
+
+
+@router.post("/announcements")
+async def create_announcement(
+    title: str = Form(...),
+    message: str = Form(...),
+    link: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    if not title.strip() or not message.strip():
+        raise HTTPException(status_code=400, detail="Başlık ve mesaj zorunlu")
+
+    image_path = None
+    if image and image.filename:
+        ext = image.filename.rsplit(".", 1)[-1].lower()
+        if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+            raise HTTPException(status_code=400, detail="Desteklenmeyen görsel formatı")
+        new_name = f"{uuid.uuid4()}.{ext}"
+        file_path = f"{UPLOAD_DIR_ANNOUNCEMENTS}/{new_name}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        image_path = file_path.replace("\\", "/")
+
+    try:
+        item = models.Announcement(
+            title=title.strip(),
+            message=message.strip(),
+            link=(link.strip() if link else None),
+            image=image_path,
+            author=current_admin.username,
+        )
+        db.add(item)
+        db.flush()
+
+        dest = item.link or f"/duyurular#duyuru-{item.id}"
+        users = db.query(models.User).filter(models.User.is_active == True).all()
+        for user in users:
+            db.add(models.Notification(
+                user_id=user.id,
+                type="announcement",
+                title=item.title,
+                message=item.message or "",
+                link=dest,
+                image=item.image,
+            ))
+
+        db.commit()
+        db.refresh(item)
+        return {
+            "status": "success",
+            "message": f"Duyuru gönderildi ({len(users)} kullanıcıya bildirim)",
+            "data": _announcement_payload(item),
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(
+    announcement_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    item = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Duyuru bulunamadı")
+
+    title = item.title
+    try:
+        db.query(models.Notification).filter(
+            models.Notification.type == "announcement",
+            models.Notification.link == f"/duyurular#duyuru-{item.id}",
+        ).delete(synchronize_session=False)
+        db.delete(item)
+        db.commit()
+        return {"status": "success", "message": f"'{title}' silindi"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

@@ -4,11 +4,9 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import CommentSection from "@/components/CommentSection";
 import Link from "next/link";
-import Image from "next/image";
 import { Lato } from "next/font/google";
-import ReadingHero from "@/components/ReadingHero";
 import { API } from "@/api";
-import Breadcrumbs from "@/components/Breadcrumbs";
+import ReadingHero from "@/components/ReadingHero";
 import RecommendedSeries from "@/components/RecommendedSeries";
 
 const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
@@ -19,6 +17,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
 
     const [episode, setEpisode] = useState(initialEpisode || null);
     const [allEpisodes, setAllEpisodes] = useState([]); // Tüm bölümleri tutacak state
+    const [seriesCover, setSeriesCover] = useState(null);
     const [loading, setLoading] = useState(!initialEpisode);
     const [error, setError] = useState(null);
 
@@ -76,6 +75,9 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
                     const webtoonRes = await fetch(`${apiUrl}/webtoons/${seriesId}`);
                     if (webtoonRes.ok) {
                         const webtoonData = await webtoonRes.json();
+                        if (webtoonData.cover_image) {
+                            setSeriesCover(webtoonData.cover_image);
+                        }
                         if (webtoonData.episodes) {
                             const sortedEpisodes = [...webtoonData.episodes].sort((a, b) => b.episode_number - a.episode_number);
                             setAllEpisodes(sortedEpisodes);
@@ -130,22 +132,10 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
     return (
         <div className={`min-h-screen bg-[#121212] text-gray-200 pb-24 ${lato.className}`} style={{ paddingBottom: '64px' }}>
 
-            {/* BREADCRUMBS (Sayfanın en tepesinde) */}
-            <div className="container mx-auto px-4 mt-4" style={{ minHeight: '60px' }}>
-                <Breadcrumbs items={[
-                    { label: "Anasayfa", href: "/" },
-                    { label: "Webtoonlar", href: "/seriler" },
-                    { label: episode.webtoon_title, href: `/webtoon/${seriesId}` },
-                    { label: `Bölüm ${episode.episode_number}`, href: null }
-                ]} />
-            </div>
-
-
-
             <ReadingHero
                 title={`Bölüm ${episode.episode_number}`}
                 seriesTitle={episode.webtoon_title}
-                coverImage={episode.webtoon_cover}
+                coverImage={episode.webtoon_cover || seriesCover}
                 viewCount={episode.view_count}
                 date={episode.created_at}
                 slug={episode.webtoon_slug || seriesId}
@@ -153,7 +143,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
             />
 
             {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
-            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mt-8 mb-8">
+            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mb-6">
                 <div className="flex justify-center">
                     <div className="relative w-full max-w-xs">
                         <select
