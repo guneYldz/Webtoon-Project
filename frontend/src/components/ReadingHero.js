@@ -16,26 +16,27 @@ export default function ReadingHero({
 
     const linkPath = type === "webtoon" ? "webtoon" : "novel";
 
-    // 👇 RESİM URL KONTROLÜ (DÜZELTİLEN KISIM)
-    // Eğer resim linki 'http' ile başlıyorsa (Backend tam link gönderdiyse) olduğu gibi al.
-    // Yoksa başına API adresini ekle.
-    const finalImage = coverImage?.startsWith("http")
-        ? coverImage
-        : `${API}/${coverImage}`;
+    // Tam URL ise kullan; değilse API kökünü ekle. HTTPS sayfada http kapak karışık içerik yüzünden kesilmesin.
+    const finalImage = !coverImage
+        ? null
+        : (coverImage.startsWith("http") ? coverImage : `${API}/${coverImage}`).replace(
+            /^http:\/\//,
+            "https://"
+        );
 
     return (
-        <div className="relative w-full py-12 md:py-20 overflow-hidden bg-[#1a1a1a]" style={{ minHeight: '500px' }}>
+        <div className="relative w-full py-10 md:py-14 overflow-hidden bg-[#1a1a1a]">
 
             {/* Kapak renkleri arka plana yayılsın (novel okuma sayfası gibi) */}
-            {coverImage && (
+            {finalImage && (
                 <div
-                    className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110 pointer-events-none"
+                    className="absolute inset-0 bg-cover bg-center opacity-50 blur-3xl scale-125 pointer-events-none"
                     style={{ backgroundImage: `url(${finalImage})`, backgroundColor: '#2d1b4e' }}
                 />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#161221] via-[#121212]/60 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#161221] via-[#121212]/45 to-transparent pointer-events-none" />
 
-            <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6" style={{ minHeight: '400px' }}>
+            <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6">
 
                 {/* Navigasyon */}
                 <div className="w-full py-2 px-4">
@@ -51,7 +52,7 @@ export default function ReadingHero({
                 </div>
 
                 {/* Kapak Resmi */}
-                {coverImage && (
+                {finalImage && (
                     <div className="relative group">
                         <div className="absolute -inset-4 bg-blue-600/10 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition duration-700" style={{ willChange: 'opacity' }}></div>
                         <div className="relative w-32 md:w-48 aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border border-gray-700 group-hover:border-gray-500 transition-colors bg-gray-800" style={{ minHeight: '192px' }}>
