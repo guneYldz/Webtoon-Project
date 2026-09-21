@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
@@ -20,6 +21,11 @@ export default function ProfilePage() {
   const [editForm, setEditForm] = useState({ username: "", email: "" });
   const [passForm, setPassForm] = useState({ old_password: "", new_password: "" });
 
+  // Aktivite (yorumlar + favoriler)
+  const [comments, setComments] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const [tab, setTab] = useState("yorumlar");
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) { router.push("/login"); return; }
@@ -33,11 +39,24 @@ export default function ProfilePage() {
         const data = await res.json();
         setUser(data);
         setEditForm({ username: data.username, email: data.email });
+        fetchActivity(data.username, token);
       } else {
         localStorage.removeItem("token");
         router.push("/login");
       }
     } catch (err) { console.error(err); } finally { setLoading(false); }
+  };
+
+  // Kullanıcının yorumlarını ve favorilerini çek
+  const fetchActivity = async (username, token) => {
+    try {
+      const [cRes, fRes] = await Promise.all([
+        fetch(`${API}/comments/kullanici/${encodeURIComponent(username)}`),
+        fetch(`${API}/favorites/listele`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (cRes.ok) setComments(await cRes.json());
+      if (fRes.ok) setFavorites(await fRes.json());
+    } catch (err) { console.error("Aktivite yüklenemedi:", err); }
   };
 
   const handleImageUpload = async (e) => {
@@ -103,7 +122,7 @@ export default function ProfilePage() {
   if (loading) return <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center text-purple-500 font-bold italic">Profil Yükleniyor...</div>;
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center text-gray-200">
+    <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center text-gray-200 py-10 px-4">
       <div className="w-full max-w-md bg-[#121212] p-8 rounded-[40px] border border-purple-500/20 shadow-2xl relative overflow-hidden">
         
         {/* Profil Resmi */}
@@ -133,6 +152,89 @@ export default function ProfilePage() {
         </div>
 
         <button onClick={handleLogout} className="w-full py-4 rounded-xl bg-red-500/10 text-red-500 font-bold text-sm hover:bg-red-500 hover:text-white transition uppercase tracking-widest">Çıkış Yap</button>
+      </div>
+
+      {/* ============ AKTİVİTE BÖLÜMÜ ============ */}
+      <div className="w-full max-w-4xl mt-10">
+
+        {/* İSTATİSTİKLER */}
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="bg-[#121212] rounded-2xl border border-gray-800 p-5 text-center">
+            <p className="text-3xl font-black text-white">{comments.length}</p>
+            <p className="text-xs text-gray-500 uppercase tracking-wider mt-1">💬 Toplam Yorum</p>
+          </div>
+          <div className="bg-[#121212] rounded-2xl border border-gray-800 p-5 text-center">
+            <p className="text-3xl font-black text-white">{favorites.length}</p>
+            <p className="text-xs text-gray-500 uppercase tracking-wider mt-1">❤️ Favori Seri</p>
+          </div>
+        </div>
+
+        {/* SEKMELER */}
+        <div className="flex gap-2 mb-6 border-b border-gray-800">
+          <button
+            onClick={() => setTab("yorumlar")}
+            className={`px-5 py-3 text-sm font-bold uppercase tracking-wider transition border-b-2 ${tab === "yorumlar" ? "text-white border-purple-500" : "text-gray-500 border-transparent hover:text-gray-300"}`}
+          >
+            Yorumlarım ({comments.length})
+          </button>
+          <button
+            onClick={() => setTab("favoriler")}
+            className={`px-5 py-3 text-sm font-bold uppercase tracking-wider transition border-b-2 ${tab === "favoriler" ? "text-white border-purple-500" : "text-gray-500 border-transparent hover:text-gray-300"}`}
+          >
+            Favorilerim ({favorites.length})
+          </button>
+        </div>
+
+        {/* YORUMLARIM */}
+        {tab === "yorumlar" && (
+          <div className="space-y-4">
+            {comments.length === 0 ? (
+              <p className="text-gray-600 text-sm italic">Henüz yorum yapmadın.</p>
+            ) : (
+              comments.map((c) => (
+                <div key={c.id} className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-800/50">
+                  <div className="flex items-center gap-2 mb-2 text-sm flex-wrap">
+                    {c.link ? (
+                      <Link href={c.link} className="text-blue-400 font-bold hover:underline">
+                        {c.seri_title} — {c.bolum_title}
+                      </Link>
+                    ) : (
+                      <span className="text-gray-500 font-bold">{c.seri_title || "Bilinmeyen bölüm"}</span>
+                    )}
+                    {c.parent_id && <span className="text-xs text-gray-600 bg-gray-800 px-2 py-0.5 rounded-full">↩ yanıt</span>}
+                    <span className="text-gray-600 text-xs ml-auto">{new Date(c.created_at).toLocaleDateString("tr-TR")}</span>
+                  </div>
+                  <p className="text-gray-300 text-sm leading-relaxed break-words">{c.content}</p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* FAVORİLERİM */}
+        {tab === "favoriler" && (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+            {favorites.length === 0 ? (
+              <p className="text-gray-600 text-sm italic col-span-full">Henüz favori serin yok.</p>
+            ) : (
+              favorites.map((f) => (
+                <Link key={`${f.type}-${f.id}`} href={f.slug} className="group">
+                  <div className="relative aspect-[2/3] rounded-lg overflow-hidden border border-gray-800 group-hover:border-purple-500 transition">
+                    <img
+                      src={f.resim ? `${API}/${f.resim}` : "/placeholder.jpg"}
+                      alt={f.baslik}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                    <span className={`absolute top-1.5 left-1.5 text-[10px] font-black px-1.5 py-0.5 rounded text-white ${f.tag === "NOVEL" || f.type === "novel" ? "bg-purple-600" : f.tag === "MANGA" ? "bg-orange-600" : "bg-blue-600"}`}>
+                      {f.tag || (f.type === "webtoon" ? "WEBTOON" : "NOVEL")}
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-gray-300 mt-2 truncate group-hover:text-purple-400 transition">{f.baslik}</p>
+                </Link>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* --- EDİT MODAL --- */}

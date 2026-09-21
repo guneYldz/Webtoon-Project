@@ -1,3 +1,4 @@
+import os
 from sqlalchemy import create_engine, text
 import json
 from datetime import datetime
@@ -7,7 +8,7 @@ def json_serial(obj):
         return obj.isoformat()
     raise TypeError(f"Type {type(obj)} not serializable")
 
-DB_URL = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+DB_URL = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
 
 try:
     engine = create_engine(DB_URL)

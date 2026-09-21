@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import FavoriteButton from "@/components/FavoriteButton"; // ✅ Button import edildi
+import ChapterListPaginated from "@/components/ChapterListPaginated";
+import SeriesSummary from "@/components/SeriesSummary";
 
 export default function WebtoonDetail() {
   const params = useParams();
@@ -31,8 +33,8 @@ export default function WebtoonDetail() {
       });
   }, [id]);
 
-  if (loading) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-white text-lg">Yükleniyor...</div>;
-  if (!webtoon) return <div className="min-h-screen bg-[#121212] flex items-center justify-center text-red-500">Webtoon Bulunamadı 😔</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white text-lg">Yükleniyor...</div>;
+  if (!webtoon) return <div className="min-h-screen flex items-center justify-center text-red-500">Seri bulunamadı 😔</div>;
 
   // 👇 İLK BÖLÜMÜ BULMA MANTIĞI
   // Bölümleri küçükten büyüğe sırala ve ilkini al (Bölüm 1, Bölüm 0 vs.)
@@ -41,7 +43,7 @@ export default function WebtoonDetail() {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#121212] pb-20 font-sans">
+    <div className="min-h-screen pb-20 font-sans">
 
       {/* 1. ÜST KISIM (KAPAK & BİLGİ) */}
       <div className="relative bg-[#1a1a1a] text-white overflow-hidden shadow-2xl border-b border-gray-800">
@@ -52,14 +54,14 @@ export default function WebtoonDetail() {
         ></div>
 
         {/* İçeriği merkeze almak için gradient ekledik */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#161221] via-transparent to-transparent"></div>
 
         <div className="relative container mx-auto max-w-7xl px-4 py-16 flex flex-col md:flex-row gap-10 items-center md:items-start z-10">
           {/* Kapak Resmi */}
           <div className="w-52 md:w-72 flex-shrink-0 rounded-xl overflow-hidden border border-gray-700 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
             <img
               src={`https://kaosmanga.net/api/${webtoon.cover_image}`}
-              alt={webtoon.title}
+              alt={`${webtoon.title} ${String(webtoon.type || "").toUpperCase().includes("MANGA") ? "manga" : "webtoon"} kapağı`}
               className="w-full h-auto object-cover"
             />
           </div>
@@ -69,13 +71,23 @@ export default function WebtoonDetail() {
             <h1 className="text-4xl md:text-6xl font-black mb-4 drop-shadow-lg tracking-tight text-white">{webtoon.title}</h1>
 
             <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-6">
-              <span className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1 rounded text-sm font-bold">Webtoon</span>
-              <span className={`px-3 py-1 rounded text-sm font-bold border ${webtoon.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
+              <span className={`px-3 py-1 rounded-full text-sm font-bold border ${String(webtoon.type || "").toUpperCase() === "MANGA" ? "bg-orange-600/20 text-orange-400 border-orange-600/50" : "bg-blue-600/20 text-blue-400 border-blue-600/50"}`}>
+                {String(webtoon.type || "").toUpperCase() === "MANGA" ? "Manga" : "Webtoon"}
+              </span>
+              <span className={`px-3 py-1 rounded-full text-sm font-bold border ${webtoon.status === 'ongoing' ? 'bg-green-500/10 text-green-400 border-green-500/50' : 'bg-red-500/10 text-red-400 border-red-500/50'}`}>
                 {webtoon.status === 'ongoing' ? 'Devam Ediyor' : 'Tamamlandı'}
               </span>
-              <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-3 py-1 rounded text-sm flex items-center gap-2">
+              <span className="bg-gray-800/50 text-gray-300 border border-gray-700 px-3 py-1 rounded-full text-sm flex items-center gap-2">
                 👁️ {(webtoon.view_count || 0).toLocaleString()}
               </span>
+              {(webtoon.categories || []).map((cat) => (
+                <span
+                  key={cat.id || cat.name}
+                  className="bg-orange-500/10 text-orange-300 border border-orange-500/40 px-3 py-1 rounded-full text-sm font-bold"
+                >
+                  {cat.name}
+                </span>
+              ))}
             </div>
 
             {/* 👇 BUTONLAR ALANI (EKLENDİ) */}
@@ -85,7 +97,7 @@ export default function WebtoonDetail() {
                 <Link
                   href={`/webtoon/${id}/bolum/${firstEpisode.id}`}
                   className="px-8 py-3 rounded-full bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all flex items-center gap-2"
-                  title={`${webtoon.title} Türkçe Oku`}
+                  title={`${webtoon.title} Türkçe ${String(webtoon.type || "").toUpperCase().includes("MANGA") ? "Manga" : "Webtoon"} Oku`}
                 >
                   📖 Türkçe Oku
                 </Link>
@@ -99,9 +111,7 @@ export default function WebtoonDetail() {
               />
             </div>
 
-            <p className="text-gray-300 text-lg leading-relaxed max-w-4xl mb-6 drop-shadow-md">
-              {webtoon.summary}
-            </p>
+            <SeriesSummary text={webtoon.summary} boxed />
           </div>
         </div>
       </div>
@@ -118,43 +128,13 @@ export default function WebtoonDetail() {
           </span>
         </h3>
 
-        <div className="flex flex-col gap-3">
-          {webtoon.episodes && webtoon.episodes.length > 0 ? (
-            // Veritabanındaki bölümleri listele (Ters sıralı: En yeni en üstte)
-            [...webtoon.episodes].sort((a, b) => b.episode_number - a.episode_number).map((ep) => (
-              <Link
-                key={ep.id}
-                href={`/webtoon/${id}/bolum/${ep.id}`}
-                title={`${ep.title || `Bölüm ${ep.episode_number}`} Oku`}
-                className="bg-[#1e1e1e] p-4 rounded-xl border border-gray-800 hover:border-blue-500/50 hover:bg-[#252525] transition flex items-center justify-between group shadow-sm"
-              >
-                <div className="flex items-center gap-5">
-                  <div className="w-14 h-14 bg-[#121212] rounded-lg border border-gray-800 flex items-center justify-center text-gray-400 font-bold text-lg group-hover:text-blue-500 group-hover:border-blue-500/30 transition">
-                    #{ep.episode_number}
-                  </div>
-
-                  <div>
-                    <h4 className="font-bold text-gray-200 text-lg group-hover:text-blue-400 transition">
-                      {ep.title}
-                    </h4>
-                    <span className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                      📅 {new Date(ep.created_at).toLocaleDateString("tr-TR")}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-gray-500 group-hover:text-blue-500 font-medium text-sm flex items-center gap-2 transition px-4 py-2 rounded bg-[#121212] border border-gray-800 group-hover:border-blue-500/30">
-                  Oku <span className="text-lg leading-none">→</span>
-                </div>
-              </Link>
-            ))
-          ) : (
-            <div className="text-center py-20 bg-[#1e1e1e] rounded-xl border border-dashed border-gray-800 text-gray-500">
-              <span className="text-4xl block mb-2">🕸️</span>
-              Henüz hiç bölüm yüklenmemiş.
-            </div>
-          )}
-        </div>
+        <ChapterListPaginated
+          items={webtoon.episodes || []}
+          type="webtoon"
+          basePath={`/webtoon/${id}`}
+          accent="blue"
+          perPage={30}
+        />
       </div>
     </div>
   );

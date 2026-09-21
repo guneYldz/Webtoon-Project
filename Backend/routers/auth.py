@@ -9,8 +9,11 @@ import models
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from typing import Optional
 import os
+from dotenv import load_dotenv
 import shutil
 import uuid
+
+load_dotenv()
 
 router = APIRouter(
     prefix="/auth",
@@ -18,12 +21,15 @@ router = APIRouter(
 )
 
 # --- AYARLAR ---
-SECRET_KEY = "cok_gizli_ve_uzun_bir_sifre_buraya_yazilir"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment değişkeni bulunamadı!")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000 # Süreyi biraz uzattım rahat test et diye
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/giris-yap")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="auth/giris-yap", auto_error=False)
 
 # --- YARDIMCI FONKSIYONLAR ---
 def sifreyi_hashle(password: str):
@@ -79,6 +85,23 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         
     print(f"✅ AUTH DEBUG: User authenticated: {user.username} (Role: {user.role})")
     return user
+
+def get_optional_user(token: Optional[str] = Depends(oauth2_scheme_optional), db: Session = Depends(get_db)):
+    """Giriş yoksa None döner; tepki sayılarını herkese göstermek için."""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if not email:
+            return None
+    except JWTError:
+        return None
+    user = db.query(models.User).filter(models.User.email == email).first()
+    if not user:
+        user = db.query(models.User).filter(models.User.username == email).first()
+    return user
+
 
 # 2. ADMIN Kontrolü
 def get_current_admin(current_user: models.User = Depends(get_current_user)):
@@ -145,6 +168,26 @@ def giris_yap(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = De
 @router.get("/me")
 def beni_getir(current_user: models.User = Depends(get_current_user)):
     return current_user
+
+# HERKESE AÇIK PROFİL ÖNİZLEME (yorumdaki isme/pp'ye tıklanınca)
+# Dikkat: e-posta gibi özel bilgiler ASLA döndürülmez.
+@router.get("/kullanici/{username}")
+def kullanici_profili(username: str, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+
+    comment_count = db.query(models.Comment).filter(models.Comment.user_id == user.id).count()
+    favorite_count = db.query(models.Favorite).filter(models.Favorite.user_id == user.id).count()
+
+    return {
+        "username": user.username,
+        "profile_image": user.profile_image,
+        "role": user.role,
+        "created_at": str(user.created_at),
+        "comment_count": comment_count,
+        "favorite_count": favorite_count,
+    }
 
 # --- PROFİL VE ŞİFRE İŞLEMLERİ ---
 

@@ -11,10 +11,19 @@ env/
 # Çevre Değişkenleri 
 .env
 .env.local
+.env.*
+!.env.example
+
+# Yedek / editör kalıntıları (şifre içerebilir)
+*.save
+*.bak
 
 # Veritabanı Dosyaları 
 *.db
 *.sqlite3
+
+# Bot onarım checkpoint'leri (sunucuda kalır)
+Backend/bot/onar_checkpoint*.json
 
 # --- REACT & FRONTEND ---
 # Node Modülleri 

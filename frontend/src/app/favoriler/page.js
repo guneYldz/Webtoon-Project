@@ -47,7 +47,7 @@ export default function FavoritesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#121212] py-20 px-4 md:px-8 font-sans">
+    <div className="min-h-screen py-20 px-4 md:px-8 font-sans">
       <div className="container mx-auto max-w-7xl">
 
         {/* ÜST BAŞLIK ALANI */}
@@ -107,7 +107,7 @@ export default function FavoritesPage() {
             <div className="text-7xl mb-6 grayscale opacity-30 animate-bounce">💔</div>
             <h2 className="text-2xl text-white font-bold mb-3">Henüz Favorin Yok</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">
-              Beğendiğin Webtoon veya Novelleri favorilerine ekleyerek kütüphaneni oluşturmaya başla.
+              Beğendiğin webtoon, manga veya novelleri favorilerine ekleyerek kütüphaneni oluşturmaya başla.
             </p>
             <Link
               href="/"
