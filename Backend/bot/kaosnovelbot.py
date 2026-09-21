@@ -370,9 +370,13 @@ TRANSLATION_REFUSAL_MARKERS = (
     "doğrudan türkçe çevirisini",
     "doğrudan çevirmem mümkün",
     "birebir çevirisini",
+    "birebir çeviri yerine",
     "birebir çeviremesem",
     "birebir çeviremem",
     "birebir çevirmek yerine",
+    "sohbet etmeyi sürdürebiliriz",
+    "metnin genel kurgusu",
+    "özetini dinlemek ister misiniz",
     "bölümün genel özeti",
     "bölümün genel bir özeti",
     "genel bir özetini",
@@ -471,6 +475,18 @@ def classify_tr_content(text):
     if not text:
         return "ok"
     if is_translation_refusal(text):
+        return "refusal"
+    # Sohbet cümlesi sonda değil de ortadaysa özet+sohbet karışığıdır → baştan çevir.
+    stripped = (text or "").rstrip()
+    mid = re.search(
+        r"(?:bir sonraki bölümün|metnin bir sonraki|bu hikâyenin bir sonraki|bu hikayenin bir sonraki)"
+        r".{0,140}ister misiniz"
+        r"|"
+        r"özet(?:ini|ine|e)?.{0,80}ister misiniz",
+        stripped,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if mid and (len(stripped) - mid.end()) > 40:
         return "refusal"
     _, had_footer = strip_gemini_chat_footer(text)
     return "footer" if had_footer else "ok"
@@ -749,7 +765,7 @@ YAPAMAYACAKLARIN:
 # ve tamamını yeniden çevirip günceller. Sağlam bölümlere DOKUNMAZ.
 # ==========================================
 ONARIM_CHECKPOINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint.json")
-ONARIM_SURUM = 4         # Telif taraması dosyasında artırınca --onar --telif baştan tarar
+ONARIM_SURUM = 5         # Telif taraması dosyasında artırınca --onar --telif baştan tarar
 ONARIM_EN_MIN = 8000     # İngilizce kaynak bundan kısaysa kırpma hatasından etkilenmemiştir
 ONARIM_ORAN_ESIK = 0.80  # TR/EN karakter oranı bunun altındaysa şüpheli (tam çeviri ~%85-110 olur)
 ONARIM_TR_SUPHE_MAX = 9200  # Kırpık çeviri en fazla ~8000×1.15 karakter olabilir.
