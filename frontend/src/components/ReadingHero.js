@@ -6,87 +6,81 @@ export default function ReadingHero({
     title,
     seriesTitle,
     coverImage,
-    author,
     viewCount,
     commentCount,
     date,
     slug,
     type = "webtoon"
 }) {
-
     const linkPath = type === "webtoon" ? "webtoon" : "novel";
+    const listLabel = type === "webtoon" ? "Webtoonlar" : "Romanlar";
 
-    // 👇 RESİM URL KONTROLÜ (DÜZELTİLEN KISIM)
-    // Eğer resim linki 'http' ile başlıyorsa (Backend tam link gönderdiyse) olduğu gibi al.
-    // Yoksa başına API adresini ekle.
-    const finalImage = coverImage?.startsWith("http")
-        ? coverImage
-        : `${API}/${coverImage}`;
+    const finalImage = !coverImage
+        ? null
+        : coverImage.startsWith("http")
+            ? coverImage
+            : `${API}/${coverImage}`;
 
     return (
-        <div className="relative w-full py-12 md:py-20 overflow-hidden bg-[#121212]" style={{ minHeight: '500px' }}>
+        <div className="relative w-full overflow-hidden bg-[#121212] mb-6">
+            {finalImage && (
+                <div
+                    className="absolute inset-0 bg-cover bg-center opacity-40 blur-[50px] scale-110"
+                    style={{ backgroundImage: `url(${finalImage})` }}
+                />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/70 to-[#121212]/20" />
 
-            {/* Arkadaki ışık efekti */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-blue-900/10 blur-[120px] rounded-full pointer-events-none"></div>
+            <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6 py-10 md:py-14">
+                <nav className="text-sm text-gray-400 font-bold uppercase tracking-widest flex gap-2 items-center justify-center flex-wrap">
+                    <Link href="/" className="hover:text-white transition">Anasayfa</Link>
+                    <span className="text-gray-600">/</span>
+                    <Link href="/seriler" className="hover:text-white transition">{listLabel}</Link>
+                    <span className="text-gray-600">/</span>
+                    <Link href={`/${linkPath}/${slug}`} className="hover:text-blue-400 transition">
+                        {seriesTitle}
+                    </Link>
+                    <span className="text-gray-600">/</span>
+                    <span className="text-blue-500">{title}</span>
+                </nav>
 
-            <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6" style={{ minHeight: '400px' }}>
-
-                {/* Navigasyon - DARK MODE İÇİN DÜZELTİLDİ */}
-                <div className="w-full bg-[#121212] py-2 px-4">
-                    <nav className="text-sm md:text-sm text-gray-500 font-bold uppercase tracking-widest flex gap-2 items-center justify-center">
-                        <Link href="/" className="hover:text-white transition">Anasayfa</Link>
-                        <span>/</span>
-                        <Link href={`/${linkPath}/${slug}`} className="hover:text-blue-400 transition text-gray-400">
-                            {seriesTitle}
-                        </Link>
-                        <span>/</span>
-                        <span className="text-blue-500">{title}</span>
-                    </nav>
-                </div>
-
-                {/* Kapak Resmi */}
-                {coverImage && (
-                    <div className="relative group">
-                        <div className="absolute -inset-4 bg-blue-600/10 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition duration-700" style={{ willChange: 'opacity' }}></div>
-                        <div className="relative w-32 md:w-48 aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border border-gray-700 group-hover:border-gray-500 transition-colors bg-gray-800" style={{ minHeight: '192px' }}>
-                            <img
-                                src={finalImage}
-                                alt={seriesTitle}
-                                width="200"
-                                height="300"
-                                loading="eager"
-                                className="w-full h-full object-cover"
-                                style={{ maxWidth: '100%', height: 'auto' }}
-                            />
-                        </div>
+                {finalImage && (
+                    <div className="relative w-32 md:w-48 aspect-[2/3] rounded-lg overflow-hidden shadow-2xl border border-white/10 bg-gray-800">
+                        <img
+                            src={finalImage}
+                            alt={seriesTitle}
+                            width="192"
+                            height="288"
+                            loading="eager"
+                            className="w-full h-full object-cover"
+                        />
                     </div>
                 )}
 
-                {/* Başlıklar */}
-                <div className="flex flex-col gap-2 mt-2">
-                    <h2 className="text-lg md:text-xl font-bold text-gray-500 tracking-tight">
+                <div className="flex flex-col gap-2">
+                    <h2 className="text-lg md:text-xl font-bold text-gray-400 tracking-tight">
                         {seriesTitle}
                     </h2>
                     <h1 className="text-3xl md:text-5xl font-black text-white drop-shadow-2xl tracking-tight">
-                        {title} <span className="text-gray-600 font-light">OKU</span>
+                        {title} <span className="text-gray-500 font-light">OKU</span>
                     </h1>
                 </div>
 
-                {/* İstatistikler */}
-                <div className="flex items-center justify-center gap-6 text-sm md:text-sm text-gray-400 font-mono bg-[#1a1a1a] px-6 py-2 rounded-full border border-gray-800 shadow-lg mt-2">
+                <div className="flex items-center justify-center gap-6 text-sm text-gray-400 font-mono bg-[#1a1a1a]/80 px-6 py-2 rounded-full border border-gray-800 shadow-lg">
                     {date && (
-                        <span className="flex items-center gap-2 hover:text-white transition">
-                            📅 {new Date(date).toLocaleDateString('tr-TR')}
+                        <span className="flex items-center gap-2">
+                            📅 {new Date(date).toLocaleDateString("tr-TR")}
                         </span>
                     )}
-                    <span className="flex items-center gap-2 hover:text-white transition">
+                    <span className="flex items-center gap-2">
                         👁️ {viewCount || 0}
                     </span>
-                    <span className="flex items-center gap-2 hover:text-white transition">
-                        💬 {commentCount || 0}
-                    </span>
+                    {commentCount != null && (
+                        <span className="flex items-center gap-2">
+                            💬 {commentCount}
+                        </span>
+                    )}
                 </div>
-
             </div>
         </div>
     );

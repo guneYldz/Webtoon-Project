@@ -4,13 +4,12 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation"; // useParams'ı props olarak alacağız
 import CommentSection from "@/components/CommentSection";
 import Link from "next/link";
-import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
+import { Crimson_Pro, Lato } from "next/font/google";
 import { API } from "@/api";
-import Breadcrumbs from "@/components/Breadcrumbs";
+import ReadingHero from "@/components/ReadingHero";
 import RecommendedSeries from "@/components/RecommendedSeries";
 
 const crimson = Crimson_Pro({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
-const cinzel = Cinzel({ subsets: ["latin"], weight: ["700", "900"], display: "swap" });
 const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
 
 // Props olarak slug ve chapterNumber'ı yukarıdan alıyoruz
@@ -19,6 +18,7 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
 
     const [chapter, setChapter] = useState(null);
     const [allChapters, setAllChapters] = useState([]); // Tüm bölümleri tutacak state
+    const [seriesCover, setSeriesCover] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showNavbar, setShowNavbar] = useState(true);
     const lastScrollY = useRef(0);
@@ -63,6 +63,9 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
                     const novelRes = await fetch(`${API}/novels/${slug}`);
                     if (novelRes.ok) {
                         const novelData = await novelRes.json();
+                        if (novelData.cover_image) {
+                            setSeriesCover(novelData.cover_image);
+                        }
                         if (novelData.chapters) {
                             // Bölümleri numarasına göre sırala (Büyükten küçüğe veya Küçükten büyüğe - Genelde okuma sırası küçükten büyüğe ama listede bulmak için)
                             // Dropdown için genelde Küçükten Büyüğe (1, 2, 3...) daha mantıklıdır ama en yeniyi görmek için tersi de olabilir. 
@@ -110,13 +113,6 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
         });
     };
 
-    const formatDate = (dateString) => {
-        if (!dateString) return "Tarih Yok";
-        try {
-            return new Date(dateString).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-        } catch (e) { return "Tarih Hatalı"; }
-    };
-
     if (loading) return (
         <div className="min-h-screen bg-[#121212] font-sans pb-40 overflow-x-hidden">
             {/* Loading Header Preservation */}
@@ -140,28 +136,15 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
 
     return (
         <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40 overflow-x-hidden`}>
-            <Breadcrumbs items={[
-                { label: "Anasayfa", href: "/" },
-                { label: "Romanlar", href: "/seriler" },
-                { label: chapter.novel_title, href: `/novel/${slug}` },
-                { label: `Bölüm ${chapter.chapter_number}`, href: null }
-            ]} />
-
-            <header className="max-w-4xl mx-auto px-4 pt-6 pb-2 text-center">
-                <Link href={`/novel/${slug}`} className="text-sm text-gray-400 hover:text-purple-400 transition">
-                    {chapter.novel_title || "Roman Serisi"}
-                </Link>
-                <h1 className={`${cinzel.className} text-2xl md:text-3xl font-black text-white leading-tight mt-2 mb-3`}>
-                    {chapter.title}
-                </h1>
-                <div className="flex flex-wrap items-center justify-center gap-3 text-gray-400 text-sm font-medium">
-                    <span>Bölüm {chapter.chapter_number}</span>
-                    <span className="text-gray-700">/</span>
-                    <span>📅 {formatDate(chapter.created_at)}</span>
-                    <span className="text-gray-700">/</span>
-                    <span>👁️ {chapter.view_count || 0}</span>
-                </div>
-            </header>
+            <ReadingHero
+                title={chapter.title || `Bölüm ${chapter.chapter_number}`}
+                seriesTitle={chapter.novel_title}
+                coverImage={chapter.novel_cover || seriesCover}
+                viewCount={chapter.view_count}
+                date={chapter.created_at}
+                slug={slug}
+                type="novel"
+            />
 
             {/* 2. OKUMA ALANI */}
             <main className="container mx-auto max-w-4xl px-4 md:px-8 relative z-10">
