@@ -13,13 +13,13 @@ const crimson = Crimson_Pro({ subsets: ["latin"], weight: ["400", "600"], displa
 const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
 
 // Props olarak slug ve chapterNumber'ı yukarıdan alıyoruz
-export default function NovelReadingClient({ slug, chapterNumber }) {
+export default function NovelReadingClient({ slug, chapterNumber, initialChapter }) {
     const router = useRouter();
 
-    const [chapter, setChapter] = useState(null);
+    const [chapter, setChapter] = useState(initialChapter || null);
     const [allChapters, setAllChapters] = useState([]); // Tüm bölümleri tutacak state
-    const [seriesCover, setSeriesCover] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [seriesCover, setSeriesCover] = useState(initialChapter?.novel_cover || null);
+    const [loading, setLoading] = useState(!initialChapter);
     const [showNavbar, setShowNavbar] = useState(true);
     const lastScrollY = useRef(0);
 
@@ -43,17 +43,19 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
 
     const loadChapter = async () => {
         try {
-            setLoading(true);
+            if (!initialChapter) setLoading(true);
             // Client tarafında fetch (Cookie ve Sayaç için önemli)
             const res = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`, {
                 cache: "no-store",
                 credentials: "include"
             });
 
-            if (!res.ok) throw new Error("Bölüm yüklenemedi");
-
-            const data = await res.json();
-            setChapter(data);
+            if (!res.ok) {
+                if (!initialChapter) throw new Error("Bölüm yüklenemedi");
+            } else {
+                const data = await res.json();
+                setChapter(data);
+            }
 
             // --- EK: TÜM BÖLÜMLERİ ÇEK (Dropdown İçin) ---
             // Novel ID veya Slug üzerinden ana veriyi çekip bölümleri alıyoruz.

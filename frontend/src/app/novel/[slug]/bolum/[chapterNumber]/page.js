@@ -63,7 +63,12 @@ export default async function Page({ params }) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       )}
-      <NovelReadingClient slug={slug} chapterNumber={chapterNumber} />
+      <NovelReadingClient
+        key={`${slug}-${chapterNumber}`}
+        slug={slug}
+        chapterNumber={chapterNumber}
+        initialChapter={chapter}
+      />
     </>
   );
 }

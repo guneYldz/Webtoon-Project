@@ -25,11 +25,11 @@ export default function ReadingHero({
         <div className="relative w-full overflow-hidden bg-[#121212] mb-6">
             {finalImage && (
                 <div
-                    className="absolute inset-0 bg-cover bg-center opacity-40 blur-[50px] scale-110"
+                    className="absolute inset-0 bg-cover bg-center opacity-50 blur-3xl scale-125"
                     style={{ backgroundImage: `url(${finalImage})` }}
                 />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/70 to-[#121212]/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/45 to-transparent" />
 
             <div className="relative container mx-auto px-4 z-10 flex flex-col items-center text-center gap-6 py-10 md:py-14">
                 <nav className="text-sm text-gray-400 font-bold uppercase tracking-widest flex gap-2 items-center justify-center flex-wrap">
