@@ -295,7 +295,10 @@ def call_gemini(prompt_text, label=""):
     Başarılıysa metin döndürür, tüm denemeler biterse None döndürür.
     """
     global client, _current_model_index
-    max_cycles = 3
+    # --onar tmux'ta kota bitince saatlerce bekleyebilsin; canlı bot kısa denesin.
+    onarim = "--onar" in sys.argv
+    max_cycles = 36 if onarim else 3
+    kota_bekle = 180 if onarim else 65
     for cycle in range(max_cycles):
         for _ in range(len(GOOGLE_API_KEYS)):
             # Ölü olduğu bilinen key'i deneme, direkt sonrakine geç
@@ -342,8 +345,11 @@ def call_gemini(prompt_text, label=""):
         if len(_dead_keys) >= len(GOOGLE_API_KEYS):
             print("❌ TÜM KEY'LER ÖLÜ (403/geçersiz)! Yeni key gerekiyor.")
             return None
-        print(f"⏳ Kullanılabilir key'ler rate limit'e çarptı. 65sn bekleniyor... (Döngü {cycle+1}/{max_cycles})")
-        time.sleep(65)
+        print(
+            f"⏳ Kullanılabilir key'ler rate limit'e çarptı. {kota_bekle}sn bekleniyor... "
+            f"(Döngü {cycle + 1}/{max_cycles})"
+        )
+        time.sleep(kota_bekle)
     print("❌ Tüm API denemeleri başarısız.")
     return None
 
@@ -921,19 +927,32 @@ def repair_mode(kesin=False, sadece_telif=False):
                         print(f"   ⏭️  Bölüm {num}: kaynak alınamadı, atlanıyor.")
                         stats["kaynak_yok"] += 1
                         continue
-                    status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
-                    if status == "SUCCESS":
-                        cp_novel[key] = "ok"
-                        save_onarim_checkpoint(checkpoint, checkpoint_file)
-                        stats["onarildi"] += 1
-                        consecutive_errors = 0
-                        time.sleep(5)
-                    else:
+                    status = None
+                    while status != "SUCCESS":
+                        status = translate_and_upload(
+                            token, novel, num, eng_title, eng_text, guncelle=True
+                        )
+                        if status == "SUCCESS":
+                            cp_novel[key] = "ok"
+                            save_onarim_checkpoint(checkpoint, checkpoint_file)
+                            stats["onarildi"] += 1
+                            consecutive_errors = 0
+                            time.sleep(5)
+                            break
+                        if sadece_telif:
+                            print(
+                                f"   ⏳ Bölüm {num} çevrilemedi (muhtemel kota). "
+                                "10dk beklenip aynı bölüm tekrar denenecek. (Ctrl+C ile durdur)"
+                            )
+                            time.sleep(600)
+                            continue
                         stats["hata"] += 1
                         consecutive_errors += 1
                         if consecutive_errors >= 3:
                             print("   🛑 Art arda 3 hata — bu roman atlanıyor (checkpoint sayesinde sonraki çalıştırmada devam eder).")
                             break
+                    if status != "SUCCESS" and not sadece_telif and consecutive_errors >= 3:
+                        break
                     continue
 
                 if kind == "footer":
