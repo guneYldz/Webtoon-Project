@@ -176,7 +176,7 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
     };
 
     if (loading) return (
-        <div className="min-h-screen bg-[#121212] font-sans pb-40 overflow-x-hidden">
+        <div className="min-h-screen font-sans pb-40 overflow-x-hidden">
             {/* Loading Header Preservation */}
             <div className="relative bg-[#1a1a1a] shadow-2xl border-b border-gray-800 mb-12 h-[400px] flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
@@ -197,7 +197,7 @@ export default function NovelReadingClient({ slug, chapterNumber }) {
     if (!chapter) return <div className="min-h-screen bg-[#121212] text-white flex justify-center items-center">Bölüm Bulunamadı</div>;
 
     return (
-        <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40 overflow-x-hidden`}>
+        <div className={`min-h-screen font-sans text-gray-200 pb-40 overflow-x-hidden`}>
             {/* 1. ÜST KAPAK ALANI */}
             <div className="relative bg-[#1a1a1a] text-white shadow-2xl border-b border-gray-800 mb-12">
                 <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110" style={{ backgroundImage: chapter.novel_cover ? `url(${API}/${chapter.novel_cover})` : 'none', backgroundColor: '#2d1b4e' }}></div>
