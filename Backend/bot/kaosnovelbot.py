@@ -7,6 +7,7 @@ import sys
 import json
 import itertools
 import html
+from datetime import datetime
 from dotenv import load_dotenv
 import cloudscraper
 import re  # Bölüm başlığı regex için
@@ -53,6 +54,170 @@ BOT_PASSWORD = os.getenv("BOT_PASSWORD")
 if not BOT_USERNAME or not BOT_PASSWORD:
     raise RuntimeError("BOT_USERNAME ve BOT_PASSWORD .env içinde olmalı (repo'ya yazılmaz)")
 BEKLEME_SURESI = 15
+
+
+# ==========================================
+# 🌍 ÇEVİRİ API AYARLARI (DeepL + DeepSeek)
+# ==========================================
+
+# --- DeepL Free ---
+DEEPL_API_KEY    = os.getenv("DEEPL_API_KEY", "")        # api-free.deepl.com
+DEEPL_FREE_LIMIT = 490_000   # 500K/ay — 10K tampon bırak
+DEEPL_USAGE_FILE = os.path.join(_BOT_DIR, "deepl_usage.json")
+
+# --- DeepSeek API (fallback) ---
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")     # platform.deepseek.com
+DEEPSEEK_MODEL   = "deepseek-chat"                       # DeepSeek-V3
+
+
+def _load_deepl_usage() -> dict:
+    """Bu ayki DeepL karakter kullanımını yükle. Ay değişince sıfırla."""
+    now_key = datetime.now().strftime("%Y-%m")
+    try:
+        with open(DEEPL_USAGE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("month") == now_key:
+            return data
+    except Exception:
+        pass
+    return {"month": now_key, "chars": 0}
+
+
+def _save_deepl_usage(usage: dict):
+    try:
+        with open(DEEPL_USAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(usage, f, ensure_ascii=False, indent=1)
+    except Exception as e:
+        print(f"   ⚠️ DeepL kullanım kaydedilemedi: {e}")
+
+
+def translate_with_deepl(texts: list) -> list:
+    """
+    DeepL Free API ile metin listesini EN→TR çevir.
+    Aylık limit aşıldıysa None döndür.
+    """
+    if not DEEPL_API_KEY:
+        return None
+
+    usage = _load_deepl_usage()
+    total_chars = sum(len(t) for t in texts)
+
+    if usage["chars"] + total_chars > DEEPL_FREE_LIMIT:
+        print(f"   ⚠️ DeepL aylık limit doldu "
+              f"({usage['chars']:,}/{DEEPL_FREE_LIMIT:,} karakter). DeepSeek'e geçiliyor...")
+        return None
+
+    try:
+        resp = requests.post(
+            "https://api-free.deepl.com/v2/translate",
+            headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
+            json={
+                "text":               texts,
+                "source_lang":        "EN",
+                "target_lang":        "TR",
+                "split_sentences":    "nonewlines",
+                "preserve_formatting": True,
+            },
+            timeout=30,
+        )
+        if resp.status_code == 456:
+            print("   ⚠️ DeepL kota limiti aşıldı (HTTP 456). DeepSeek'e geçiliyor...")
+            return None
+        resp.raise_for_status()
+        results = [t["text"] for t in resp.json()["translations"]]
+
+        usage["chars"] += total_chars
+        _save_deepl_usage(usage)
+        print(f"   🌍 DeepL çevirdi "
+              f"({total_chars:,} karakter | aylık toplam: {usage['chars']:,}/{DEEPL_FREE_LIMIT:,})")
+        return results
+
+    except Exception as e:
+        print(f"   ❌ DeepL hatası: {e} — DeepSeek'e geçiliyor...")
+        return None
+
+
+def translate_with_deepseek(chunks: list, config: str) -> list:
+    """
+    DeepSeek API (OpenAI uyumlu) ile metin parçalarını Türkçeye çevir.
+    """
+    if not DEEPSEEK_API_KEY:
+        print("   ❌ DEEPSEEK_API_KEY tanımlı değil!")
+        return None
+
+    system_prompt = (
+        "Sen profesyonel bir roman çevirmenisin. Kullanıcının verdiği İngilizce roman metnini "
+        "Türkçeye çevir. Sadece çevrilmiş metni yaz, hiçbir açıklama veya AI giriş cümlesi EKLEME.\n\n"
+        f"SERİYE ÖZEL TALİMATLAR:\n{config}\n\n"
+        "ZORUNLU KURALLAR:\n"
+        "1. Paragraf düzenini KORU.\n"
+        "2. Metnin TAMAMINI çevir, hiçbir cümleyi ATLAMA.\n"
+        "3. DİYALOG SATIRLARINI (tırnak içindeki konuşmalar) ASLA ATLAMA veya KISALTMA.\n"
+        "4. Verilen metnin SON CÜMLESİNE mutlaka ulaş.\n"
+        "5. \"Elbette\", \"Işte çeviri\" gibi AI giriş cümleleri YAZMA."
+    )
+
+    results = []
+    for i, chunk in enumerate(chunks, 1):
+        for attempt in range(3):
+            try:
+                resp = requests.post(
+                    "https://api.deepseek.com/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                        "Content-Type":  "application/json",
+                    },
+                    json={
+                        "model":       DEEPSEEK_MODEL,
+                        "messages":    [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user",   "content": chunk},
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens":  8192,
+                    },
+                    timeout=120,
+                )
+                if resp.status_code == 429:
+                    wait = int(resp.headers.get("Retry-After", 60))
+                    print(f"   ⏳ DeepSeek rate limit — {wait}sn bekleniyor... (Deneme {attempt+1}/3)")
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                text = resp.json()["choices"][0]["message"]["content"].strip()
+                results.append(text)
+                print(f"   🤖 DeepSeek parça {i}/{len(chunks)} çevirdi ({len(chunk):,} karakter)")
+                time.sleep(1)
+                break
+            except Exception as e:
+                print(f"   ❌ DeepSeek hatası (deneme {attempt+1}/3): {e}")
+                if attempt == 2:
+                    return None
+                time.sleep(10)
+        else:
+            return None
+
+    return results if len(results) == len(chunks) else None
+
+
+def translate_chunks_hybrid(chunks: list, config: str) -> list:
+    """
+    Hibrit çeviri: önce DeepL (tüm chunk’ları tek istekte), dolunca DeepSeek.
+    Her iki API de başarısız olursa None döndürür.
+    """
+    if DEEPL_API_KEY:
+        result = translate_with_deepl(chunks)
+        if result is not None:
+            return result
+
+    if DEEPSEEK_API_KEY:
+        print("   🤖 DeepSeek ile çevriliyor...")
+        result = translate_with_deepseek(chunks, config)
+        if result is not None:
+            return result
+
+    print("   ❌ Ne DeepL ne de DeepSeek kullanılabilir!")
+    return None
 
 
 # SERİYE ÖZEL AYARLAR (Config Yapısı)
@@ -523,21 +688,41 @@ def call_gemini_for_translation(prompt_text, label="", max_refusals=3):
     return None
 
 
-def split_text_into_chunks(text, max_chars=9000):
+CHUNK_MAX_CHARS = 4000  # Gemini için güvenli parça boyutu (9000 karakterde LLM'ler son kısımları yutabiliyor)
+
+def split_text_into_chunks(text, max_chars=CHUNK_MAX_CHARS):
     """
     Metni paragraf sınırlarından bölerek max_chars'ı aşmayan parçalara ayırır.
-    Uzun bölümlerin [:8000] kırpması yüzünden eksik çevrilmesini önler:
-    her parça ayrı çevrilip sonra birleştirilir.
+    Gemini'nin uzun metinlerde son kısımları yutmasını, özetlemesini veya
+    token sınırına takılmasını önlemek için ideal boyut 3500-4500 karakterdir.
     """
+    if not text:
+        return []
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     paragraphs = text.split("\n\n")
     chunks = []
     current = ""
     for p in paragraphs:
-        if current and len(current) + len(p) + 2 > max_chars:
-            chunks.append(current)
-            current = p
+        p = p.strip()
+        if not p:
+            continue
+        if len(p) > max_chars:
+            lines = p.split("\n")
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                if current and len(current) + len(line) + 1 > max_chars:
+                    chunks.append(current)
+                    current = line
+                else:
+                    current = f"{current}\n{line}" if current else line
         else:
-            current = f"{current}\n\n{p}" if current else p
+            if current and len(current) + len(p) + 2 > max_chars:
+                chunks.append(current)
+                current = p
+            else:
+                current = f"{current}\n\n{p}" if current else p
     if current:
         chunks.append(current)
     return chunks
@@ -596,45 +781,73 @@ ROMAN METNİ ÇEVİRİSİ KURALLARI (ZORUNLU):
 7. "Ve...", "Ama..." ile başlayan tek başına duran kısa cümleleri önceki cümleye ekle.
 8. Bire bir sözcük çevirisi YAPMA; anlamı, duyguyu ve romanın akışını Türkçeye taşı.
 9. Her cümle akışkan, doğal, kitap okur gibi hissettirmeli.
+10. DİYALOG SATIRLARINI (tırnak içindeki konuşmalar) ASLA ATLAMA, EKSİK BIRAKMA veya KISALTMA — her diyalog satırı tam ve eksiksiz çevrilmeli.
+11. Verilen metnin SON CÜMLESİNE mutlaka ulaş — orijinal metindeki son cümle çevrilmeden bitirme.
 
 ROMANIN TÜRÜNE ÖZEL TALİMATLAR:
 {config}
 """
 
-    translated_parts = []
-    for i, chunk in enumerate(chunks, 1):
-        if i == 1:
-            translation_prompt = f"""
-Sen usta bir roman çevirmenisin. Tek seferde hem bölüm ismini hem de metni Türkçeye çevir.
+    # ==================================================
+    # 🌍 1. PAŞ: HİBRİT ÇEVİRİ (DeepL → DeepSeek → Gemini son çare)
+    # Gemini burada ÇALIŞMAZ — sadece editör paşında kullanılır
+    # ==================================================
+    print(f"   🌍 Hibrit çeviri başlıyor ({len(eng_text):,} karakter, {len(chunks)} parça)...")
+    translated_parts = translate_chunks_hybrid(chunks, config)
 
-{baslik_talimati}
+    if translated_parts is None:
+        # Son çare: Gemini (telif/eksik çeviri riski var ama en azından bir şeyler üretir)
+        print("   ⚠️ DeepL + DeepSeek başarısız, Gemini son çare olarak deneniyor...")
+        translated_parts = []
+        for i, chunk in enumerate(chunks, 1):
+            if i == 1:
+                translation_prompt = (
+                    "Sen usta bir roman çevirmenisin. Tek seferde hem bölüm ismini hem de metni Türkçeye çevir.\n\n"
+                    f"{baslik_talimati}\n\n{ceviri_kurallari}\n\nÇEVİRİLECEK METİN:\n{chunk}"
+                )
+            else:
+                translation_prompt = (
+                    f"Sen usta bir roman çevirmenisin. Aşağıdaki metin parça {i}/{len(chunks)}'dir. Türkçeye çevir.\n\n"
+                    f"BAŞLIK satırı YAZMA.\n\n{ceviri_kurallari}\n\nÇEVİRİLECEK METİN:\n{chunk}"
+                )
+            parca = call_gemini_for_translation(translation_prompt, label=f"Çeviri {i}/{len(chunks)}")
+            if parca is None:
+                print("❌ Gemini çevirisi de başarısız. Bot 1 saat uyuyor...")
+                time.sleep(3600)
+                return "ERROR"
 
-{ceviri_kurallari}
+            # 🛡️ EKSİK ÇEVİRİ KORUMASI:
+            # Eğer çevrilen parça orijinal chunk'a göre çok kısaysa (sonunu yuttuysa) tekrar dene
+            if len(parca) < len(chunk) * 0.45 and len(chunk) > 400:
+                print(f"      ⚠️ Parça {i}/{len(chunks)} şüpheli derecede kısa ({len(parca)} / {len(chunk)} karakter)! Eksik kısım için tekrar deneniyor...")
+                parca_retry = call_gemini_for_translation(
+                    translation_prompt + "\n\nÖNEMLİ KURAL: Önceki denemede metnin son kısımları eksik kaldı. Lütfen metnin İLK CÜMLESİNDEN SON CÜMLESİNE KADAR HİÇBİR ŞEYİ ATLAMADAN TAMAMINI çevir.",
+                    label=f"Çeviri Tekrar {i}/{len(chunks)}"
+                )
+                if parca_retry and len(parca_retry) > len(parca):
+                    parca = parca_retry
+                    print(f"      ✔ Parça {i} eksik kısmı tamamlanarak yeniden alındı.")
 
-ÇEVİRİLECEK METİN:
-{chunk}
-"""
-        else:
-            translation_prompt = f"""
-Sen usta bir roman çevirmenisin. Aşağıdaki metin, bir roman bölümünün DEVAMIDIR (parça {i}/{len(chunks)}). Türkçeye çevir.
+            translated_parts.append(parca)
+            if len(chunks) > 1:
+                print(f"      ✔ Parça {i}/{len(chunks)} çevrildi.")
 
-BAŞLIK satırı YAZMA — bu sadece metin devamıdır.
-
-{ceviri_kurallari}
-
-ÇEVİRİLECEK METİN:
-{chunk}
-"""
-        parca = call_gemini_for_translation(translation_prompt, label=f"Çeviri {i}/{len(chunks)}")
-        if parca is None:
-            print("❌ Çeviri başarısız. Bot 1 saat uyuyor...")
-            time.sleep(3600)
-            return "ERROR"
-        translated_parts.append(parca)
-        if len(chunks) > 1:
-            print(f"      ✔ Parça {i}/{len(chunks)} çevrildi.")
+    if not translated_parts:
+        print("❌ Hiçbir çeviri sağlanamadı.")
+        return "ERROR"
 
     ceviri_ham = "\n\n".join(translated_parts)
+
+    # DeepL/DeepSeek başlık çevirmez — eng_isim varsa Gemini ile ayrıca çevir
+    if eng_isim and "BAŞLIK:" not in ceviri_ham.upper():
+        baslik_prompt = (
+            f"Şu İngilizce roman bölüm başlığını Türkçeye çevir.\n"
+            f"Sadece şu formatı kullan (tırnak veya noktalama ekleme):\nBAŞLIK: <Türkçe isim>\n\nBaşlık: {eng_isim}"
+        )
+        baslik_tr_raw = call_gemini(baslik_prompt, label="Başlık")
+        if baslik_tr_raw:
+            ceviri_ham = baslik_tr_raw.strip() + "\n\n" + ceviri_ham
+
 
     # ==================================================
     # ÇIKTIYI AYRIŞTIR: BAŞLIK + METİN
@@ -696,6 +909,7 @@ YAPACAKLARIN:
 3. İngilizce cümle yapısından kaynaklanan kelime sırası bozukluklarını düzelt.
 4. Karakterin sesini, tonunu ve duygusunu koru — anlamı asla değiştirme.
 5. Gereksiz tekrarları at, ama yeni cümle veya fikir EKLEME.
+6. Metnin başından sonuna kadar TAMAMINI elden geçir, SON CÜMLEYE mutlaka ulaş.
 
 SERİYE ÖZEL TALIMATLAR (bunu da uygula):
 {config}
@@ -705,6 +919,8 @@ YAPAMAYACAKLARIN:
 - Paragraf SILME veya BİRLEŞTİRME — her paragraf ayrı kalmalı.
 - Metni KISALTMA veya ÖZETLEME — tamamını yeniden yaz.
 - Yorum veya açıklama EKLEME.
+- DİYALOG SATIRLARINI (tırnak içindeki konuşmalar) ASLA ATLATMA, EKSIK BIRAKMA veya KISALTMA — her diyalog tam ve eksiksiz kalmalı.
+- Metnin sonunu veya herhangi bir cümlesini ASLA ATLATMA, YARIM BIRAKMA ya da KESME — tüm satırlar orijinal çeviriyle bire bir örtüşmeli.
 
 ÇEVİRİ METNİ:
 {p_chunk}
@@ -713,6 +929,13 @@ YAPAMAYACAKLARIN:
         if parca_polish and is_translation_refusal(parca_polish):
             print(f"   ⚠️ Editör {i}/{len(polish_chunks)}: telif/özet yanıtı, ham çeviri parçası korunuyor.")
             parca_polish = None
+
+        # 🛡️ EDİTÖR EKSİK BIRAKMA KORUMASI:
+        # Eğer editör metni şüpheli derecede kısaltmışsa (sonunu yazmadıysa), ham çeviriyi koru
+        if parca_polish and len(parca_polish) < len(p_chunk) * 0.70 and len(p_chunk) > 300:
+            print(f"   ⚠️ Editör {i}/{len(polish_chunks)} metni eksik bıraktı/kırptı ({len(parca_polish)} < {len(p_chunk)} karakter). Ham çeviri parçası korunuyor.")
+            parca_polish = None
+
         if parca_polish:
             # Giriş cümlesi varsa temizle
             for giris in ["İşte", "Elbette", "Düzeltilmiş", "Aşağıda", "Tabii"]:
@@ -771,11 +994,10 @@ YAPAMAYACAKLARIN:
 # ve tamamını yeniden çevirip günceller. Sağlam bölümlere DOKUNMAZ.
 # ==========================================
 ONARIM_CHECKPOINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint.json")
-ONARIM_SURUM = 5         # Telif taraması dosyasında artırınca --onar --telif baştan tarar
-ONARIM_EN_MIN = 8000     # İngilizce kaynak bundan kısaysa kırpma hatasından etkilenmemiştir
-ONARIM_ORAN_ESIK = 0.80  # TR/EN karakter oranı bunun altındaysa şüpheli (tam çeviri ~%85-110 olur)
-ONARIM_TR_SUPHE_MAX = 9200  # Kırpık çeviri en fazla ~8000×1.15 karakter olabilir.
-                            # TR bundan uzunsa bölüm kesin tam çevrilmiştir.
+ONARIM_SURUM = 6         # Sürüm 6: Eksik çevirileri (son kısımları kırpılmış bölümleri) tespit eden oran denetimi
+ONARIM_EN_MIN = 8000     # Eski kırpma hatası eşiği (artık oran denetimi tüm bölümlere uygulanır)
+ONARIM_ORAN_ESIK = 0.75  # TR/EN karakter oranı bunun altındaysa bölüm EKSİK kabul edilir (normal çeviri ~%80-110 olur)
+ONARIM_TR_SUPHE_MAX = 9200  # TR bundan uzunsa bölüm kesin tam çevrilmiştir.
 
 def load_onarim_checkpoint(checkpoint_file, sifirla_surum_farkinda=False):
     """Daha önce doğrulanan bölümleri diskten yükle (bot yarıda kesilirse kaldığı yerden devam eder)."""
@@ -838,12 +1060,16 @@ def update_chapter_content(token, novel, chapter_num, content):
     return False
 
 
-def repair_mode(kesin=False, sadece_telif=False):
+def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
     if sadece_telif:
         checkpoint_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint_telif.json")
         print("🔧 TELİF/ÖZET TARAMA (--onar --telif)")
         print("   Eski onar_checkpoint.json YOK SAYILIR — 'ok' yazılmış bölümler de taranır.")
         print("   İngilizce kaynak ancak özet/telif bulunursa çekilir.")
+    elif eksik_tara:
+        checkpoint_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint_eksik.json")
+        print("🔧 EKSİK ÇEVİRİ TARAMA (--onar --eksik)")
+        print("   Tüm bölümlerin TR/EN uzunluk oranı taranır. Son kısmı veya yarısı eksik kalan bölümler yeniden çevrilir.")
     elif kesin:
         # KESİN MOD: Oran tahminine güvenme. İngilizcesi 8000 karakterden uzun
         # olan (yani kırpma hatasından etkilenmiş OLABİLECEK) her bölümü,
@@ -871,7 +1097,7 @@ def repair_mode(kesin=False, sadece_telif=False):
     ]
     print(f"🎯 Kontrol edilecek roman sayısı: {len(active_novels)}")
 
-    checkpoint = load_onarim_checkpoint(checkpoint_file, sifirla_surum_farkinda=sadece_telif)
+    checkpoint = load_onarim_checkpoint(checkpoint_file, sifirla_surum_farkinda=(sadece_telif or eksik_tara))
     stats = {"saglam": 0, "onarildi": 0, "eklendi": 0, "kaynak_yok": 0, "hata": 0, "footer": 0}
 
     def scrape_source(num):
@@ -975,10 +1201,10 @@ def repair_mode(kesin=False, sadece_telif=False):
                         print(f"   … {num}/{max_ch} tarandı (özet yok)")
                     stats["saglam"] += 1
                     continue
-                if already:
+                if already and not eksik_tara:
                     continue
-                # İlk kez --onar: aşağıda EN uzunluk kontrolü için kaynağı çek
-            elif already:
+                # İlk kez --onar veya --eksik: aşağıda EN uzunluk kontrolü için kaynağı çek
+            elif already and not eksik_tara:
                 continue
             elif sadece_telif:
                 continue
@@ -1010,28 +1236,9 @@ def repair_mode(kesin=False, sadece_telif=False):
                         break
                 continue
 
-            # İngilizce kaynak 8000 karakterden kısaysa kırpma hatası bu bölümü ETKİLEMEMİŞTİR
-            if len(eng_text) <= ONARIM_EN_MIN:
-                print(f"   ✅ Bölüm {num} sağlam (EN {len(eng_text)} ≤ {ONARIM_EN_MIN} karakter, kırpma bu bölümü etkilememiş).")
-                cp_novel[key] = "ok"
-                save_onarim_checkpoint(checkpoint, checkpoint_file)
-                stats["saglam"] += 1
-                continue
+            oran = len(tr_content) / len(eng_text) if len(eng_text) > 0 else 1.0
 
-            # KIRPILMA İMZASI KONTROLÜ:
-            # Eski hata EN'in ilk 8000 karakterini çeviriyordu → kırpık TR her zaman
-            # ~9200 karakterin ALTINDA kalır (8000 × ~1.15 tavan).
-            # TR bundan uzunsa bölüm kesin tamdır.
-            oran = len(tr_content) / len(eng_text)
-            if len(tr_content) >= ONARIM_TR_SUPHE_MAX:
-                print(f"   ✅ Bölüm {num} sağlam (TR {len(tr_content)} ≥ {ONARIM_TR_SUPHE_MAX} karakter — kırpık çeviri bu uzunluğa ulaşamaz).")
-                cp_novel[key] = "ok"
-                save_onarim_checkpoint(checkpoint, checkpoint_file)
-                stats["saglam"] += 1
-                continue
-
-            # Normal mod: orana bakılır (tam çeviri EN'le orantılı büyür, ~%85-110).
-            # Kesin mod: oran tahminine güvenilmez, şüpheli her bölüm yeniden çevrilir.
+            # 1. TR/EN karakter oranı eşiğin üzerindeyse (%75+) bölüm tamdır
             if not kesin and oran >= ONARIM_ORAN_ESIK:
                 print(f"   ✅ Bölüm {num} sağlam (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}).")
                 cp_novel[key] = "ok"
@@ -1039,9 +1246,17 @@ def repair_mode(kesin=False, sadece_telif=False):
                 stats["saglam"] += 1
                 continue
 
+            # 2. TR metni zaten yeterince uzunsa (>= ONARIM_TR_SUPHE_MAX) sağlamdır
+            if not kesin and len(tr_content) >= ONARIM_TR_SUPHE_MAX:
+                print(f"   ✅ Bölüm {num} sağlam (TR {len(tr_content)} ≥ {ONARIM_TR_SUPHE_MAX} karakter).")
+                cp_novel[key] = "ok"
+                save_onarim_checkpoint(checkpoint, checkpoint_file)
+                stats["saglam"] += 1
+                continue
+
             # ── EKSİK/ŞÜPHELİ bölüm → tamamını yeniden çevir, üzerine yaz ──
-            sebep = "şüpheli (kesin mod)" if (kesin and oran >= ONARIM_ORAN_ESIK) else "EKSİK"
-            print(f"   🔧 Bölüm {num} {sebep}! (EN {len(eng_text)} / TR {len(tr_content)} karakter, oran %{oran*100:.0f}) → yeniden çevriliyor...")
+            sebep = "şüpheli (kesin mod)" if (kesin and oran >= ONARIM_ORAN_ESIK) else f"EKSİK (oran %{oran*100:.0f} < %{ONARIM_ORAN_ESIK*100:.0f})"
+            print(f"   🔧 Bölüm {num} {sebep}! (EN {len(eng_text)} / TR {len(tr_content)} karakter) → yeniden çevriliyor...")
             status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
             if status == "SUCCESS":
                 cp_novel[key] = "ok"
@@ -1076,6 +1291,7 @@ if __name__ == "__main__":
         repair_mode(
             kesin=("--kesin" in sys.argv),
             sadece_telif=("--telif" in sys.argv),
+            eksik_tara=("--eksik" in sys.argv or "--yeniden" in sys.argv),
         )
         sys.exit(0)
 
