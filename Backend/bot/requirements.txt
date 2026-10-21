@@ -1,2 +1,23 @@
+# ── Temel ──────────────────────────────────────────────────────────────────
 beautifulsoup4
 requests
+python-dotenv
+python-slugify
+Pillow
+SQLAlchemy
+undetected-chromedriver
+selenium
+cloudscraper
+
+# ── Google AI (Novel botları için) ─────────────────────────────────────────
+google-genai
+
+# ── Manga Çeviri Pipeline ──────────────────────────────────────────────────
+# OCR (GPU destekli — RTX 5070 için CUDA gerekir: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121)
+easyocr
+
+# Görüntü işleme (balon tespiti)
+opencv-python-headless
+
+# DeepSeek / OpenRouter API istemcisi (OpenAI uyumlu)
+openai>=1.0.0
