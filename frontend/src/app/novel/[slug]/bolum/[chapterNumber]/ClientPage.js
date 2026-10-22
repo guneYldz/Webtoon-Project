@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import CommentSection from "@/components/CommentSection";
+import ChapterReactions from "@/components/ChapterReactions";
 import Link from "next/link";
 import Image from "next/image";
 import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
@@ -248,6 +249,7 @@ export default function ClientNovelReadingPage() {
 
             {/* 3. YORUM ALANI */}
             <div className={`mt-32 max-w-3xl mx-auto ${lato.className} border-t border-gray-800 pt-12 px-4`}>
+                <ChapterReactions type="novel" targetId={chapter.id} />
                 <CommentSection
                     type="novel"
                     itemId={chapter.novel_id}

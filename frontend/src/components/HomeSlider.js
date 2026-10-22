@@ -5,9 +5,10 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, Pagination, EffectFade } from 'swiper/modules';
 
 // Swiper CSS dosyalarını import ediyoruz (Zorunlu)
-// import 'swiper/css';
-// import 'swiper/css/pagination';
-// import 'swiper/css/effect-fade'; // Eğer fade efekti istersen bunu kullanacağız
+// CDN yerine paketten: render-bloklayan harici CSS isteğini kaldırır (hız)
+import 'swiper/css';
+import 'swiper/css/pagination';
+import 'swiper/css/effect-fade';
 
 // Senin tasarım bileşenin
 import FeaturedSlider from "./FeaturedSlider";
@@ -56,10 +57,11 @@ export default function HomeSlider({ slides = [] }) {
         }}
         className="w-full h-full"
       >
-        {slides.map((slide) => (
+        {slides.map((slide, index) => (
           <SwiperSlide key={`${slide.typeLabel}-${slide.id}`}>
-            {/* Senin tasarım bileşenin */}
-            <FeaturedSlider webtoon={slide} />
+            {/* Sadece ilk slayt öncelikli: diğerleri LCP ile bant genişliği
+                yarışına girmesin diye tembel yüklenir */}
+            <FeaturedSlider webtoon={slide} isFirst={index === 0} />
           </SwiperSlide>
         ))}
       </Swiper>

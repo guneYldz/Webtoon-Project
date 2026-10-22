@@ -30,7 +30,7 @@ export async function generateMetadata({ params }) {
       title: `Bölüm ${chapter.chapter_number} - ${novelTitle} Oku | Kaos Manga`,
       description: `${novelTitle} serisinin ${chapter.chapter_number}. bölümünü şimdi oku. Özet: ${chapter.content ? chapter.content.substring(0, 150) : ""}...`,
       alternates: {
-        canonical: `https://kaosmanga.com/novel/${slug}/bolum/${chapterNumber}`,
+        canonical: `https://kaosmanga.net/novel/${slug}/bolum/${chapterNumber}`,
       },
       openGraph: {
         title: `Bölüm ${chapter.chapter_number} - ${novelTitle}`,
@@ -75,7 +75,7 @@ export default async function Page({ params }) {
     "isPartOf": {
       "@type": "Book", // Hangi kitaba ait?
       "name": chapter.novel_title,
-      "url": `https://kaosmanga.com/novel/${slug}`
+      "url": `https://kaosmanga.net/novel/${slug}`
     }
   } : null;
 

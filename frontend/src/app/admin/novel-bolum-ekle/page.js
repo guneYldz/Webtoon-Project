@@ -1,26 +1,66 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Editor, EditorProvider, Toolbar, BtnBold, BtnItalic, BtnUnderline, BtnLink, BtnStrikeThrough, BtnNumberedList, BtnBulletList } from "react-simple-wysiwyg";
+import { defaultChapterTitle, formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
 
-export default function NovelBolumEkle() {
-  const router = useRouter();
+function NovelBolumEkle() {
+  const searchParams = useSearchParams();
+  const preselectedId = searchParams.get("novel_id") || "";
+
   const [loading, setLoading] = useState(false);
   const [novels, setNovels] = useState([]);
   const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
 
-  const [selectedNovel, setSelectedNovel] = useState("");
+  const [selectedNovel, setSelectedNovel] = useState(preselectedId);
   const [title, setTitle] = useState("");
   const [chapterNumber, setChapterNumber] = useState("");
   const [content, setContent] = useState("");
 
   useEffect(() => {
-    fetch(`${API}/novels/`)
-      .then((res) => res.json())
-      .then((data) => setNovels(data))
-      .catch((err) => console.error("Romanlar çekilemedi:", err));
+    if (preselectedId) setSelectedNovel(preselectedId);
+  }, [preselectedId]);
+
+  useEffect(() => {
+    const load = async () => {
+      const token =
+        sessionStorage.getItem("access_token") ||
+        sessionStorage.getItem("admin_token") ||
+        sessionStorage.getItem("token");
+      let list = [];
+      try {
+        if (token) {
+          const res = await fetch(`${API}/admin/novel/list`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            list = Array.isArray(data) ? data : data.data || [];
+          }
+        }
+        if (!list.length) {
+          const res = await fetch(`${API}/novels/?limit=1000`);
+          if (res.ok) {
+            const data = await res.json();
+            list = Array.isArray(data) ? data : data.data || [];
+          }
+        }
+      } catch (err) {
+        console.error("Romanlar çekilemedi:", err);
+      }
+      setNovels(list);
+    };
+    load();
   }, [API]);
+
+  const onChapterNumberChange = (value) => {
+    setChapterNumber(value);
+    if (!value) return;
+    if (!title || isAutoChapterTitle(title)) {
+      setTitle(`Bölüm ${formatChapterNumber(value)}`);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,20 +70,21 @@ export default function NovelBolumEkle() {
     }
 
     setLoading(true);
-    const token = sessionStorage.getItem("access_token") ||
+    const token =
+      sessionStorage.getItem("access_token") ||
       sessionStorage.getItem("admin_token") ||
       sessionStorage.getItem("token");
 
     const formData = new FormData();
     formData.append("novel_id", selectedNovel);
     formData.append("chapter_number", chapterNumber);
-    formData.append("title", title);
+    formData.append("title", defaultChapterTitle(title, chapterNumber));
     formData.append("content", content);
 
     try {
       const response = await fetch(`${API}/novels/bolum-ekle`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
@@ -61,16 +102,16 @@ export default function NovelBolumEkle() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center py-10 px-4">
-      <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-4xl border border-gray-700">
+    <div className="bg-gray-900 text-gray-100 rounded-xl py-6 px-4">
+      <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-4xl mx-auto border border-gray-700">
 
         <h1 className="text-3xl font-bold mb-6 text-blue-400 border-b border-gray-700 pb-4 flex justify-between items-center">
-          <span>📖 Roman Bölümü Yükle</span>
+          <span>📖 Novel Bölümü Yükle</span>
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-gray-400 font-medium mb-1">Hangi Roman?</label>
+            <label className="block text-gray-400 font-medium mb-1">Hangi Novel?</label>
             <select
               value={selectedNovel}
               onChange={(e) => setSelectedNovel(e.target.value)}
@@ -85,22 +126,27 @@ export default function NovelBolumEkle() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <input
-              type="number"
-              placeholder="Bölüm No"
-              value={chapterNumber}
-              onChange={(e) => setChapterNumber(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-white outline-none"
-              required
-            />
-            <input
-              type="text"
-              placeholder="Bölüm Başlığı"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-white outline-none"
-              required
-            />
+            <div>
+              <input
+                type="number"
+                step="any"
+                placeholder="Bölüm No"
+                value={chapterNumber}
+                onChange={(e) => onChapterNumberChange(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white outline-none"
+                required
+              />
+            </div>
+            <div>
+              <input
+                type="text"
+                placeholder="Bölüm 1"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white outline-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">Boş bırakırsan otomatik “Bölüm {chapterNumber || "1"}” olur.</p>
+            </div>
           </div>
 
           <div>
@@ -137,5 +183,13 @@ export default function NovelBolumEkle() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function NovelBolumEklePage() {
+  return (
+    <Suspense fallback={<div className="text-gray-500 p-8">Yükleniyor...</div>}>
+      <NovelBolumEkle />
+    </Suspense>
   );
 }

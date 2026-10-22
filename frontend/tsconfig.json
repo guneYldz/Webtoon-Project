@@ -17,6 +17,7 @@
         "isolatedModules": true,
         "jsx": "preserve",
         "incremental": true,
+        "baseUrl": ".",
         "plugins": [
             {
                 "name": "next"
@@ -32,6 +33,8 @@
         "next-env.d.ts",
         "**/*.ts",
         "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
         ".next/types/**/*.ts"
     ],
     "exclude": [

@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image"; // Image import edildi
 import { usePathname, useRouter } from "next/navigation";
 import { API } from "@/api";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
@@ -109,9 +110,13 @@ export default function Navbar() {
     router.push("/login");
   };
 
+  if (pathname?.startsWith("/admin") || pathname === "/login-admin") {
+    return null;
+  }
+
   return (
     <nav
-      className={`bg-[#1a1a1a] border-b border-gray-800 z-[1000] h-20 max-h-20 shadow-md ${isReadingPage ? "relative" : "sticky top-0"
+      className={`bg-[#1a1a1a] border-b border-gray-800 z-[1000] h-24 max-h-24 shadow-md ${isReadingPage ? "relative" : "sticky top-0"
         }`}
     >
       <div className="container mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
@@ -131,15 +136,14 @@ export default function Navbar() {
 
           <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-4 group">
             {/* Logo - Optimized size */}
-            <div className="relative w-12 h-12 sm:w-16 sm:h-16 group-hover:scale-105 transition duration-300">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 group-hover:scale-105 transition duration-300 overflow-hidden rounded-full">
               <Image
                 src="/logo.png"
                 alt="Kaos Manga Logo"
                 fill
-                className="object-contain"
-                sizes="64px"
-                quality={100}
-                priority
+                className="object-cover scale-125"
+                sizes="80px"
+                quality={90}
               />
             </div>
 
@@ -157,19 +161,25 @@ export default function Navbar() {
           <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Ana Sayfa
           </Link>
-          <Link href="/kesfet" title="Webtoon ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Keşfet
           </Link>
-          <Link href="/seriler" title="Tüm Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+          <Link href="/seriler" title="Tüm Webtoon, Manga ve Novel Serileri" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Seriler
           </Link>
           <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
             Yeniler
           </Link>
+          <Link href="/duyurular" title="Duyurular" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
+            Duyurular
+          </Link>
         </div>
 
-        {/* SAĞ: PROFİL ALANI */}
-        <div className="relative">
+        {/* SAĞ: BİLDİRİM + PROFİL ALANI */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          <NotificationBell user={user} />
+
+          <div className="relative">
           {user ? (
             <div>
               <button
@@ -226,10 +236,10 @@ export default function Navbar() {
                   {(user.role === "admin" || user.role === "editor") && (
                     <>
                       <div className="px-4 py-1 text-base font-bold text-gray-500 uppercase tracking-wider mt-1">
-                        Webtoon Yönetimi
+                        Webtoon & Manga
                       </div>
                       <Link href="/admin/webtoon-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
-                        📚 Seri Ekle
+                        📚 Webtoon & Manga Ekle
                       </Link>
                       <Link href="/admin/bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
                         🎬 Bölüm Yükle
@@ -287,6 +297,7 @@ export default function Navbar() {
             </button>
           )}
         </div>
+        </div>
       </div>
 
       {/* MOBİL MENÜ OVERLAY */}
@@ -322,14 +333,17 @@ export default function Navbar() {
             <Link href="/" title="Ana Sayfa" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               🏠 Ana Sayfa
             </Link>
-            <Link href="/kesfet" title="Webtoon ve Novel Keşfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               🔍 Keşfet
             </Link>
-            <Link href="/seriler" title="Tüm Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+            <Link href="/seriler" title="Tüm Webtoon, Manga ve Novel Serileri" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               📚 Seriler
             </Link>
             <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
               ✨ Yeniler
+            </Link>
+            <Link href="/duyurular" title="Duyurular" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
+              📢 Duyurular
             </Link>
           </div>
 

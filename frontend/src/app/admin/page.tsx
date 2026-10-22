@@ -67,7 +67,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 {/* İstatistik Kartları */}
                 <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                    <h3 className="text-gray-500 text-sm font-medium">Toplam Webtoon</h3>
+                    <h3 className="text-gray-500 text-sm font-medium">Toplam Webtoon & Manga</h3>
                     <p className="text-3xl font-bold text-gray-900 mt-2">{stats.total_webtoons || 0}</p>
                     <p className="text-sm text-green-600 mt-1">{stats.published_webtoons || 0} Yayında</p>
                 </div>
@@ -89,7 +89,7 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Link href="/admin/webtoon-ekle" className="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all">
                         <span className="text-3xl">🎨</span>
-                        <span className="font-semibold text-gray-700">Yeni Webtoon Ekle</span>
+                        <span className="font-semibold text-gray-700">Webtoon & Manga Ekle</span>
                     </Link>
                     <Link href="/admin/novel-ekle" className="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all">
                         <span className="text-3xl">📖</span>
@@ -98,6 +98,24 @@ export default function AdminDashboard() {
                     <Link href="/admin/categories" className="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all">
                         <span className="text-3xl">📂</span>
                         <span className="font-semibold text-gray-700">Kategorileri Yönet</span>
+                    </Link>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 className="text-xl font-bold mb-4">Bölüm Ekle</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Link href="/admin/bolum-ekle?series_type=WEBTOON" className="flex items-center gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <span className="text-3xl">📘</span>
+                        <span className="font-semibold text-gray-700">Webtoon Bölüm Ekle</span>
+                    </Link>
+                    <Link href="/admin/bolum-ekle?series_type=MANGA" className="flex items-center gap-4 p-4 border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-all">
+                        <span className="text-3xl">📙</span>
+                        <span className="font-semibold text-gray-700">Manga Bölüm Ekle</span>
+                    </Link>
+                    <Link href="/admin/novel-bolum-ekle" className="flex items-center gap-4 p-4 border-2 border-purple-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all">
+                        <span className="text-3xl">📕</span>
+                        <span className="font-semibold text-gray-700">Novel Bölüm Ekle</span>
                     </Link>
                 </div>
             </div>

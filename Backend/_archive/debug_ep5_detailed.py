@@ -1,6 +1,7 @@
+import os
 from sqlalchemy import create_engine, text
 
-DATABASE_URL = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+DATABASE_URL = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
 engine = create_engine(DATABASE_URL)
 
 def debug_episode_fetch():

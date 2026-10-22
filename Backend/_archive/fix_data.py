@@ -1,10 +1,11 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import WebtoonEpisode, Webtoon, User
 from passlib.context import CryptContext
 
 # Use localhost:5433 for host access
-DATABASE_URL = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+DATABASE_URL = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 

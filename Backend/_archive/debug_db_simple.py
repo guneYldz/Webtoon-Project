@@ -4,9 +4,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# DB_URL = os.getenv("DATABASE_URL")
-# Hardcoded for test if env fails, matching bot.py logic roughly or standard docker localhost
-DB_URL = "postgresql://postgres:postgres@localhost:5432/webtoon_db"
+load_dotenv()
+
+DB_URL = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
+if not DB_URL:
+    raise RuntimeError("BOT_DB_CONNECTION veya DB_CONNECTION .env içinde olmalı")
 
 try:
     engine = create_engine(DB_URL)

@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import CommentSection from "@/components/CommentSection";
+import ChapterReactions from "@/components/ChapterReactions";
 import Link from "next/link";
-import Image from "next/image";
 import { Lato } from "next/font/google";
 import ReadingHero from "@/components/ReadingHero";
 import { API } from "@/api";
@@ -128,7 +128,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
     if (!episode) return null;
 
     return (
-        <div className={`min-h-screen bg-[#121212] text-gray-200 pb-24 ${lato.className}`} style={{ paddingBottom: '64px' }}>
+        <div className={`min-h-screen text-gray-200 pb-24 ${lato.className}`} style={{ paddingBottom: '64px' }}>
 
             {/* BREADCRUMBS (Sayfanın en tepesinde) */}
             <div className="container mx-auto px-4 mt-4" style={{ minHeight: '60px' }}>
@@ -153,7 +153,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
             />
 
             {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
-            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mt-8 mb-8">
+            <div className="max-w-4xl mx-auto px-4 md:px-0 mt-8 mb-8">
                 <div className="flex justify-center">
                     <div className="relative w-full max-w-xs">
                         <select
@@ -186,10 +186,9 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
                             key={index}
                             src={imgUrl.startsWith("http") ? imgUrl : `${API}/${imgUrl}`}
                             alt={`Sayfa ${index + 1}`}
-                            width="800"
-                            height="2000"
                             className="w-full h-auto block"
                             loading={index < 2 ? "eager" : "lazy"}
+                            decoding={index < 2 ? "sync" : "async"}
                         />
                     ))
                 ) : (
@@ -200,7 +199,7 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
             </div>
 
             {/* 2. ÖNCEKİ - SERİ - SONRAKİ BUTONLARI (Alt Bölüm) */}
-            <div className="max-w-4xl mx-auto bg-[#121212] px-4 md:px-0 mt-8 mb-8">
+            <div className="max-w-4xl mx-auto px-4 md:px-0 mt-8 mb-8">
                 <div className="flex items-center justify-between text-gray-400 font-medium text-sm md:text-base border-t border-b border-gray-800 py-4">
 
                     {/* Önceki Butonu */}
@@ -231,10 +230,11 @@ export default function WebtoonReadingClient({ seriesId, episodeId, initialEpiso
             </div>
 
             {/* Yorum Alanı */}
-            <div className="mt-0 max-w-4xl mx-auto border-t border-gray-800 bg-[#121212] py-12 px-4 md:px-12">
+            <div className="mt-0 max-w-4xl mx-auto border-t border-gray-800 py-12 px-4 md:px-12">
                 <RecommendedSeries type="webtoon" />
 
                 <div className="mt-12">
+                    <ChapterReactions type="webtoon" targetId={episode.id} />
                     <CommentSection
                         type="webtoon"
                         itemId={episode.webtoon_id}

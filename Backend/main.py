@@ -22,7 +22,7 @@ import uuid
 import shutil
 
 # --- ROUTERLARI ÇAĞIR ---
-from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router
+from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications, reactions
 
 # 1. Tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
@@ -33,6 +33,7 @@ with engine.connect() as _conn:
     for _stmt in [
         "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
         "ALTER TABLE comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES comments(id)",
+        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image VARCHAR(500)",
     ]:
         try:
             _conn.execute(sql_text(_stmt))
@@ -40,12 +41,54 @@ with engine.connect() as _conn:
         except Exception:
             pass  # Kolon zaten varsa sessizce geç
 
+    # WEBTOON türünü enum'a ekle; mevcut MANGA kayıtlarını WEBTOON yap
+    # (sitede şimdiye kadar hepsi WEBTOON görünüyordu). Admin sonradan Manga seçebilir.
+    try:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ac:
+            for _enum_name in ("contenttype", "content_type"):
+                try:
+                    _ac.execute(sql_text(f"ALTER TYPE {_enum_name} ADD VALUE IF NOT EXISTS 'WEBTOON'"))
+                except Exception:
+                    pass
+            try:
+                _enum_rows = _ac.execute(sql_text(
+                    "SELECT DISTINCT t.typname FROM pg_type t "
+                    "JOIN pg_enum e ON t.oid = e.enumtypid "
+                    "WHERE e.enumlabel IN ('MANGA', 'NOVEL', 'WEBTOON')"
+                )).fetchall()
+                for _row in _enum_rows:
+                    _enum_ident = str(_row[0] or "")
+                    if not _enum_ident.replace("_", "").isalnum():
+                        continue
+                    try:
+                        _ac.execute(sql_text(
+                            f"ALTER TYPE {_enum_ident} ADD VALUE IF NOT EXISTS 'WEBTOON'"
+                        ))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        _conn.execute(sql_text(
+            "UPDATE webtoons SET type = 'WEBTOON' WHERE type = 'MANGA' "
+            "AND NOT EXISTS (SELECT 1 FROM webtoons w2 WHERE w2.type = 'WEBTOON')"
+        ))
+        _conn.commit()
+    except Exception:
+        pass
+
+# ⚠️ root_path="/api" KALDIRILDI (Starlette 0.50 uyumu):
+# Nginx zaten /api önekini kırpıp backend'e öneksiz iletiyor.
+# Yeni Starlette, root_path ayarlıyken öneksiz gelen isteklerde static mount
+# yollarını yanlış hesaplıyordu → tüm resimler 404 veriyordu.
+# Docs'un doğru URL göstermesi için "servers" ayarı yeterli.
 app = FastAPI(
     title="Kaos Manga API",
-    root_path="/api",
     docs_url="/docs",
     openapi_url="/openapi.json",
-    servers=[{"url": "https://kaosmanga.net/api"}] # Burayı ekle
+    servers=[{"url": "https://kaosmanga.net/api"}]
 )
 
 # ==========================================
@@ -126,7 +169,7 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
     name = "Seri"
     name_plural = "Seriler"
     icon = "fa-solid fa-book"
-    column_list = [models.Webtoon.id, models.Webtoon.cover_image, models.Webtoon.title, models.Webtoon.categories, models.Webtoon.is_featured, models.Webtoon.is_published, models.Webtoon.view_count, models.Webtoon.status]
+    column_list = [models.Webtoon.id, models.Webtoon.cover_image, models.Webtoon.title, models.Webtoon.type, models.Webtoon.categories, models.Webtoon.is_featured, models.Webtoon.is_published, models.Webtoon.view_count, models.Webtoon.status]
     form_ajax_refs = {"categories": {"fields": ("name",), "order_by": "name"}}
     form_overrides = {"cover_image": FileField, "banner_image": FileField}
     form_columns = ["title", "slug", "summary", "categories", "status", "type", "is_featured", "is_published", "cover_image", "banner_image", "source_url"]
@@ -259,10 +302,18 @@ app.include_router(favorites.router)
 app.include_router(likes.router)
 app.include_router(novel.router)
 app.include_router(admin_router.router)
+app.include_router(notifications.router)
+app.include_router(reactions.router)
 
 @app.get("/")
 def ana_sayfa():
-    return {"durum": "Sistem Hazır", "mesaj": "Webtoon & Novel API Hazır! 🚀"}
+    return {"durum": "Sistem Hazır", "mesaj": "Webtoon, Manga & Novel API Hazır! 🚀"}
+
+@app.get("/categories")
+def public_categories(db: Session = Depends(get_db)):
+    cats = db.query(models.Category).order_by(models.Category.name.asc()).all()
+    return [{"id": c.id, "name": c.name} for c in cats]
+
 
 @app.get("/vitrin")
 def get_vitrin(db: Session = Depends(get_db)):
@@ -278,7 +329,10 @@ def get_vitrin(db: Session = Depends(get_db)):
             "id": w.id, "title": w.title, "slug": w.slug,
             "banner_image": w.banner_image, "cover_image": w.cover_image,
             "summary": w.summary, "view_count": w.view_count,
-            "status": w.status, "type": "webtoon", "typeLabel": "WEBTOON", "bg_color": "blue"
+            "status": w.status,
+            "type": "webtoon",
+            "typeLabel": "MANGA" if str(getattr(w.type, "value", w.type) or "").upper() == "MANGA" else "WEBTOON",
+            "bg_color": "orange" if str(getattr(w.type, "value", w.type) or "").upper() == "MANGA" else "blue",
         })
     for n in featured_novels:
         vitrin_listesi.append({

@@ -1,19 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function WebtoonEkle() {
+function WebtoonEkle() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const typeFromUrl = (searchParams.get("series_type") || "WEBTOON").toUpperCase();
   const [loading, setLoading] = useState(false);
   const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
   const [formData, setFormData] = useState({
     ad: "",
     ozet: "",
     durum: "Devam Ediyor",
+    series_type: typeFromUrl === "MANGA" ? "MANGA" : "WEBTOON",
   });
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null); // Resim önizlemesi için
+
+  useEffect(() => {
+    const t = (searchParams.get("series_type") || "").toUpperCase();
+    if (t === "MANGA" || t === "WEBTOON") {
+      setFormData((prev) => (prev.series_type === t ? prev : { ...prev, series_type: t }));
+    }
+  }, [searchParams]);
 
   // Yazı alanları değişince çalışır
   const handleChange = (e) => {
@@ -44,7 +54,7 @@ export default function WebtoonEkle() {
     const data = new FormData();
     data.append("baslik", formData.ad);
     data.append("ozet", formData.ozet);
-    // Status backend'de default 'ongoing' ama istersen backend'e ekleyebilirsin
+    data.append("series_type", formData.series_type || "WEBTOON");
 
     if (file) {
       data.append("resim", file);
@@ -68,7 +78,7 @@ export default function WebtoonEkle() {
         throw new Error(errorData.detail || "Yükleme başarısız");
       }
 
-      alert("✅ Webtoon Başarıyla Eklendi!");
+      alert(formData.series_type === "MANGA" ? "✅ Manga başarıyla eklendi!" : "✅ Webtoon başarıyla eklendi!");
       router.push("/");
     } catch (err) {
       console.error(err);
@@ -83,14 +93,14 @@ export default function WebtoonEkle() {
       <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-lg border border-gray-700">
 
         <h1 className="text-3xl font-bold mb-6 text-blue-400 flex items-center gap-2 border-b border-gray-700 pb-4">
-          📚 Yeni Webtoon Ekle
+          {formData.series_type === "MANGA" ? "📙 Manga Ekle" : "📘 Webtoon Ekle"}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-5">
 
           {/* İsim */}
           <div>
-            <label className="block text-gray-400 font-medium mb-1">Webtoon Adı</label>
+            <label className="block text-gray-400 font-medium mb-1">Seri Adı</label>
             <input
               type="text"
               name="ad"
@@ -112,6 +122,20 @@ export default function WebtoonEkle() {
               className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none transition"
               placeholder="Hikaye ne hakkında?"
             ></textarea>
+          </div>
+
+          {/* Tür */}
+          <div>
+            <label className="block text-gray-400 font-medium mb-1">Tür</label>
+            <select
+              name="series_type"
+              value={formData.series_type}
+              onChange={handleChange}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="WEBTOON">Webtoon</option>
+              <option value="MANGA">Manga</option>
+            </select>
           </div>
 
           {/* Durum */}
@@ -159,11 +183,19 @@ export default function WebtoonEkle() {
               : "bg-blue-600 hover:bg-blue-500 hover:shadow-blue-500/30"
               }`}
           >
-            {loading ? "Yükleniyor..." : "✨ Webtoon'u Oluştur"}
+            {loading ? "Yükleniyor..." : formData.series_type === "MANGA" ? "✨ Manga Oluştur" : "✨ Webtoon Oluştur"}
           </button>
 
         </form>
       </div>
     </div>
+  );
+}
+
+export default function WebtoonEklePage() {
+  return (
+    <Suspense fallback={<div className="text-gray-500 p-8">Yükleniyor...</div>}>
+      <WebtoonEkle />
+    </Suspense>
   );
 }

@@ -54,9 +54,10 @@ export default function RecommendedSeries({ type = "novel" }) {
                                     alt={item.title}
                                     width={200}
                                     height={300}
-                                    unoptimized={true}
+                                    loading="lazy"
                                     className="object-cover group-hover:scale-105 transition duration-500"
                                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 33vw, 200px"
+                                    quality={90}
                                     style={{ width: '100%', height: 'auto' }}
                                 />
                             )}

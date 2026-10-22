@@ -28,8 +28,10 @@ if sys.stdout.encoding != 'utf-8':
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Bir üst klasör (Backend)
 BACKEND_DIR = os.path.dirname(CURRENT_DIR)
+REPO_ROOT = os.path.dirname(BACKEND_DIR)
 
-# .env dosyasını yükle
+# Asıl dosya: repo kökündeki .env (docker-compose'un yanı). Backend/.env varsa eksikleri doldurur.
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -68,7 +70,9 @@ def rotate_key():
     print(f"🔄 API Key rotasyonu: Key #{_current_key_index + 1} aktif")
 
 # 🔥 KRİTİK AYAR: Docker PostgreSQL Bağlantısı (DIŞARIDAN ERİŞİM)
-DB_CONNECTION = "postgresql://webtoon_admin:gizlisifre123@localhost:5433/webtoon_db"
+DB_CONNECTION = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION")
+if not DB_CONNECTION:
+    raise RuntimeError("BOT_DB_CONNECTION veya DB_CONNECTION .env içinde olmalı")
 
 client = get_gemini_client()
 # Gemini 1.5 Flash (Zeki ve Hızlı)

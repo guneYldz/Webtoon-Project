@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean, Float, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -6,6 +6,7 @@ import enum
 
 # --- İÇERİK TÜRÜ ENUM ---
 class ContentType(str, enum.Enum):
+    WEBTOON = "WEBTOON"
     MANGA = "MANGA"
     NOVEL = "NOVEL"
 
@@ -25,6 +26,7 @@ class User(Base):
     comments = relationship("Comment", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
     likes = relationship("Like", back_populates="user")
+    reactions = relationship("ChapterReaction", back_populates="user", cascade="all, delete-orphan")
 
     def __str__(self):
         return self.username
@@ -49,6 +51,19 @@ class Category(Base):
         overlaps="webtoons,categories"
     )
 
+    novels = relationship(
+        "Novel",
+        secondary="novel_categories",
+        back_populates="categories",
+        overlaps="novel_links,category_novel_links",
+    )
+
+    novel_links = relationship(
+        "NovelCategory",
+        back_populates="category",
+        overlaps="novels,categories",
+    )
+
     def __str__(self):
         return self.name
 
@@ -70,7 +85,7 @@ class Webtoon(Base):
     # 👇 DÜZELTME BURADA: SQL Server hatasını önlemek için String(255) yapıldı
     slug = Column(String(255), unique=True, index=True)
 
-    type = Column(Enum(ContentType), default=ContentType.MANGA)
+    type = Column(Enum(ContentType), default=ContentType.WEBTOON)
     source_url = Column(String(500), nullable=True)
 
     categories = relationship(
@@ -173,6 +188,41 @@ class Comment(Base):
     def __str__(self):
         return f"Yorum ({self.id}) - {self.content[:20]}..."
 
+# 7.5 BİLDİRİMLER
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    type = Column(String(30), nullable=False)  # "reply" | "announcement"
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    link = Column(String(500), nullable=True)
+    is_read = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", backref="notifications")
+
+    def __str__(self):
+        return f"Bildirim ({self.id}) → User {self.user_id}: {self.title}"
+
+# 7.6 DUYURULAR (herkese açık kanal sayfası)
+class Announcement(Base):
+    __tablename__ = "announcements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    link = Column(String(500), nullable=True)
+    image = Column(String(500), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    author = relationship("User")
+
+    def __str__(self):
+        return f"Duyuru ({self.id}): {self.title}"
+
 # 8. FAVORİLER
 class Favorite(Base):
     __tablename__ = "favorites"
@@ -226,8 +276,39 @@ class Novel(Base):
     chapters = relationship("NovelChapter", back_populates="novel", cascade="all, delete-orphan")
     banner_image = Column(String, nullable=True)
 
+    categories = relationship(
+        "Category",
+        secondary="novel_categories",
+        back_populates="novels",
+        overlaps="novel_links,category_novel_links",
+    )
+    category_links = relationship(
+        "NovelCategory",
+        back_populates="novel",
+        overlaps="categories,novels",
+    )
+
     def __str__(self):
         return self.title
+
+
+class NovelCategory(Base):
+    __tablename__ = "novel_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    novel_id = Column(Integer, ForeignKey("novels.id"), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+
+    novel = relationship(
+        "Novel",
+        back_populates="category_links",
+        overlaps="categories,novels",
+    )
+    category = relationship(
+        "Category",
+        back_populates="novel_links",
+        overlaps="novels,categories",
+    )
 
 class NovelChapter(Base):
     __tablename__ = "novel_chapters"
@@ -250,3 +331,25 @@ class NovelChapter(Base):
 
     def __str__(self):
         return f"{self.title} (Bölüm {self.chapter_number})"
+
+
+# 11. BÖLÜM TEPKİLERİ (webtoon bölümü veya novel bölümü)
+class ChapterReaction(Base):
+    __tablename__ = "chapter_reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    content_type = Column(String(20), nullable=False)  # webtoon | novel
+    target_id = Column(Integer, nullable=False)
+    reaction = Column(String(20), nullable=False)  # upvote, funny, love, surprised, angry, sad
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="reactions")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "content_type", "target_id", name="uq_user_chapter_reaction"),
+        Index("ix_reactions_target", "content_type", "target_id"),
+    )
+
+    def __str__(self):
+        return f"Reaction {self.reaction} by {self.user_id} on {self.content_type}:{self.target_id}"

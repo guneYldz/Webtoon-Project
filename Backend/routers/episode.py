@@ -9,7 +9,8 @@ from fastapi import Response
 import models
 import schemas
 from database import get_db
-from routers.auth import get_current_admin
+from routers.auth import get_current_admin, get_current_editor
+from utils.chapter_title import default_chapter_title, chapter_display_label
 
 
 # --- YARDIMCI: DOĞAL SIRALAMA (1, 2, 10 SORUNU İÇİN) ---
@@ -28,7 +29,7 @@ router = APIRouter(
 @router.post("/ekle", status_code=status.HTTP_201_CREATED)
 def create_episode(
     webtoon_id: int = Form(...),
-    title: str = Form(...),
+    title: str = Form(""),
     episode_number: float = Form(...),
     content_text: str = Form(None), 
     
@@ -52,6 +53,8 @@ def create_episode(
     
     if var_mi:
         raise HTTPException(status_code=400, detail="Bu bölüm numarası zaten var!")
+
+    title = default_chapter_title(title, episode_number)
 
     # C. Bölümü Veritabanına Kaydet
     yeni_bolum = models.WebtoonEpisode(
@@ -101,6 +104,21 @@ def create_episode(
             db.add(db_img)
         
         db.commit()
+
+    # Favorisinde bu webtoon olanlara bildirim
+    try:
+        from routers.notifications import notify_favorite_users_new_chapter
+        ch_label = chapter_display_label(title, episode_number)
+        notify_favorite_users_new_chapter(
+            db,
+            webtoon_id=webtoon.id,
+            series_title=webtoon.title,
+            chapter_label=ch_label,
+            link=f"/webtoon/{webtoon.slug or webtoon.id}/bolum/{yeni_bolum.id}",
+        )
+        db.commit()
+    except Exception as e:
+        print(f"⚠️ Favori bildirim hatası (webtoon): {e}")
 
     return {
         "mesaj": "Bölüm Başarıyla Eklendi", 
@@ -204,6 +222,11 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         "webtoon_title": bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
         "webtoon_slug": bolum.webtoon.slug if bolum.webtoon else "",
         "webtoon_cover": f"{request.base_url}{bolum.webtoon.cover_image}" if bolum.webtoon and bolum.webtoon.cover_image else None,
+        "series_type": (
+            getattr(bolum.webtoon.type, "value", bolum.webtoon.type)
+            if bolum.webtoon and getattr(bolum.webtoon, "type", None)
+            else "WEBTOON"
+        ),
         "title": bolum.title,
         "episode_number": bolum.episode_number,
         "created_at": bolum.created_at,
@@ -213,4 +236,46 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         "next_episode_id": sonraki_bolum.id if sonraki_bolum else None,
         "prev_episode_id": onceki_bolum.id if onceki_bolum else None
     }
+
+
+@router.delete("/{episode_id}")
+def bolum_sil(
+    episode_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_editor),
+):
+    bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == episode_id).first()
+    if not bolum:
+        raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
+
+    webtoon_id = bolum.webtoon_id
+    slug = bolum.webtoon.slug if bolum.webtoon else None
+    ep_num = bolum.episode_number
+    title = bolum.title
+
+    db.query(models.Comment).filter(
+        models.Comment.webtoon_episode_id == episode_id,
+        models.Comment.parent_id.isnot(None),
+    ).delete(synchronize_session=False)
+    db.query(models.Comment).filter(models.Comment.webtoon_episode_id == episode_id).delete(synchronize_session=False)
+    db.query(models.Like).filter(models.Like.episode_id == episode_id).delete(synchronize_session=False)
+    db.query(models.ChapterReaction).filter(
+        models.ChapterReaction.content_type == "webtoon",
+        models.ChapterReaction.target_id == episode_id,
+    ).delete(synchronize_session=False)
+
+    db.delete(bolum)
+    db.commit()
+
+    klasor = f"static/images/{webtoon_id}/{episode_id}"
+    if os.path.isdir(klasor):
+        shutil.rmtree(klasor, ignore_errors=True)
+
+    if slug and ep_num is not None:
+        chap_num = str(int(ep_num)) if float(ep_num).is_integer() else str(ep_num)
+        bot_folder = f"static/images/{slug}/bolum-{chap_num}"
+        if os.path.isdir(bot_folder):
+            shutil.rmtree(bot_folder, ignore_errors=True)
+
+    return {"status": "success", "message": f"'{title}' silindi"}
 
