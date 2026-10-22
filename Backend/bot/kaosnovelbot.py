@@ -1060,7 +1060,9 @@ def update_chapter_content(token, novel, chapter_num, content):
     return False
 
 
-def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
+def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False, hedef_bolum=None):
+    if hedef_bolum is not None:
+        print(f"🎯 TEK BÖLÜM MODU: Sadece Bölüm {hedef_bolum} işlenecek.")
     if sadece_telif:
         checkpoint_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onar_checkpoint_telif.json")
         print("🔧 TELİF/ÖZET TARAMA (--onar --telif)")
@@ -1118,23 +1120,28 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
         mevcut_numaralar = {float(ch["chapter_number"]) for ch in chapters}
         max_ch = int(max(mevcut_numaralar))
         cp_novel = checkpoint.setdefault(slug, {})
-        kalan = sum(1 for n in range(1, max_ch + 1) if str(n) not in cp_novel)
-        if sadece_telif:
-            print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). Telif taraması: {kalan} kaldı.")
+        if hedef_bolum is not None:
+            bolumler = [hedef_bolum]
+            print(f"   🎯 TEK BÖLÜM HEDEFİ: Bölüm {hedef_bolum} (Checkpoint atlaması devre dışı bırakıldı)")
         else:
-            print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). İlk kez bakılacak: {kalan}")
-            print("   (Checkpoint'te ok olanlar da telif/özet için ucuz TR kontrolünden geçer.)")
+            bolumler = list(range(1, max_ch + 1))
+            kalan = sum(1 for n in bolumler if str(n) not in cp_novel)
+            if sadece_telif:
+                print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). Telif taraması: {kalan} kaldı.")
+            else:
+                print(f"   📊 Veritabanında {len(mevcut_numaralar)} bölüm var (en yüksek: {max_ch}). İlk kez bakılacak: {kalan}")
+                print("   (Checkpoint'te ok olanlar da telif/özet için ucuz TR kontrolünden geçer.)")
 
         consecutive_errors = 0
 
-        for num in range(1, max_ch + 1):
+        for num in bolumler:
             key = str(num)
             already = key in cp_novel
             in_db = float(num) in mevcut_numaralar
 
             # --telif: bu geçişte işlenmişse atla. Normal --onar: ok olsa bile TR'ye bak.
             # --telif, --eksik veya --kesin modunda bu bölüm zaten taranmışsa atla.
-            if already and (sadece_telif or eksik_tara or kesin):
+            if hedef_bolum is None and already and (sadece_telif or eksik_tara or kesin):
                 continue
 
             if in_db:
@@ -1289,10 +1296,18 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
 # ==========================================
 if __name__ == "__main__":
     if "--onar" in sys.argv:
+        hedef_bolum = None
+        for idx, arg in enumerate(sys.argv):
+            if arg in ("--bolum", "--chapter", "-b") and idx + 1 < len(sys.argv):
+                try:
+                    hedef_bolum = int(sys.argv[idx + 1])
+                except ValueError:
+                    pass
         repair_mode(
             kesin=("--kesin" in sys.argv),
             sadece_telif=("--telif" in sys.argv),
             eksik_tara=("--eksik" in sys.argv or "--yeniden" in sys.argv),
+            hedef_bolum=hedef_bolum,
         )
         sys.exit(0)
 
