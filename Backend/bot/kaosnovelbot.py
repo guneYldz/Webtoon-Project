@@ -1133,7 +1133,8 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
             in_db = float(num) in mevcut_numaralar
 
             # --telif: bu geçişte işlenmişse atla. Normal --onar: ok olsa bile TR'ye bak.
-            if already and sadece_telif:
+            # --telif, --eksik veya --kesin modunda bu bölüm zaten taranmışsa atla.
+            if already and (sadece_telif or eksik_tara or kesin):
                 continue
 
             if in_db:
@@ -1159,7 +1160,7 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
                             token, novel, num, eng_title, eng_text, guncelle=True
                         )
                         if status == "SUCCESS":
-                            cp_novel[key] = "ok"
+                            cp_novel[key] = "edited"
                             save_onarim_checkpoint(checkpoint, checkpoint_file)
                             stats["onarildi"] += 1
                             consecutive_errors = 0
@@ -1185,7 +1186,7 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
                     cleaned, _ = strip_gemini_chat_footer(tr_content)
                     print(f"   ✂️  Bölüm {num}: sonundaki Gemini sohbet satırı kesiliyor...")
                     if update_chapter_content(token, novel, num, cleaned):
-                        cp_novel[key] = "ok"
+                        cp_novel[key] = "edited"
                         save_onarim_checkpoint(checkpoint, checkpoint_file)
                         stats["footer"] += 1
                     else:
@@ -1194,17 +1195,17 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
 
                 # Sağlam Türkçe
                 if sadece_telif:
-                    cp_novel[key] = "temiz"
+                    cp_novel[key] = "ok"
                     if num % 50 == 0:
                         save_onarim_checkpoint(checkpoint, checkpoint_file)
                     if num % 200 == 0:
                         print(f"   … {num}/{max_ch} tarandı (özet yok)")
                     stats["saglam"] += 1
                     continue
-                if already and not eksik_tara:
+                if already:
                     continue
                 # İlk kez --onar veya --eksik: aşağıda EN uzunluk kontrolü için kaynağı çek
-            elif already and not eksik_tara:
+            elif already:
                 continue
             elif sadece_telif:
                 continue
@@ -1259,7 +1260,7 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False):
             print(f"   🔧 Bölüm {num} {sebep}! (EN {len(eng_text)} / TR {len(tr_content)} karakter) → yeniden çevriliyor...")
             status = translate_and_upload(token, novel, num, eng_title, eng_text, guncelle=True)
             if status == "SUCCESS":
-                cp_novel[key] = "ok"
+                cp_novel[key] = "edited"
                 save_onarim_checkpoint(checkpoint, checkpoint_file)
                 stats["onarildi"] += 1
                 consecutive_errors = 0
