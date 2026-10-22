@@ -1209,10 +1209,10 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False, hedef_bolum=N
                         print(f"   … {num}/{max_ch} tarandı (özet yok)")
                     stats["saglam"] += 1
                     continue
-                if already:
+                if hedef_bolum is None and already:
                     continue
                 # İlk kez --onar veya --eksik: aşağıda EN uzunluk kontrolü için kaynağı çek
-            elif already:
+            elif hedef_bolum is None and already:
                 continue
             elif sadece_telif:
                 continue
