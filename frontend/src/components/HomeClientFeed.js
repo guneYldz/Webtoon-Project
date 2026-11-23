@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Flame, Eye, Layers } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/apiClient";
+import { formatTrNumber } from "@/lib/formatTr";
 import SeriesCard from "@/components/SeriesCard";
 import { Badge, badgeVariantFromSeriesType } from "@/components/ui";
 
@@ -223,7 +224,7 @@ export default function HomeClientFeed({ allSeries = [], popularList = [] }) {
                       </Badge>
                       <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
                         <Eye className="h-3 w-3" />
-                        {Number(w.view_count || 0).toLocaleString("tr-TR")}
+                        {formatTrNumber(w.view_count)}
                       </span>
                     </div>
                   </div>

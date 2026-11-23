@@ -15,16 +15,17 @@ import {
   formatChapterNumber,
   isAutoChapterTitle,
 } from "@/lib/chapterTitle";
+import { formatTrShortDate } from "@/lib/formatTr";
 import { useReadingHistory, isChapterRead } from "@/lib/readingHistory";
 import { Badge, Button } from "@/components/ui";
 
 const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
 
-function isRecentlyPublished(dateStr) {
-  if (!dateStr) return false;
+function isRecentlyPublished(dateStr, nowMs) {
+  if (!dateStr || !nowMs) return false;
   const ts = new Date(dateStr).getTime();
   if (!Number.isFinite(ts)) return false;
-  return Date.now() - ts <= TWO_DAYS_MS;
+  return nowMs - ts <= TWO_DAYS_MS;
 }
 
 /**
@@ -40,6 +41,11 @@ export default function ChapterDirectory({
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("desc"); // "desc" | "asc"
+  const [nowMs, setNowMs] = useState(null);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
 
   const { hydrated, getSeriesProgress } = useReadingHistory();
   const progress = hydrated
@@ -189,7 +195,7 @@ export default function ChapterDirectory({
             const displayTitle = getDisplayTitle(item);
             const hasSubtitle =
               displayTitle.toLowerCase() !== `bölüm ${num}`.toLowerCase();
-            const isRecent = isRecentlyPublished(item.created_at);
+            const isRecent = isRecentlyPublished(item.created_at, nowMs);
 
             const isCurrentLast =
               Boolean(progress) &&
@@ -251,11 +257,8 @@ export default function ChapterDirectory({
                   <div className="flex items-center gap-2 mt-1 text-xs text-ink-muted">
                     <span>
                       {item.created_at
-                        ? new Date(item.created_at).toLocaleDateString("tr-TR", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })
+                        ? formatTrShortDate(item.created_at, { withYear: true }) ||
+                          "Okumak için tıkla"
                         : "Okumak için tıkla"}
                     </span>
                     {isCurrentLast ? (

@@ -12,6 +12,7 @@ import {
 import { resolveMediaUrl } from "@/lib/apiClient";
 import { seriesTypeLabel, seriesKindTr } from "@/lib/seriesType";
 import { formatChapterNumber } from "@/lib/chapterTitle";
+import { formatTrNumber } from "@/lib/formatTr";
 import { useReadingHistory } from "@/lib/readingHistory";
 import { Badge, badgeVariantFromSeriesType, buttonClasses } from "@/components/ui";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -129,7 +130,7 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
                 </Badge>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-elevated/80 border border-subtle text-xs font-medium text-ink-secondary">
                   <Eye className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
-                  {(series.view_count || 0).toLocaleString("tr-TR")}
+                  {formatTrNumber(series.view_count)}
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-elevated/80 border border-subtle text-xs font-medium text-ink-secondary">
                   <Layers className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />

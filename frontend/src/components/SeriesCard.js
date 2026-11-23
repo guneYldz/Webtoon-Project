@@ -4,42 +4,13 @@ import { Eye, Clock } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/apiClient";
 import { seriesTypeLabel } from "@/lib/seriesType";
 import { formatChapterNumber } from "@/lib/chapterTitle";
+import { formatTrNumber } from "@/lib/formatTr";
+import RelativeTime from "@/components/RelativeTime";
 import {
   Badge,
   badgeVariantFromSeriesType,
   SeriesCardSkeleton,
 } from "@/components/ui";
-
-function formatRelativeTime(dateInput) {
-  if (!dateInput) return null;
-  try {
-    const date = new Date(dateInput);
-    const ts = date.getTime();
-    if (!Number.isFinite(ts) || ts <= 0) return null;
-    const diffSec = Math.floor((Date.now() - ts) / 1000);
-    if (diffSec < 60) return "Az önce";
-    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} dk önce`;
-    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} sa önce`;
-    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)} gün önce`;
-    return date.toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "short",
-    });
-  } catch {
-    return null;
-  }
-}
-
-function isRecentlyAdded(dateInput, hours = 72) {
-  if (!dateInput) return false;
-  try {
-    const ts = new Date(dateInput).getTime();
-    if (!Number.isFinite(ts) || ts <= 0) return false;
-    return Date.now() - ts <= hours * 3600 * 1000;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Unified Series Card component for Home, Explore (/kesfet), Catalog (/seriler),
@@ -91,7 +62,7 @@ export function SeriesCard({
     item.status === "ongoing" ||
     String(item.status || "").toLowerCase() === "güncel";
   const hasStatus = Boolean(item.status);
-  const isNew = Boolean(item.isNew) || isRecentlyAdded(item.created_at);
+  const isNew = Boolean(item.isNew);
 
   const latestChapters = Array.isArray(item.latestChapters)
     ? item.latestChapters
@@ -173,7 +144,7 @@ export function SeriesCard({
               {item.view_count !== undefined && (
                 <span className="inline-flex items-center gap-1 rounded bg-black/60 backdrop-blur-md px-1.5 py-0.5 border border-white/10">
                   <Eye className="h-3 w-3 text-ink-secondary" />
-                  {Number(item.view_count || 0).toLocaleString("tr-TR")}
+                  {formatTrNumber(item.view_count)}
                 </span>
               )}
             </div>
@@ -201,7 +172,7 @@ export function SeriesCard({
               const chapHref = `/${routePrefix}/${
                 rawSlug || item.id
               }/bolum/${chapTarget}`;
-              const relTime = formatRelativeTime(chap.created_at);
+              const hasCreatedAt = Boolean(chap.created_at);
 
               return (
                 <Link
@@ -214,10 +185,10 @@ export function SeriesCard({
                     Bölüm {formatChapterNumber(chapNum)}
                   </span>
                   <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted shrink-0">
-                    {relTime ? (
+                    {hasCreatedAt ? (
                       <>
                         <Clock className="h-3 w-3 text-brand/80" />
-                        <span>{relTime}</span>
+                        <RelativeTime date={chap.created_at} fallback="Yeni" />
                       </>
                     ) : (
                       <span className="text-brand font-semibold">Yeni</span>
@@ -233,13 +204,24 @@ export function SeriesCard({
             <span className="truncate">
               {primaryCategory ||
                 item.author ||
-                (item.created_at
-                  ? formatRelativeTime(item.created_at)
-                  : isNovel
-                  ? "Web Novel"
-                  : typeLabel === "MANGA"
-                  ? "Manga"
-                  : "Webtoon")}
+                (item.created_at ? (
+                  <RelativeTime
+                    date={item.created_at}
+                    fallback={
+                      isNovel
+                        ? "Web Novel"
+                        : typeLabel === "MANGA"
+                        ? "Manga"
+                        : "Webtoon"
+                    }
+                  />
+                ) : isNovel ? (
+                  "Web Novel"
+                ) : typeLabel === "MANGA" ? (
+                  "Manga"
+                ) : (
+                  "Webtoon"
+                ))}
             </span>
             {variant === "updates" && latestChapters.length === 0 && (
               <span className="text-[11px] italic text-ink-muted">

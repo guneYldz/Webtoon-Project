@@ -3,6 +3,7 @@ import Image from "next/image";
 import { BookOpen, Eye, Flame } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/apiClient";
 import { seriesTypeLabel } from "@/lib/seriesType";
+import { formatTrNumber } from "@/lib/formatTr";
 import FavoriteButton from "./FavoriteButton";
 import {
   Badge,
@@ -94,7 +95,7 @@ const FeaturedSlider = ({ webtoon, isFirst = false }) => {
           <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-ink-secondary font-medium">
             <span className="inline-flex items-center gap-1.5">
               <Eye className="h-4 w-4 text-brand" />
-              {Number(webtoon.view_count || 0).toLocaleString("tr-TR")} Okunma
+              {formatTrNumber(webtoon.view_count)} Okunma
             </span>
             {Array.isArray(webtoon.categories) &&
               webtoon.categories.slice(0, 3).map((cat, idx) => {

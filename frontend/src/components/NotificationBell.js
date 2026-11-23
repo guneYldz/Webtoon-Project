@@ -21,9 +21,16 @@ export default function NotificationBell({ user }) {
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState(null);
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  useEffect(() => {
+    try {
+      setToken(window.localStorage.getItem("token"));
+    } catch {
+      setToken(null);
+    }
+  }, [user]);
+
   const isGuest = !user || !token;
 
   const fetchUnreadLoggedIn = async () => {
@@ -123,7 +130,7 @@ export default function NotificationBell({ user }) {
     fetchUnreadLoggedIn();
     const interval = setInterval(fetchUnreadLoggedIn, 60000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, token, isGuest]);
 
   const handleOpenChange = async (nextOpen) => {
     setOpen(nextOpen);

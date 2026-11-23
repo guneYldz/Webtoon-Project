@@ -2,6 +2,7 @@
 export {
   API,
   PUBLIC_API_URL,
+  MEDIA_BASE_URL,
   INTERNAL_API_URL,
   SITE_URL,
   getApiBaseUrl,

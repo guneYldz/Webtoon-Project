@@ -9,6 +9,11 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'kaosmanga.net',
+        pathname: '/static/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'kaosmanga.net',
         pathname: '/api/static/**',
       },
       {

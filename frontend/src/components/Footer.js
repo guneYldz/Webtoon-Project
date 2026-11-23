@@ -23,7 +23,7 @@ const ACCOUNT_LINKS = [
 ];
 
 export default function Footer() {
-  const year = new Date().getFullYear();
+  const year = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCFullYear();
 
   return (
     <footer className="mt-20 border-t border-subtle bg-surface/70 backdrop-blur-md">
@@ -131,7 +131,7 @@ export default function Footer() {
 
         {/* Bottom Legal Bar */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-ink-muted">
-          <p>© {year} Kaos Manga. Tüm hakları saklıdır.</p>
+          <p suppressHydrationWarning>© {year} Kaos Manga. Tüm hakları saklıdır.</p>
           <p className="inline-flex items-center gap-1.5">
             Türkçe Webtoon, Manga ve Novel Okuma Platformu
             <Heart className="h-3.5 w-3.5 text-brand fill-brand/30" />
