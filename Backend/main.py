@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from typing import Any
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,15 +12,17 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.datastructures import UploadFile
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
+from jose import JWTError, jwt
+from datetime import datetime, timedelta, timezone
 from database import engine, get_db
 import random
 import models
 import os
 import signals
+from utils.media import validate_and_save_image
 from wtforms import TextAreaField, FileField, Field
 from wtforms.widgets import FileInput
 import uuid
-import shutil
 
 # --- ROUTERLARI ÇAĞIR ---
 from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications, reactions
@@ -101,20 +104,25 @@ if not SECRET_KEY:
 
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
+_DEFAULT_CORS_ORIGINS = [
+    "https://kaosmanga.net",
+    "https://www.kaosmanga.net",
+    "http://kaosmanga.net",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+_EXTRA_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://kaosmanga.net",
-        "https://www.kaosmanga.net",
-        "http://kaosmanga.net",
-        "http://89.47.113.248",
-        "http://89.47.113.248:3000",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000"
-    ],
+    allow_origins=_DEFAULT_CORS_ORIGINS + _EXTRA_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin"],
 )
 
 # ==========================================
@@ -133,22 +141,28 @@ class AdminAuth(AuthenticationBackend):
 
         with Session(engine) as session:
             user = session.query(models.User).filter(models.User.username == username).first()
+            if not user or not user.is_active or user.role != "admin":
+                return False
 
-            if user:
+            password_valid = False
+            try:
+                if pwd_context.verify(password, user.password):
+                    password_valid = True
+            except Exception:
                 password_valid = False
-                try:
-                    if pwd_context.verify(password, user.password):
-                        password_valid = True
-                except Exception:
-                    pass
 
-                if not password_valid and not user.password.startswith("$"):
-                     if user.password == password:
-                        password_valid = True
-
-                if password_valid and user.role == "admin":
-                    request.session.update({"token": f"admin_token_{user.id}"})
-                    return True
+            if password_valid:
+                token = jwt.encode(
+                    {
+                        "sub": str(user.id),
+                        "type": "sqladmin",
+                        "exp": datetime.now(timezone.utc) + timedelta(hours=12),
+                    },
+                    SECRET_KEY,
+                    algorithm="HS256",
+                )
+                request.session.update({"token": token})
+                return True
         return False
 
     async def logout(self, request: Request) -> bool:
@@ -157,7 +171,24 @@ class AdminAuth(AuthenticationBackend):
 
     async def authenticate(self, request: Request) -> bool:
         token = request.session.get("token")
-        return bool(token)
+        if not token or not isinstance(token, str):
+            return False
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            if payload.get("type") != "sqladmin":
+                request.session.clear()
+                return False
+            user_id = int(payload.get("sub", ""))
+        except (JWTError, ValueError, TypeError):
+            request.session.clear()
+            return False
+
+        with Session(engine) as session:
+            user = session.query(models.User).filter(models.User.id == user_id).first()
+            if not user or not user.is_active or user.role != "admin":
+                request.session.clear()
+                return False
+        return True
 
 authentication_backend = AdminAuth(secret_key=SECRET_KEY)
 
@@ -175,24 +206,18 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
     form_columns = ["title", "slug", "summary", "categories", "status", "type", "is_featured", "is_published", "cover_image", "banner_image", "source_url"]
 
     async def on_model_change(self, data, model, is_created, request):
-        UPLOAD_DIR_COVERS = "/app/static/covers"
-        os.makedirs(UPLOAD_DIR_COVERS, exist_ok=True)
-        UPLOAD_DIR_BANNERS = "/app/static/banners"
-        os.makedirs(UPLOAD_DIR_BANNERS, exist_ok=True)
+        UPLOAD_DIR_COVERS = "static/covers"
+        UPLOAD_DIR_BANNERS = "static/banners"
         for field in ["cover_image", "banner_image"]:
             val = data.get(field)
             if isinstance(val, UploadFile) and val.filename and val.size > 0:
                 if not is_created and getattr(model, field):
                     signals.delete_file(getattr(model, field))
-                file_ext = val.filename.split(".")[-1]
                 folder = UPLOAD_DIR_COVERS if field == "cover_image" else UPLOAD_DIR_BANNERS
                 prefix = "banner-" if field == "banner_image" else ""
-                new_filename = f"{prefix}{uuid.uuid4()}.{file_ext}"
-                file_path = os.path.join(folder, new_filename).replace("\\", "/")
-                with open(file_path, "wb") as buffer:
-                    shutil.copyfileobj(val.file, buffer)
-                # Veritabanına göreli yol olarak kaydet
-                data[field] = file_path.replace("/app/", "")
+                data[field] = await run_in_threadpool(
+                    validate_and_save_image, val, folder, 15 * 1024 * 1024, prefix
+                )
             else:
                 if field in data: del data[field]
         return await super().on_model_change(data, model, is_created, request)
@@ -242,18 +267,18 @@ class NovelAdmin(ModelView, model=models.Novel):
     form_columns = ["title", "slug", "author", "summary", "status", "is_featured", "is_published", "cover_image", "banner_image", "source_url"]
 
     async def on_model_change(self, data, model, is_created, request):
-        UPLOAD_DIR_COVERS = "/app/static/covers"
-        os.makedirs(UPLOAD_DIR_COVERS, exist_ok=True)
+        UPLOAD_DIR_COVERS = "static/covers"
+        UPLOAD_DIR_BANNERS = "static/banners"
         for field in ["cover_image", "banner_image"]:
             val = data.get(field)
             if isinstance(val, UploadFile) and val.filename and val.size > 0:
-                file_ext = val.filename.split(".")[-1]
-                new_filename = f"novel-{uuid.uuid4()}.{file_ext}"
-                file_path = os.path.join(UPLOAD_DIR_COVERS, new_filename).replace("\\", "/")
-                with open(file_path, "wb") as buffer:
-                    shutil.copyfileobj(val.file, buffer)
-                # Veritabanına göreli yol olarak kaydet
-                data[field] = file_path.replace("/app/", "")
+                if not is_created and getattr(model, field):
+                    signals.delete_file(getattr(model, field))
+                folder = UPLOAD_DIR_COVERS if field == "cover_image" else UPLOAD_DIR_BANNERS
+                prefix = "novel-banner-" if field == "banner_image" else "novel-"
+                data[field] = await run_in_threadpool(
+                    validate_and_save_image, val, folder, 15 * 1024 * 1024, prefix
+                )
             else:
                 if field in data: del data[field]
         return await super().on_model_change(data, model, is_created, request)
@@ -318,8 +343,16 @@ def public_categories(db: Session = Depends(get_db)):
 @app.get("/vitrin")
 def get_vitrin(db: Session = Depends(get_db)):
     try:
-        featured_webtoons = db.query(models.Webtoon).filter(models.Webtoon.is_featured == True).all()
-        featured_novels = db.query(models.Novel).filter(models.Novel.is_featured == True).all()
+        featured_webtoons = (
+            db.query(models.Webtoon)
+            .filter(models.Webtoon.is_featured == True, models.Webtoon.is_published == True)
+            .all()
+        )
+        featured_novels = (
+            db.query(models.Novel)
+            .filter(models.Novel.is_featured == True, models.Novel.is_published == True)
+            .all()
+        )
     except Exception:
         return []
 
@@ -343,24 +376,3 @@ def get_vitrin(db: Session = Depends(get_db)):
         })
     random.shuffle(vitrin_listesi)
     return vitrin_listesi
-
-@app.get("/fix_db")
-def fix_database_episodes(db: Session = Depends(get_db)):
-    try:
-        w_eps = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.is_published == False).all()
-        w_count = 0
-        for ep in w_eps:
-            ep.is_published = True
-            w_count += 1
-            
-        n_eps = db.query(models.NovelChapter).filter(models.NovelChapter.is_published == False).all()
-        n_count = 0
-        for ep in n_eps:
-            ep.is_published = True
-            n_count += 1
-            
-        db.commit()
-        return {"mesaj": f"Başarıyla {w_count} webtoon bölümü ve {n_count} novel bölümü yayınlandı!"}
-    except Exception as e:
-        db.rollback()
-        return {"hata": str(e)}

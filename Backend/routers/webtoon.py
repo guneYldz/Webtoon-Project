@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Query, status, Response, Request
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import desc
 from typing import List
-import shutil
 import os
 import uuid # Resim isimleri çakışmasın diye rastgele isim üretici
 import re   # Slug üretimi için regex
@@ -13,12 +12,27 @@ import models
 import schemas
 # Admin kontrolünü içeri aktarıyoruz
 from routers.auth import get_current_admin
+from utils.media import validate_and_save_image
 
 # Router kurulumu
 router = APIRouter(
     prefix="/webtoons",    # Tüm adresler /webtoons ile başlar
     tags=["Webtoons"]      # Dokümantasyonda başlık
 )
+
+
+def _get_client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip")
+    if xri:
+        return xri.strip()
+    return request.client.host if request.client else "unknown"
+
 
 # --- YARDIMCI FONKSİYON: SLUG OLUŞTURUCU ---
 def slug_olustur(text: str):
@@ -33,14 +47,10 @@ def slug_olustur(text: str):
 @router.get("/", response_model=List[schemas.WebtoonCard]) 
 def webtoonlari_getir(
     db: Session = Depends(get_db),
-    limit: int = 20,       
-    skip: int = 0,         
+    limit: int = Query(default=20, ge=1, le=1000),
+    skip: int = Query(default=0, ge=0),
     sort_by: str = "newest" 
 ):
-
-    # O P T I M İ Z A S Y O N EKLENDİ (N+1 Sorunu Çözümü)
-    from sqlalchemy.orm import selectinload
-
     query = db.query(models.Webtoon).filter(models.Webtoon.is_published == True).options(
         selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)),
         selectinload(models.Webtoon.categories)
@@ -56,30 +66,27 @@ def webtoonlari_getir(
     webtoons = query.offset(skip).limit(limit).all()
     return webtoons
 
-# 2. DETAY GÖSTERME (Bölümlerle Birlikte) - HERKESE AÇIK
 # 2. DETAY GÖSTERME (Hem ID hem Slug destekler) - HERKESE AÇIK
 @router.get("/{id_or_slug}", response_model=schemas.WebtoonDetail)
 def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Session = Depends(get_db)):
-    # Gelen veri sayı mı? (Örn: "1", "5")
+    load_opts = (
+        selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)),
+        selectinload(models.Webtoon.categories),
+    )
     if id_or_slug.isdigit():
-        webtoon = db.query(models.Webtoon).options(selectinload(models.Webtoon.categories)).filter(models.Webtoon.id == int(id_or_slug), models.Webtoon.is_published == True).first()
-    
-    # Yoksa yazı mı? (Örn: "shadow-slave")
+        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.id == int(id_or_slug), models.Webtoon.is_published == True).first()
     else:
-        webtoon = db.query(models.Webtoon).options(selectinload(models.Webtoon.categories)).filter(models.Webtoon.slug == id_or_slug, models.Webtoon.is_published == True).first()
+        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.slug == id_or_slug, models.Webtoon.is_published == True).first()
     
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
     
-    
-    # 🔥 YENİ SİSTEM: IP Tabanlı View Count Rate Limiting
+    # 🔥 IP Tabanlı View Count Rate Limiting
     from utils.view_tracker import view_tracker
     
-    client_ip = request.client.host
+    client_ip = _get_client_ip(request)
     
-    # ViewTracker ile kontrol: Bu IP son 1 saat içinde bu webtoon'u gördü mü?
     if view_tracker.should_count_view(client_ip, "webtoon", webtoon.id):
-        # İlk defa görüntüleniyor (veya 1 saat geçmiş), sayacı artır
         if webtoon.view_count is None:
             webtoon.view_count = 0
         webtoon.view_count += 1
@@ -92,59 +99,43 @@ def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Ses
 def webtoon_ekle(
     baslik: str = Form(...),
     ozet: str = Form(...),
-    # 👇 Kapak resmi (Zorunlu)
     resim: UploadFile = File(...), 
-    # 👇 Banner resmi (İsteğe bağlı - None olabilir)
     banner: UploadFile = File(None), 
     source_url: str = Form(None),
     series_type: str = Form("WEBTOON"),
-
     db: Session = Depends(get_db),
-    # Eğer admin sistemini henüz kurmadıysan burayı geçici olarak get_db yapabilirsin:
-    # current_user: models.User = Depends(get_current_admin) 
+    current_user: models.User = Depends(get_current_admin),
 ):
-    # --- 1. Slug Oluştur (URL için gerekli) ---
+    # --- 1. Slug Oluştur ---
     yeni_slug = slug_olustur(baslik)
-    
-    # Slug çakışması kontrolü (Aynı isimde webtoon var mı?)
-    # SQL Server hatasını önlemek için slug uzunluğu kontrol altında
     if len(yeni_slug) > 250:
         yeni_slug = yeni_slug[:250]
 
     if db.query(models.Webtoon).filter(models.Webtoon.slug == yeni_slug).first():
-        yeni_slug = f"{yeni_slug}-{uuid.uuid4().hex[:4]}" # Sonuna rastgele kod ekle
+        yeni_slug = f"{yeni_slug}-{uuid.uuid4().hex[:4]}"
 
-    # --- 2. Klasörleri Hazırla ---
-    # static klasörü backend'in ana dizininde olmalı
+    # --- 2. Kapak ve Banner Resmini Doğrula ve Kaydet ---
     kapak_klasoru = "static/covers"
     banner_klasoru = "static/banners"
 
-    os.makedirs(kapak_klasoru, exist_ok=True)
-    os.makedirs(banner_klasoru, exist_ok=True)
+    kapak_yolu = validate_and_save_image(resim, kapak_klasoru, max_bytes=15 * 1024 * 1024)
 
-    # --- 3. Kapak Resmini Kaydet ---
-    dosya_uzantisi = resim.filename.split(".")[-1]
-    yeni_dosya_adi = f"{uuid.uuid4()}.{dosya_uzantisi}"
-    kapak_yolu = f"{kapak_klasoru}/{yeni_dosya_adi}"
+    banner_yolu = None
+    if banner and banner.filename:
+        try:
+            banner_yolu = validate_and_save_image(banner, banner_klasoru, max_bytes=15 * 1024 * 1024, prefix="banner-")
+        except Exception:
+            if kapak_yolu and os.path.exists(kapak_yolu):
+                try:
+                    os.remove(kapak_yolu)
+                except OSError:
+                    pass
+            raise
 
-    with open(kapak_yolu, "wb") as buffer:
-        shutil.copyfileobj(resim.file, buffer)
-
-    # --- 4. Banner Resmini Kaydet (Eğer yüklendiyse) ---
-    banner_yolu = None 
-    
-    if banner:
-        banner_uzantisi = banner.filename.split(".")[-1]
-        yeni_banner_adi = f"{uuid.uuid4()}.{banner_uzantisi}"
-        banner_yolu = f"{banner_klasoru}/{yeni_banner_adi}"
-        
-        with open(banner_yolu, "wb") as buffer:
-            shutil.copyfileobj(banner.file, buffer)
-
-    # --- 5. Veritabanına Kayıt ---
+    # --- 3. Veritabanına Kayıt ---
     yeni = models.Webtoon(
         title=baslik, 
-        slug=yeni_slug,     # 👈 SLUG EKLENDİ (String 255 ile uyumlu)
+        slug=yeni_slug,
         summary=ozet, 
         cover_image=kapak_yolu, 
         banner_image=banner_yolu, 

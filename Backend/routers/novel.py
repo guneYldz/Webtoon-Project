@@ -1,22 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, status, Request, Response
-from sqlalchemy.orm import Session, selectinload
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Query, status, Request, Response
+from sqlalchemy.orm import Session, selectinload, defer
 from sqlalchemy import desc, asc
-from typing import List
-import shutil
-import os
-import uuid
+from typing import List, Optional
 
 # Proje dosyaları
 from database import get_db
 import models 
 import schemas
-from routers.auth import get_current_user
-from utils.chapter_title import default_chapter_title, chapter_display_label 
+from routers.auth import get_current_user, get_optional_user
+from utils.chapter_title import default_chapter_title, chapter_display_label
+from utils.media import validate_and_save_image
+from utils.sanitize import sanitize_novel_html
 
 router = APIRouter(
     prefix="/novels",
     tags=["Novels (Romanlar)"]
 )
+
+
+def _get_client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip")
+    if xri:
+        return xri.strip()
+    return request.client.host if request.client else "unknown"
+
 
 # --- YETKİ KONTROL ---
 def check_editor_permission(user: models.User):
@@ -28,36 +41,46 @@ def check_editor_permission(user: models.User):
 
 # --- YARDIMCI FONSİYONLAR ---
 def get_novels_logic(db: Session, limit: int, skip: int):
-    # O P T I M İ Z A S Y O N EKLENDİ (N+1 Sorunu Çözümü)
-    from sqlalchemy.orm import selectinload
-
+    # RAM optimizasyonu: NovelChapter.content sütununu defer ile hariç tut ve yalnızca yayındaki bölümleri yükle
     query = db.query(models.Novel).filter(models.Novel.is_published == True).options(
-        selectinload(models.Novel.chapters),
+        selectinload(models.Novel.chapters.and_(models.NovelChapter.is_published == True)).defer(
+            models.NovelChapter.content
+        ),
         selectinload(models.Novel.categories),
     )
     novels = query.order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
     
-    # 🚀 Frontend Performans Yaması:
     for n in novels:
-        # Bölümleri numaraya göre tersten (büyükten küçüğe) sırala ve ilk 3'ü al
-        # ⚠️ CRITICAL SİGORTA: `chapter_number` None ise -1 kabul et
         try:
-            n.chapters.sort(key=lambda x: (float(x.chapter_number) if x.chapter_number is not None else -1.0), reverse=True)
+            sorted_chapters = sorted(
+                list(n.chapters),
+                key=lambda x: (float(x.chapter_number) if x.chapter_number is not None else -1.0),
+                reverse=True,
+            )[:3]
         except Exception:
-            # Sort başarısız olursa (örn: veritabanı hatası) sıralamadan devam et
-            pass
-        n.chapters = n.chapters[:3]
+            sorted_chapters = list(n.chapters)[:3]
+        _ = list(n.categories)
+        db.expunge(n)
+        n.chapters = sorted_chapters
         
     return novels
 
 # 1. LİSTELEME
 @router.get("/", response_model=List[schemas.NovelCard])
-def novelleri_getir(db: Session = Depends(get_db), limit: int = 100, skip: int = 0):
+def novelleri_getir(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=1, le=1000),
+    skip: int = Query(default=0, ge=0),
+):
     return get_novels_logic(db, limit, skip)
 
 # 1.1 LİSTELEME (SLASHSIZ ERİŞİM İÇİN ALIAS - CORS FIX)
-@router.get("", include_in_schema=False)
-def novelleri_getir_no_slash(db: Session = Depends(get_db), limit: int = 100, skip: int = 0):
+@router.get("", include_in_schema=False, response_model=List[schemas.NovelCard])
+def novelleri_getir_no_slash(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=1, le=1000),
+    skip: int = Query(default=0, ge=0),
+):
     return get_novels_logic(db, limit, skip)
 
 # 2. TEK ROMAN GETİR
@@ -71,25 +94,30 @@ def novel_detay(slug_or_id: str, response: Response, request: Request, db: Sessi
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
     
-    
-    # 🔥 YENİ SİSTEM: IP Tabanlı View Count Rate Limiting
+    # 🔥 IP Tabanlı View Count Rate Limiting
     from utils.view_tracker import view_tracker
     
-    client_ip = request.client.host
+    client_ip = _get_client_ip(request)
     
-    # ViewTracker ile kontrol: Bu IP son 1 saat içinde bu romanı gördü mü?
     if view_tracker.should_count_view(client_ip, "novel", novel.id):
-        # İlk defa görüntüleniyor (veya 1 saat geçmiş), sayacı artır
         if getattr(novel, 'view_count', None) is None:
             novel.view_count = 0
         novel.view_count += 1
         db.commit()
     
-    chapters = db.query(models.NovelChapter).filter(
-        models.NovelChapter.novel_id == novel.id,
-        models.NovelChapter.is_published == True
-    ).order_by(asc(models.NovelChapter.chapter_number)).all()
+    chapters = (
+        db.query(models.NovelChapter)
+        .options(defer(models.NovelChapter.content))
+        .filter(
+            models.NovelChapter.novel_id == novel.id,
+            models.NovelChapter.is_published == True,
+        )
+        .order_by(asc(models.NovelChapter.chapter_number))
+        .all()
+    )
     
+    _ = list(novel.categories)
+    db.expunge(novel)
     novel.chapters = chapters
     return novel
 
@@ -107,17 +135,12 @@ def novel_ekle(
 ):
     check_editor_permission(current_user)
 
-    cover_path = None
-    if cover:
-        os.makedirs("static/novel_covers", exist_ok=True)
-        ext = cover.filename.split(".")[-1]
-        filename = f"{uuid.uuid4()}.{ext}"
-        cover_path = f"static/novel_covers/{filename}"
-        with open(cover_path, "wb") as buffer:
-            shutil.copyfileobj(cover.file, buffer)
-
     if db.query(models.Novel).filter(models.Novel.slug == slug).first():
         raise HTTPException(status_code=400, detail="Bu slug zaten kullanılıyor.")
+
+    cover_path = None
+    if cover and cover.filename:
+        cover_path = validate_and_save_image(cover, "static/novel_covers", max_bytes=15 * 1024 * 1024)
 
     yeni_novel = models.Novel(
         title=title,
@@ -147,6 +170,10 @@ def novel_bolum_ekle(
 ):
     check_editor_permission(current_user)
 
+    novel = db.query(models.Novel).filter(models.Novel.id == novel_id).first()
+    if not novel:
+        raise HTTPException(status_code=404, detail="Roman bulunamadı!")
+
     mevcut_bolum = db.query(models.NovelChapter).filter(
         models.NovelChapter.novel_id == novel_id,
         models.NovelChapter.chapter_number == chapter_number
@@ -159,12 +186,13 @@ def novel_bolum_ekle(
         )
 
     title = default_chapter_title(title, chapter_number)
+    sanitized_content = sanitize_novel_html(content)
 
     yeni_bolum = models.NovelChapter(
         novel_id=novel_id,
         chapter_number=chapter_number,
         title=title,
-        content=content,
+        content=sanitized_content,
         is_published=True,
         view_count=0
     )
@@ -176,80 +204,97 @@ def novel_bolum_ekle(
     # Favorisinde bu roman olanlara bildirim
     try:
         from routers.notifications import notify_favorite_users_new_chapter
-        novel = db.query(models.Novel).filter(models.Novel.id == novel_id).first()
-        if novel:
-            ch_label = chapter_display_label(title, chapter_number)
-            notify_favorite_users_new_chapter(
-                db,
-                novel_id=novel.id,
-                series_title=novel.title,
-                chapter_label=ch_label,
-                link=f"/novel/{novel.slug}/bolum/{chapter_number}",
-            )
-            db.commit()
-    except Exception as e:
-        print(f"⚠️ Favori bildirim hatası (novel): {e}")
+        ch_label = chapter_display_label(title, chapter_number)
+        notify_favorite_users_new_chapter(
+            db,
+            novel_id=novel.id,
+            series_title=novel.title,
+            chapter_label=ch_label,
+            link=f"/novel/{novel.slug}/bolum/{chapter_number}",
+        )
+        db.commit()
+    except Exception:
+        pass
 
     return {"durum": "Başarılı", "mesaj": "Bölüm eklendi"}
 
 # 5. OKUMA SAYFASI (🔥 FİNAL VERSİYON: KORUMALI & HYBRID LOCATOR 🔥)
 @router.get("/{slug}/chapters/{chapter_identifier}")
-def novel_bolum_oku(slug: str, chapter_identifier: str, request: Request, response: Response, db: Session = Depends(get_db)):
-    
+def novel_bolum_oku(
+    slug: str,
+    chapter_identifier: str,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+):
+    is_privileged = bool(
+        current_user and current_user.is_active and current_user.role in ("admin", "editor")
+    )
+
     # Romanı bul
-    novel = db.query(models.Novel).filter(models.Novel.slug == slug).first()
+    novel_query = db.query(models.Novel).filter(models.Novel.slug == slug)
+    if not is_privileged:
+        novel_query = novel_query.filter(models.Novel.is_published == True)
+    novel = novel_query.first()
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
 
     chapter = None
 
     # 1. Deneme: Identifier bir Float ise (Bölüm Numarası)
-    is_float = False
     try:
         c_num = float(chapter_identifier)
-        is_float = True
-        chapter = db.query(models.NovelChapter).filter(
+        ch_q = db.query(models.NovelChapter).filter(
             models.NovelChapter.novel_id == novel.id,
             models.NovelChapter.chapter_number == c_num
-        ).first()
+        )
+        if not is_privileged:
+            ch_q = ch_q.filter(models.NovelChapter.is_published == True)
+        chapter = ch_q.first()
     except ValueError:
         pass
 
     # 2. Deneme: Eğer bulunamadıysa ve Identifier bir Integer ise (ID olabilir)
     if not chapter and chapter_identifier.isdigit():
         c_id = int(chapter_identifier)
-        chapter = db.query(models.NovelChapter).filter(
+        ch_q = db.query(models.NovelChapter).filter(
             models.NovelChapter.novel_id == novel.id,
             models.NovelChapter.id == c_id
-        ).first()
+        )
+        if not is_privileged:
+            ch_q = ch_q.filter(models.NovelChapter.is_published == True)
+        chapter = ch_q.first()
 
     if not chapter:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı (ID veya Numara ile eşleşmedi)")
 
-    # 🔥 YENİ SİSTEM: IP Tabanlı View Count Rate Limiting
+    # 🔥 IP Tabanlı View Count Rate Limiting
     from utils.view_tracker import view_tracker
     
-    client_ip = request.client.host
+    client_ip = _get_client_ip(request)
     
-    # Chapter view count (bölüm bazında)
     if view_tracker.should_count_view(client_ip, "novel_chapter", chapter.id):
         if chapter.view_count is None:
             chapter.view_count = 0
         chapter.view_count += 1
         db.commit()
-    # ------------------------------------
 
-
-    # Navigasyon
-    prev_ch = db.query(models.NovelChapter).filter(
+    # Navigasyon (yayınlanmamış taslak bölümleri normal okura sızdırma)
+    prev_q = db.query(models.NovelChapter).filter(
         models.NovelChapter.novel_id == novel.id,
         models.NovelChapter.chapter_number < chapter.chapter_number
-    ).order_by(desc(models.NovelChapter.chapter_number)).first()
-
-    next_ch = db.query(models.NovelChapter).filter(
+    )
+    next_q = db.query(models.NovelChapter).filter(
         models.NovelChapter.novel_id == novel.id,
         models.NovelChapter.chapter_number > chapter.chapter_number
-    ).order_by(asc(models.NovelChapter.chapter_number)).first()
+    )
+    if not is_privileged:
+        prev_q = prev_q.filter(models.NovelChapter.is_published == True)
+        next_q = next_q.filter(models.NovelChapter.is_published == True)
+
+    prev_ch = prev_q.order_by(desc(models.NovelChapter.chapter_number)).first()
+    next_ch = next_q.order_by(asc(models.NovelChapter.chapter_number)).first()
 
     return {
         "id": chapter.id,
@@ -324,7 +369,7 @@ def novel_bolum_guncelle(
         num = new_chapter_number if new_chapter_number is not None else chapter.chapter_number
         chapter.title = default_chapter_title(title, num)
     if content is not None:
-        chapter.content = content
+        chapter.content = sanitize_novel_html(content)
     if is_published is not None:
         chapter.is_published = is_published
     

@@ -3,14 +3,27 @@ from sqlalchemy.orm import Session
 from typing import List
 import shutil
 import os
-import uuid
 import datetime
 from fastapi import Response
 import models
 import schemas
 from database import get_db
-from routers.auth import get_current_admin, get_current_editor
+from routers.auth import get_current_admin
 from utils.chapter_title import default_chapter_title, chapter_display_label
+from utils.media import validate_and_save_image
+
+
+def _get_client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip")
+    if xri:
+        return xri.strip()
+    return request.client.host if request.client else "unknown"
 
 
 # --- YARDIMCI: DOĞAL SIRALAMA (1, 2, 10 SORUNU İÇİN) ---
@@ -56,7 +69,7 @@ def create_episode(
 
     title = default_chapter_title(title, episode_number)
 
-    # C. Bölümü Veritabanına Kaydet
+    # C. Bölümü Veritabanına Ekle (flush ile atomik ID al)
     yeni_bolum = models.WebtoonEpisode(
         webtoon_id=webtoon_id,
         title=title,
@@ -66,44 +79,45 @@ def create_episode(
         view_count=0
     )
     db.add(yeni_bolum)
-    
-    # Webtoon'un tarihini güncelle (Anasayfada üste çıksın)
-    webtoon.created_at = datetime.datetime.utcnow()
-    
-    db.commit()
-    db.refresh(yeni_bolum) # ID oluştu
+    db.flush()
 
-    # D. Eğer Resim Varsa Yükle (MANGA Modu) 🖼️
+    saved_count = 0
+    # D. Eğer Resim Varsa Doğrula ve Yükle (MANGA Modu) 🖼️
     if resimler:
         klasor_yolu = f"static/images/{webtoon_id}/{yeni_bolum.id}"
-        if not os.path.exists(klasor_yolu):
-            os.makedirs(klasor_yolu)
+        try:
+            resimler.sort(key=lambda x: natural_sort_key(x.filename or ""))
+        except Exception:
+            resimler.sort(key=lambda x: x.filename or "")
 
         try:
-            resimler.sort(key=lambda x: natural_sort_key(x.filename))
-        except:
-            resimler.sort(key=lambda x: x.filename)
+            for index, resim in enumerate(resimler):
+                if not resim.filename:
+                    continue
 
-        for index, resim in enumerate(resimler):
-            if not resim.filename:
-                continue
+                kayit_yolu = validate_and_save_image(
+                    resim,
+                    klasor_yolu,
+                    max_bytes=15 * 1024 * 1024,
+                    prefix=f"page_{index + 1}_",
+                )
+                saved_count += 1
 
-            uzanti = resim.filename.split(".")[-1]
-            yeni_ad = f"page_{index+1}_{uuid.uuid4().hex[:8]}.{uzanti}"
-            kayit_yolu = f"{klasor_yolu}/{yeni_ad}"
+                db_img = models.EpisodeImage(
+                    episode_id=yeni_bolum.id,
+                    image_url=kayit_yolu,
+                    page_order=saved_count
+                )
+                db.add(db_img)
+        except Exception:
+            db.rollback()
+            shutil.rmtree(klasor_yolu, ignore_errors=True)
+            raise
 
-            with open(kayit_yolu, "wb") as buffer:
-                shutil.copyfileobj(resim.file, buffer)
-
-            # Veritabanına kaydet
-            db_img = models.EpisodeImage(
-                episode_id=yeni_bolum.id,
-                image_url=kayit_yolu,
-                page_order=index + 1
-            )
-            db.add(db_img)
-        
-        db.commit()
+    # Webtoon'un tarihini güncelle (Anasayfada üste çıksın)
+    webtoon.created_at = datetime.datetime.utcnow()
+    db.commit()
+    db.refresh(yeni_bolum)
 
     # Favorisinde bu webtoon olanlara bildirim
     try:
@@ -117,13 +131,13 @@ def create_episode(
             link=f"/webtoon/{webtoon.slug or webtoon.id}/bolum/{yeni_bolum.id}",
         )
         db.commit()
-    except Exception as e:
-        print(f"⚠️ Favori bildirim hatası (webtoon): {e}")
+    except Exception:
+        pass
 
     return {
         "mesaj": "Bölüm Başarıyla Eklendi", 
         "bolum_id": yeni_bolum.id, 
-        "resim_sayisi": len(resimler) if resimler else 0,
+        "resim_sayisi": saved_count,
         "tur": "NOVEL" if content_text else "MANGA"
     }
 
@@ -140,28 +154,22 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
     
-    
-    # 🔥 YENİ SİSTEM: IP Tabanlı View Count Rate Limiting
+    # 🔥 IP Tabanlı View Count Rate Limiting
     from utils.view_tracker import view_tracker
     
-    client_ip = request.client.host
+    client_ip = _get_client_ip(request)
     
-    # Episode view count (bölüm bazında)
     if view_tracker.should_count_view(client_ip, "episode", episode_id):
-        # İlk kez izleniyor veya 1 saat geçmiş
         if bolum.view_count is None:
             bolum.view_count = 0
         bolum.view_count += 1
         
-        # Webtoon view count da artır (bölüm okunduğunda seri de sayılır)
         if bolum.webtoon:
             if bolum.webtoon.view_count is None:
                 bolum.webtoon.view_count = 0
             bolum.webtoon.view_count += 1
         
         db.commit()
-    # ----------------------------------------------------
-
 
     # 3. Navigasyon (Önceki/Sonraki Bölüm)
     sonraki_bolum = db.query(models.WebtoonEpisode).filter(
@@ -176,7 +184,7 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
         models.WebtoonEpisode.is_published == True
     ).order_by(models.WebtoonEpisode.episode_number.desc()).first()
 
-    # 4. Resim Listesi Oluşturma (Aynı mantık devam ediyor...)
+    # 4. Resim Listesi Oluşturma (Göreli static/... URL'leri)
     image_urls = []
     
     # YÖNTEM A: Veritabanı
@@ -187,15 +195,15 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
 
     if db_images:
         for img in db_images:
-            full_url = str(request.base_url) + img.image_url
-            image_urls.append(full_url)
+            rel_url = (img.image_url or "").replace("\\", "/").lstrip("/")
+            if rel_url:
+                image_urls.append(rel_url)
     
     # YÖNTEM B: Klasör (Bot)
     if not image_urls and bolum.webtoon:
         slug = bolum.webtoon.slug
         bot_base_path = f"static/images/{slug}"
         if not slug or not os.path.exists(bot_base_path):
-            import re
             text_slug = bolum.webtoon.title.lower()
             text_slug = text_slug.replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
             text_slug = re.sub(r'[^a-z0-9\s-]', '', text_slug)
@@ -208,20 +216,25 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
             files = os.listdir(bot_folder_path)
             try:
                 files.sort(key=natural_sort_key)
-            except:
+            except Exception:
                 files.sort()
 
             for file in files:
                 if file.endswith((".webp", ".jpg", ".png", ".jpeg")):
-                    url = f"{str(request.base_url)}static/images/{slug}/bolum-{chap_num}/{file}"
-                    image_urls.append(url)
+                    image_urls.append(f"static/images/{slug}/bolum-{chap_num}/{file}")
+
+    cover_rel = (
+        bolum.webtoon.cover_image.replace("\\", "/").lstrip("/")
+        if bolum.webtoon and bolum.webtoon.cover_image
+        else None
+    )
 
     return {
         "id": bolum.id,
         "webtoon_id": bolum.webtoon_id,
         "webtoon_title": bolum.webtoon.title if bolum.webtoon else "Bilinmiyor",
         "webtoon_slug": bolum.webtoon.slug if bolum.webtoon else "",
-        "webtoon_cover": f"{request.base_url}{bolum.webtoon.cover_image}" if bolum.webtoon and bolum.webtoon.cover_image else None,
+        "webtoon_cover": cover_rel,
         "series_type": (
             getattr(bolum.webtoon.type, "value", bolum.webtoon.type)
             if bolum.webtoon and getattr(bolum.webtoon, "type", None)
@@ -242,7 +255,7 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
 def bolum_sil(
     episode_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_editor),
+    current_admin: models.User = Depends(get_current_admin),
 ):
     bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == episode_id).first()
     if not bolum:

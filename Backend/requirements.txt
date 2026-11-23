@@ -33,3 +33,6 @@ itsdangerous
 wtforms
 markupsafe
 python-dotenv
+Pillow>=11.0.0
+nh3>=0.2.20
+email-validator>=2.2.0

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from routers.auth import get_current_user 
 import models
@@ -100,7 +100,15 @@ def check_favorite_generic(type: str, id: int,
 # 3. FAVORİLERİMİ LİSTELE (PROFİL İÇİN)
 # ==========================================
 def _favori_listesi(db: Session, user_id: int):
-    favoriler = db.query(models.Favorite).filter(models.Favorite.user_id == user_id).all()
+    favoriler = (
+        db.query(models.Favorite)
+        .options(
+            joinedload(models.Favorite.webtoon),
+            joinedload(models.Favorite.novel),
+        )
+        .filter(models.Favorite.user_id == user_id)
+        .all()
+    )
 
     sonuc = []
     for fav in favoriler:
@@ -111,7 +119,7 @@ def _favori_listesi(db: Session, user_id: int):
                 "tag": "MANGA" if str(getattr(fav.webtoon.type, "value", fav.webtoon.type) or "").upper() == "MANGA" else "WEBTOON",
                 "baslik": fav.webtoon.title,
                 "resim": fav.webtoon.cover_image,
-                "slug": f"/webtoon/{fav.webtoon.id}"
+                "slug": f"/webtoon/{fav.webtoon.slug or fav.webtoon.id}"
             })
         elif fav.novel:
             sonuc.append({

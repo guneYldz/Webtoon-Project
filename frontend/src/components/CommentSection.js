@@ -401,6 +401,16 @@ export default function CommentSection({
   const renderCommentBody = (c, isReply = false, rootId = null) => {
     const replyTarget = rootId || c.id;
     const formKey = c.id;
+    const isOwnComment =
+      Boolean(currentUser) &&
+      ((c.user_id !== undefined &&
+        c.user_id !== null &&
+        currentUser.id !== undefined &&
+        Number(c.user_id) === Number(currentUser.id)) ||
+        (c.user_username &&
+          currentUser.username &&
+          c.user_username === currentUser.username));
+    const canDelete = canModerate || isOwnComment;
 
     return (
       <div className="flex gap-3 sm:gap-3.5">
@@ -425,7 +435,7 @@ export default function CommentSection({
               </span>
             </div>
 
-            {canModerate && (
+            {canDelete && (
               <button
                 type="button"
                 onClick={() => handleDeleteComment(c.id)}

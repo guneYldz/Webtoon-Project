@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
@@ -139,8 +139,8 @@ class NovelChapterBase(BaseModel):
     novel_cover: Optional[str] = None
 
     # Navigasyon
-    prev_chapter: Optional[int] = None
-    next_chapter: Optional[int] = None
+    prev_chapter: Optional[float] = None
+    next_chapter: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -243,6 +243,33 @@ class UserCreate(UserBase):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    email: str
+    role: str = "user"
+    is_active: bool = True
+    profile_image: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class RegisterRequest(BaseModel):
+    kullanici_adi: str = Field(..., min_length=2, max_length=50)
+    eposta: EmailStr
+    sifre: str = Field(..., min_length=6, max_length=128)
+
+    @field_validator("kullanici_adi")
+    @classmethod
+    def strip_username(cls, v: str) -> str:
+        cleaned = v.strip()
+        if len(cleaned) < 2:
+            raise ValueError("Kullanıcı adı en az 2 karakter olmalıdır.")
+        return cleaned
+
 
 class UserResponse(UserBase):
     id: int

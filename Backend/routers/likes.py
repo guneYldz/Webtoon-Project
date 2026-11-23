@@ -17,7 +17,7 @@ def begeni_islem(request: schemas.LikeCreate,
                  db: Session = Depends(get_db)):
     
     # 1. Bölüm var mı?
-    bolum = db.query(models.Episode).filter(models.Episode.id == request.episode_id).first()
+    bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == request.episode_id).first()
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı!")
 

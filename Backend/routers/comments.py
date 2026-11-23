@@ -25,6 +25,7 @@ class CommentCreate(BaseModel):
 class CommentResponse(BaseModel):
     id: int
     content: str
+    user_id: Optional[int] = None
     user_username: str
     user_profile_image: Optional[str] = None
     parent_id: Optional[int] = None
@@ -37,6 +38,7 @@ def _comment_to_dict(c):
     return {
         "id": c.id,
         "content": c.content,
+        "user_id": c.user_id,
         "user_username": c.user.username if c.user else "Silinmiş Kullanıcı",
         "user_profile_image": c.user.profile_image if c.user else None,
         "parent_id": c.parent_id,
@@ -80,6 +82,12 @@ def create_comment(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    cleaned_content = (comment.content or "").strip()
+    if not cleaned_content:
+        raise HTTPException(status_code=400, detail="Yorum içeriği boş olamaz.")
+    if len(cleaned_content) > 2000:
+        raise HTTPException(status_code=400, detail="Yorum en fazla 2000 karakter olabilir.")
+
     novel_chapter_id = comment.novel_chapter_id
     webtoon_episode_id = comment.webtoon_episode_id
 
@@ -90,9 +98,20 @@ def create_comment(
             raise HTTPException(status_code=404, detail="Yanıt verilen yorum bulunamadı.")
         novel_chapter_id = parent.novel_chapter_id
         webtoon_episode_id = parent.webtoon_episode_id
+    else:
+        if novel_chapter_id is None and webtoon_episode_id is None:
+            raise HTTPException(status_code=400, detail="Yorum için bölüm bilgisi gereklidir.")
+        if webtoon_episode_id is not None:
+            episode = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == webtoon_episode_id).first()
+            if not episode:
+                raise HTTPException(status_code=404, detail="Yorum yapılan webtoon bölümü bulunamadı.")
+        if novel_chapter_id is not None:
+            chapter = db.query(models.NovelChapter).filter(models.NovelChapter.id == novel_chapter_id).first()
+            if not chapter:
+                raise HTTPException(status_code=404, detail="Yorum yapılan roman bölümü bulunamadı.")
 
     new_comment = models.Comment(
-        content=comment.content,
+        content=cleaned_content,
         user_id=current_user.id,
         novel_chapter_id=novel_chapter_id,
         webtoon_episode_id=webtoon_episode_id,
@@ -134,6 +153,7 @@ def create_comment(
 @router.get("/webtoon/{episode_id}", response_model=List[CommentResponse])
 def get_webtoon_comments(episode_id: int, db: Session = Depends(get_db)):
     comments = db.query(models.Comment)\
+        .options(joinedload(models.Comment.user))\
         .filter(models.Comment.webtoon_episode_id == episode_id)\
         .order_by(desc(models.Comment.created_at))\
         .all()
@@ -144,6 +164,7 @@ def get_webtoon_comments(episode_id: int, db: Session = Depends(get_db)):
 @router.get("/novel/{chapter_id}", response_model=List[CommentResponse])
 def get_novel_comments(chapter_id: int, db: Session = Depends(get_db)):
     comments = db.query(models.Comment)\
+        .options(joinedload(models.Comment.user))\
         .filter(models.Comment.novel_chapter_id == chapter_id)\
         .order_by(desc(models.Comment.created_at))\
         .all()
@@ -166,19 +187,21 @@ def get_user_comments(username: str, limit: int = 100, db: Session = Depends(get
 
     return [{**_comment_to_dict(c), **_seri_bilgisi(c)} for c in comments]
 
-# 5. YORUM SİL (Admin/Editor — yorum paneli için)
+# 5. YORUM SİL (Yorum sahibi veya Admin/Editor)
 @router.delete("/{comment_id}")
 def delete_comment(
     comment_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    if current_user.role not in ["admin", "editor"]:
-        raise HTTPException(status_code=403, detail="Bu işlem için yetkiniz yok.")
-
     comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Yorum bulunamadı")
+
+    is_staff = current_user.role in ["admin", "editor"]
+    is_owner = comment.user_id == current_user.id
+    if not (is_staff or is_owner):
+        raise HTTPException(status_code=403, detail="Bu işlem için yetkiniz yok.")
 
     # Önce bu yoruma verilen yanıtları sil (FK kısıtlaması patlamasın)
     db.query(models.Comment).filter(models.Comment.parent_id == comment_id).delete()

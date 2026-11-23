@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Query
-from sqlalchemy.orm import Session
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import or_, func
 from database import get_db 
+import logging
 import models 
-import shutil
+import schemas
 import os
 import uuid
 from typing import Optional, List
-import traceback
 from routers.auth import get_current_admin  # ADMIN AUTH
-from sqlalchemy.orm import selectinload
 from fastapi.encoders import jsonable_encoder
+from utils.media import validate_and_save_image
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/admin",
@@ -20,11 +23,33 @@ router = APIRouter(
 UPLOAD_DIR = "static/covers"
 UPLOAD_DIR_BANNERS = "static/banners"
 UPLOAD_DIR_ANNOUNCEMENTS = "static/announcements"
-ALLOWED_ANNOUNCEMENT_EXTS = {"jpg", "jpeg", "png", "webp", "gif"}
+ALLOWED_ROLES = {"user", "editor", "admin"}
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR_BANNERS, exist_ok=True)
 os.makedirs(UPLOAD_DIR_ANNOUNCEMENTS, exist_ok=True)
+
+
+def _validate_announcement_link(link: Optional[str]) -> Optional[str]:
+    if link is None:
+        return None
+    cleaned = link.strip()
+    if not cleaned:
+        return None
+    if (cleaned.startswith("/") and not cleaned.startswith("//")) or cleaned.startswith(("http://", "https://")):
+        return cleaned
+    raise HTTPException(
+        status_code=400,
+        detail="Duyuru bağlantısı '/', 'http://' veya 'https://' ile başlamalıdır.",
+    )
+
+
+def _remove_file_quietly(path: Optional[str]):
+    if path and os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def parse_category_ids(raw: Optional[str]) -> Optional[List[int]]:
@@ -88,34 +113,20 @@ async def create_webtoon(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
-    print(f"⚡ Admin isteği geldi: {title}")
-    
     cover_path = None
     banner_path = None
 
-    if cover_image and cover_image.filename:
-        ext = cover_image.filename.split(".")[-1]
-        new_name = f"{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR}/{new_name}"
-        
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(cover_image.file, buffer)
-        
-        cover_path = file_path.replace("\\", "/")
-        print(f"   ✅ Kapak kaydedildi: {cover_path}")
-
-    if banner_image and banner_image.filename:
-        ext = banner_image.filename.split(".")[-1]
-        new_name = f"banner-{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR_BANNERS}/{new_name}"
-        
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(banner_image.file, buffer)
-            
-        banner_path = file_path.replace("\\", "/")
-        print(f"   ✅ Banner kaydedildi: {banner_path}")
-
     try:
+        if cover_image and cover_image.filename:
+            cover_path = await run_in_threadpool(
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+            )
+
+        if banner_image and banner_image.filename:
+            banner_path = await run_in_threadpool(
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+            )
+
         base_slug = title.lower().replace(" ", "-").replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
         random_suffix = str(uuid.uuid4())[:8]
         slug = f"{base_slug}-{random_suffix}"
@@ -143,10 +154,17 @@ async def create_webtoon(
 
         return {"status": "success", "message": "Webtoon başarıyla oluşturuldu!", "data": with_categories(new_webtoon)}
 
-    except Exception as e:
-        print("❌ HATA OLUŞTU:")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Sunucu Hatası: {str(e)}")
+    except HTTPException:
+        db.rollback()
+        _remove_file_quietly(cover_path)
+        _remove_file_quietly(banner_path)
+        raise
+    except Exception:
+        db.rollback()
+        _remove_file_quietly(cover_path)
+        _remove_file_quietly(banner_path)
+        logger.exception("Webtoon oluşturma hatası")
+        raise HTTPException(status_code=500, detail="Webtoon oluşturulurken sunucu hatası oluştu.")
 
 
 @router.get("/webtoons")
@@ -160,7 +178,6 @@ async def list_webtoons(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
-    print(f"🔍 DEBUG: list_webtoons called by {current_admin.username}")
     query = db.query(models.Webtoon)
     
     if search:
@@ -182,7 +199,6 @@ async def list_webtoons(
     offset = (page - 1) * limit
     webtoons = query.order_by(models.Webtoon.created_at.desc()).offset(offset).limit(limit).all()
     
-    print(f"   ✅ Total found: {total}")
     try:
         encoded = jsonable_encoder(webtoons)
         for i, w in enumerate(webtoons):
@@ -208,7 +224,6 @@ async def list_admin_webtoons(
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
     """Basit liste (User'ın istediği endpoint)"""
-    print(f"🔍 DEBUG: list_admin_webtoons called by {current_admin.username}")
     webtoons = db.query(models.Webtoon).order_by(models.Webtoon.id.desc()).all()
     return webtoons
 
@@ -245,8 +260,6 @@ async def update_webtoon(
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
     
-    print(f"DEBUG: update_webtoon source_url='{source_url}' (type: {type(source_url)})")
-    
     if title is not None:
         webtoon.title = title
     if summary is not None:
@@ -261,34 +274,49 @@ async def update_webtoon(
         webtoon.source_url = source_url.strip() or None  # Boş string → NULL
     if series_type is not None:
         webtoon.type = parse_comic_type(series_type)
-    
-    if cover_image and cover_image.filename:
-        ext = cover_image.filename.split(".")[-1]
-        new_name = f"{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR}/{new_name}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(cover_image.file, buffer)
-        webtoon.cover_image = file_path.replace("\\", "/")
-    
-    if banner_image and banner_image.filename:
-        ext = banner_image.filename.split(".")[-1]
-        new_name = f"banner-{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR_BANNERS}/{new_name}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(banner_image.file, buffer)
-        webtoon.banner_image = file_path.replace("\\", "/")
 
-    ids = parse_category_ids(category_ids)
-    if ids is not None:
-        set_item_categories(db, webtoon, ids)
-    
+    new_cover_path = None
+    new_banner_path = None
+    old_cover_path = webtoon.cover_image
+    old_banner_path = webtoon.banner_image
+
     try:
+        if cover_image and cover_image.filename:
+            new_cover_path = await run_in_threadpool(
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+            )
+            webtoon.cover_image = new_cover_path
+
+        if banner_image and banner_image.filename:
+            new_banner_path = await run_in_threadpool(
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+            )
+            webtoon.banner_image = new_banner_path
+
+        ids = parse_category_ids(category_ids)
+        if ids is not None:
+            set_item_categories(db, webtoon, ids)
+
         db.commit()
         db.refresh(webtoon)
+
+        if new_cover_path and old_cover_path and old_cover_path != new_cover_path:
+            _remove_file_quietly(old_cover_path)
+        if new_banner_path and old_banner_path and old_banner_path != new_banner_path:
+            _remove_file_quietly(old_banner_path)
+
         return {"status": "success", "message": "Webtoon güncellendi", "data": with_categories(webtoon)}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Güncelleme hatası: {str(e)}")
+        _remove_file_quietly(new_cover_path)
+        _remove_file_quietly(new_banner_path)
+        raise
+    except Exception:
+        db.rollback()
+        _remove_file_quietly(new_cover_path)
+        _remove_file_quietly(new_banner_path)
+        logger.exception("Webtoon güncelleme hatası (id=%s)", webtoon_id)
+        raise HTTPException(status_code=500, detail="Webtoon güncellenirken sunucu hatası oluştu.")
 
 
 @router.delete("/webtoons/{webtoon_id}")
@@ -305,9 +333,10 @@ async def delete_webtoon(
         db.delete(webtoon)
         db.commit()
         return {"status": "success", "message": f"'{webtoon.title}' silindi"}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Silme hatası: {str(e)}")
+        logger.exception("Webtoon silme hatası (id=%s)", webtoon_id)
+        raise HTTPException(status_code=500, detail="Webtoon silinirken sunucu hatası oluştu.")
 
 
 # ==================== NOVELS ====================
@@ -357,7 +386,6 @@ async def list_admin_novels(
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
     """Basit liste (Webtoon sayfasındaki gibi)"""
-    print(f"🔍 DEBUG: list_admin_novels called by {current_admin.username}")
     novels = db.query(models.Novel).order_by(models.Novel.id.desc()).all()
     return novels
 
@@ -392,23 +420,17 @@ async def create_novel(
     cover_path = None
     banner_path = None
 
-    if cover_image and cover_image.filename:
-        ext = cover_image.filename.split(".")[-1]
-        new_name = f"{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR}/{new_name}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(cover_image.file, buffer)
-        cover_path = file_path.replace("\\", "/")
-
-    if banner_image and banner_image.filename:
-        ext = banner_image.filename.split(".")[-1]
-        new_name = f"banner-{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR_BANNERS}/{new_name}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(banner_image.file, buffer)
-        banner_path = file_path.replace("\\", "/")
-
     try:
+        if cover_image and cover_image.filename:
+            cover_path = await run_in_threadpool(
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+            )
+
+        if banner_image and banner_image.filename:
+            banner_path = await run_in_threadpool(
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+            )
+
         base_slug = title.lower().replace(" ", "-").replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
         random_suffix = str(uuid.uuid4())[:8]
         slug = f"{base_slug}-{random_suffix}"
@@ -434,9 +456,17 @@ async def create_novel(
         db.commit()
         db.refresh(new_novel)
         return {"status": "success", "message": "Novel oluşturuldu", "data": with_categories(new_novel)}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Hata: {str(e)}")
+        _remove_file_quietly(cover_path)
+        _remove_file_quietly(banner_path)
+        raise
+    except Exception:
+        db.rollback()
+        _remove_file_quietly(cover_path)
+        _remove_file_quietly(banner_path)
+        logger.exception("Novel oluşturma hatası")
+        raise HTTPException(status_code=500, detail="Novel oluşturulurken sunucu hatası oluştu.")
 
 
 @router.put("/novels/{novel_id}")
@@ -459,8 +489,6 @@ async def update_novel(
     if not novel:
         raise HTTPException(status_code=404, detail="Novel bulunamadı")
     
-    print(f"DEBUG: update_novel source_url='{source_url}' (type: {type(source_url)})")
-    
     if title is not None:
         novel.title = title
     if summary is not None:
@@ -475,34 +503,49 @@ async def update_novel(
         novel.is_featured = is_featured
     if source_url is not None:
         novel.source_url = source_url.strip() or None  # Boş string → NULL
-    
-    if cover_image and cover_image.filename:
-        ext = cover_image.filename.split(".")[-1]
-        new_name = f"{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR}/{new_name}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(cover_image.file, buffer)
-        novel.cover_image = file_path.replace("\\", "/")
-    
-    if banner_image and banner_image.filename:
-        ext = banner_image.filename.split(".")[-1]
-        new_name = f"banner-{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR_BANNERS}/{new_name}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(banner_image.file, buffer)
-        novel.banner_image = file_path.replace("\\", "/")
 
-    ids = parse_category_ids(category_ids)
-    if ids is not None:
-        set_item_categories(db, novel, ids)
-    
+    new_cover_path = None
+    new_banner_path = None
+    old_cover_path = novel.cover_image
+    old_banner_path = novel.banner_image
+
     try:
+        if cover_image and cover_image.filename:
+            new_cover_path = await run_in_threadpool(
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+            )
+            novel.cover_image = new_cover_path
+
+        if banner_image and banner_image.filename:
+            new_banner_path = await run_in_threadpool(
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+            )
+            novel.banner_image = new_banner_path
+
+        ids = parse_category_ids(category_ids)
+        if ids is not None:
+            set_item_categories(db, novel, ids)
+
         db.commit()
         db.refresh(novel)
+
+        if new_cover_path and old_cover_path and old_cover_path != new_cover_path:
+            _remove_file_quietly(old_cover_path)
+        if new_banner_path and old_banner_path and old_banner_path != new_banner_path:
+            _remove_file_quietly(old_banner_path)
+
         return {"status": "success", "message": "Novel güncellendi", "data": with_categories(novel)}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        _remove_file_quietly(new_cover_path)
+        _remove_file_quietly(new_banner_path)
+        raise
+    except Exception:
+        db.rollback()
+        _remove_file_quietly(new_cover_path)
+        _remove_file_quietly(new_banner_path)
+        logger.exception("Novel güncelleme hatası (id=%s)", novel_id)
+        raise HTTPException(status_code=500, detail="Novel güncellenirken sunucu hatası oluştu.")
 
 
 @router.delete("/novels/{novel_id}")
@@ -519,9 +562,10 @@ async def delete_novel(
         db.delete(novel)
         db.commit()
         return {"status": "success", "message": f"'{novel.title}' silindi"}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Novel silme hatası (id=%s)", novel_id)
+        raise HTTPException(status_code=500, detail="Novel silinirken sunucu hatası oluştu.")
 
 
 # ==================== CATEGORIES ====================
@@ -547,9 +591,10 @@ async def create_category(
         db.commit()
         db.refresh(new_cat)
         return {"status": "success", "message": "Kategori oluşturuldu", "data": new_cat}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Kategori oluşturma hatası")
+        raise HTTPException(status_code=500, detail="Kategori oluşturulurken sunucu hatası oluştu.")
 
 
 @router.put("/categories/{category_id}")
@@ -567,9 +612,10 @@ async def update_category(
     try:
         db.commit()
         return {"status": "success", "message": "Kategori güncellendi", "data": cat}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Kategori güncelleme hatası (id=%s)", category_id)
+        raise HTTPException(status_code=500, detail="Kategori güncellenirken sunucu hatası oluştu.")
 
 
 @router.delete("/categories/{category_id}")
@@ -586,9 +632,10 @@ async def delete_category(
         db.delete(cat)
         db.commit()
         return {"status": "success", "message": f"'{cat.name}' silindi"}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Kategori silme hatası (id=%s)", category_id)
+        raise HTTPException(status_code=500, detail="Kategori silinirken sunucu hatası oluştu.")
 
 
 # ==================== USERS ====================
@@ -624,7 +671,7 @@ async def list_users(
     
     return {
         "status": "success",
-        "data": users,
+        "data": [schemas.UserOut.model_validate(u) for u in users],
         "pagination": {"page": page, "limit": limit, "total": total, "pages": (total + limit - 1) // limit}
     }
 
@@ -638,7 +685,7 @@ async def get_user(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
-    return {"status": "success", "data": user}
+    return {"status": "success", "data": schemas.UserOut.model_validate(user)}
 
 
 @router.put("/users/{user_id}")
@@ -654,16 +701,39 @@ async def update_user(
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
     
     if role is not None:
-        user.role = role
+        clean_role = role.strip().lower()
+        if clean_role not in ALLOWED_ROLES:
+            raise HTTPException(
+                status_code=400,
+                detail="Geçersiz rol. Yalnızca 'user', 'editor' veya 'admin' olabilir.",
+            )
+        if user.id == current_admin.id and clean_role != "admin":
+            raise HTTPException(
+                status_code=400,
+                detail="Kendi admin yetkinizi düşüremezsiniz.",
+            )
+        user.role = clean_role
+
     if is_active is not None:
+        if user.id == current_admin.id and is_active is False:
+            raise HTTPException(
+                status_code=400,
+                detail="Kendi hesabınızı devre dışı bırakamazsınız.",
+            )
         user.is_active = is_active
     
     try:
         db.commit()
-        return {"status": "success", "message": "Kullanıcı güncellendi", "data": user}
-    except Exception as e:
+        db.refresh(user)
+        return {
+            "status": "success",
+            "message": "Kullanıcı güncellendi",
+            "data": schemas.UserOut.model_validate(user),
+        }
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Kullanıcı güncelleme hatası (id=%s)", user_id)
+        raise HTTPException(status_code=500, detail="Kullanıcı güncellenirken sunucu hatası oluştu.")
 
 
 @router.delete("/users/{user_id}")
@@ -675,14 +745,17 @@ async def delete_user(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    if user.id == current_admin.id:
+        raise HTTPException(status_code=400, detail="Kendi hesabınızı silemezsiniz.")
     
     try:
         db.delete(user)
         db.commit()
         return {"status": "success", "message": f"'{user.username}' silindi"}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Kullanıcı silme hatası (id=%s)", user_id)
+        raise HTTPException(status_code=500, detail="Kullanıcı silinirken sunucu hatası oluştu.")
 
 
 # ==================== DUYURULAR ====================
@@ -704,52 +777,59 @@ async def create_announcement(
     if not title or not message:
         raise HTTPException(status_code=400, detail="Başlık ve mesaj zorunlu")
 
+    safe_link = _validate_announcement_link(link)
+
     image_path = None
-    if image and image.filename:
-        ext = image.filename.rsplit(".", 1)[-1].lower()
-        if ext not in ALLOWED_ANNOUNCEMENT_EXTS:
-            raise HTTPException(status_code=400, detail="Sadece jpg, png, webp veya gif yükleyebilirsin")
-        new_name = f"{uuid.uuid4()}.{ext}"
-        file_path = f"{UPLOAD_DIR_ANNOUNCEMENTS}/{new_name}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-        image_path = file_path.replace("\\", "/")
+    try:
+        if image and image.filename:
+            image_path = await run_in_threadpool(
+                validate_and_save_image, image, UPLOAD_DIR_ANNOUNCEMENTS, 10 * 1024 * 1024
+            )
 
-    # 1) Duyuru kanalına kalıcı kayıt
-    announcement = models.Announcement(
-        title=title,
-        message=message,
-        link=link.strip() if link else None,
-        image=image_path,
-        created_by=current_admin.id,
-    )
-    db.add(announcement)
-    db.flush()  # id alsın
-
-    duyuru_link = f"/duyurular#duyuru-{announcement.id}"
-
-    # 2) Herkese bildirim (tıklanınca duyuru sayfasına gider)
-    users = db.query(models.User).filter(models.User.is_active == True).all()
-    count = 0
-    for u in users:
-        create_notification(
-            db,
-            user_id=u.id,
-            type_="announcement",
+        # 1) Duyuru kanalına kalıcı kayıt
+        announcement = models.Announcement(
             title=title,
             message=message,
-            link=duyuru_link,
+            link=safe_link,
+            image=image_path,
+            created_by=current_admin.id,
         )
-        count += 1
+        db.add(announcement)
+        db.flush()  # id alsın
 
-    db.commit()
-    return {
-        "status": "success",
-        "message": f"Duyuru yayınlandı ve {count} kullanıcıya bildirildi",
-        "sent_to": count,
-        "announcement_id": announcement.id,
-        "image": image_path,
-    }
+        duyuru_link = f"/duyurular#duyuru-{announcement.id}"
+
+        # 2) Herkese bildirim (tıklanınca duyuru sayfasına gider)
+        users = db.query(models.User).filter(models.User.is_active == True).all()
+        count = 0
+        for u in users:
+            create_notification(
+                db,
+                user_id=u.id,
+                type_="announcement",
+                title=title,
+                message=message,
+                link=duyuru_link,
+            )
+            count += 1
+
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Duyuru yayınlandı ve {count} kullanıcıya bildirildi",
+            "sent_to": count,
+            "announcement_id": announcement.id,
+            "image": image_path,
+        }
+    except HTTPException:
+        db.rollback()
+        _remove_file_quietly(image_path)
+        raise
+    except Exception:
+        db.rollback()
+        _remove_file_quietly(image_path)
+        logger.exception("Duyuru oluşturma hatası")
+        raise HTTPException(status_code=500, detail="Duyuru yayınlanırken sunucu hatası oluştu.")
 
 
 # ==================== YORUM PANELİ ====================
@@ -822,9 +902,10 @@ async def delete_comment_admin(
         db.delete(comment)
         db.commit()
         return {"status": "success", "message": "Yorum ve yanıtları silindi"}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Yorum silme hatası (id=%s)", comment_id)
+        raise HTTPException(status_code=500, detail="Yorum silinirken sunucu hatası oluştu.")
 
 
 # ==================== DASHBOARD STATS ====================

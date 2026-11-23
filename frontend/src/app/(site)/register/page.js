@@ -14,7 +14,7 @@ import {
   UserPlus,
   AlertCircle,
 } from "lucide-react";
-import { PUBLIC_API_URL } from "@/lib/apiClient";
+import { apiFetch } from "@/lib/apiClient";
 import { Button } from "@/components/ui";
 
 export default function RegisterPage() {
@@ -39,15 +39,15 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const url = new URL(`${PUBLIC_API_URL}/auth/kayit-ol`);
-      url.searchParams.append("kullanici_adi", formData.username);
-      url.searchParams.append("eposta", formData.email);
-      url.searchParams.append("sifre", formData.password);
-
-      const response = await fetch(url.toString(), {
+      const response = await apiFetch("/auth/kayit-ol", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+        },
+        json: {
+          kullanici_adi: formData.username.trim(),
+          eposta: formData.email.trim(),
+          sifre: formData.password,
         },
       });
 
