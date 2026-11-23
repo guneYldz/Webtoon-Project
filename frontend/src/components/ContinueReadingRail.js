@@ -57,6 +57,7 @@ export default function ContinueReadingRail() {
               {/* 2:3 Mini Cover */}
               <Link
                 href={entry.lastChapterUrl}
+                title={`${entry.title} - Bölüm ${formatChapterNumber(entry.lastChapterNumber)}`}
                 className="relative aspect-[2/3] w-14 shrink-0 overflow-hidden rounded-lg bg-canvas ring-1 ring-white/10"
               >
                 <Image
@@ -86,6 +87,7 @@ export default function ContinueReadingRail() {
 
                 <Link
                   href={entry.lastChapterUrl}
+                  title={`${entry.title} - Bölüm ${formatChapterNumber(entry.lastChapterNumber)}`}
                   className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-secondary group-hover:text-ink-primary transition-colors"
                 >
                   <Play className="h-3 w-3 text-brand fill-brand" />

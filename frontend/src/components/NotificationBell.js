@@ -254,6 +254,7 @@ export default function NotificationBell({ user }) {
                   <Link
                     key={`${n.type}-${n.id}`}
                     href={href}
+                    title={n.title || "Bildirim detayı"}
                     onClick={() => setOpen(false)}
                     className="block"
                   >
@@ -269,6 +270,7 @@ export default function NotificationBell({ user }) {
         <div className="px-4 py-2.5 border-t border-subtle shrink-0 bg-surface/60">
           <Link
             href="/duyurular"
+            title="Tüm duyuruları gör"
             onClick={() => setOpen(false)}
             className="inline-flex w-full items-center justify-center gap-1.5 text-xs font-semibold text-brand hover:text-purple-300 transition-colors"
           >

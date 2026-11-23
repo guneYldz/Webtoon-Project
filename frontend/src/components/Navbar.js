@@ -189,6 +189,7 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
+                title={link.label}
                 className={`relative px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
                   active
                     ? "text-ink-primary bg-white/[0.07] font-semibold shadow-sm ring-1 ring-inset ring-white/10"
@@ -424,6 +425,7 @@ export default function Navbar() {
                   <Link
                     key={link.href}
                     href={link.href}
+                    title={link.label}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
                       active

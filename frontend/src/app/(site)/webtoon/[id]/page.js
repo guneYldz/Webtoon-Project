@@ -39,12 +39,6 @@ export async function generateMetadata({ params }) {
   return {
     title,
     description,
-    keywords: [
-      series.title,
-      `türkçe ${kind.toLowerCase()}`,
-      `${kind.toLowerCase()} oku`,
-      "kaos manga",
-    ],
     alternates: {
       canonical: canonicalUrl,
     },

@@ -123,6 +123,7 @@ export default function HomeClientFeed({ allSeries = [], popularList = [] }) {
           <div className="mt-8 flex justify-center xl:hidden">
             <Link
               href="/seriler"
+              title="Tüm webtoon, manga ve novel serilerini görüntüle"
               className="inline-flex items-center gap-2 rounded-xl border border-subtle bg-surface hover:bg-elevated px-5 py-2.5 text-xs font-semibold text-ink-primary transition"
             >
               <span>Tüm Serileri Görüntüle</span>

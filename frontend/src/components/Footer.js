@@ -31,7 +31,11 @@ export default function Footer() {
         <div className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-12 pb-10 border-b border-subtle">
           {/* Brand & Condensed SEO Bio */}
           <div className="lg:col-span-5 space-y-4">
-            <Link href="/" className="inline-flex items-center gap-3 group">
+            <Link
+              href="/"
+              title="Kaos Manga - Ana Sayfa"
+              className="inline-flex items-center gap-3 group"
+            >
               <div className="relative h-10 w-10 overflow-hidden rounded-full bg-black ring-1 ring-purple-500/35 shadow-[0_0_14px_rgba(168,85,247,0.25)] group-hover:ring-brand transition">
                 <Image
                   src="/logo.png"
@@ -79,6 +83,7 @@ export default function Footer() {
                   <li key={item.href}>
                     <Link
                       href={item.href}
+                      title={item.label}
                       className="inline-flex items-center gap-2 text-ink-secondary hover:text-ink-primary transition-colors"
                     >
                       <Icon className="h-3.5 w-3.5 text-ink-muted" />
@@ -100,6 +105,7 @@ export default function Footer() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    title={item.label}
                     className="text-ink-secondary hover:text-ink-primary transition-colors"
                   >
                     {item.label}
@@ -119,6 +125,7 @@ export default function Footer() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    title={item.label}
                     className="text-ink-secondary hover:text-ink-primary transition-colors"
                   >
                     {item.label}

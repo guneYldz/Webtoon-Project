@@ -37,7 +37,6 @@ export async function generateMetadata({ params }) {
   return {
     title,
     description,
-    keywords: [novel.title, "türkçe novel", "novel oku", "webnovel türkçe", "kaos manga"],
     alternates: {
       canonical: canonicalUrl,
     },
