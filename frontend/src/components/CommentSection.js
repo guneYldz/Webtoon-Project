@@ -1,89 +1,149 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { API } from "@/api";
+import {
+  MessageSquare,
+  Reply,
+  Send,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  ArrowUpDown,
+  Trash2,
+  ChevronDown,
+  Lock,
+} from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch, resolveMediaUrl, getUserToken } from "@/lib/apiClient";
+import { Button, Badge, Skeleton } from "@/components/ui";
 
-// Profil fotoğrafı varsa onu, yoksa baş harfli daireyi gösterir.
-// username varsa /kullanici/[username] profil önizlemesine tıklanabilir.
-function Avatar({ username, image, sizeClass = "w-10 h-10", textClass = "text-sm" }) {
+const SPOILER_PREFIX = "[SPOILER]";
+const PAGE_SIZE = 15;
+
+function parseSpoilerContent(rawContent) {
+  const text = String(rawContent || "");
+  if (text.startsWith(SPOILER_PREFIX)) {
+    return {
+      isSpoiler: true,
+      body: text.slice(SPOILER_PREFIX.length).trimStart(),
+    };
+  }
+  return { isSpoiler: false, body: text };
+}
+
+function Avatar({ username, image, sizeClass = "w-9 h-9", textClass = "text-xs" }) {
   const avatar = image ? (
     <img
-      src={`${API}/${image}`}
-      alt={username || "avatar"}
-      className={`${sizeClass} rounded-full object-cover shadow-md shrink-0 border border-gray-700`}
+      src={resolveMediaUrl(image)}
+      alt={username || "Kullanıcı"}
+      className={`${sizeClass} rounded-full object-cover shrink-0 border border-white/10`}
     />
   ) : (
-    <div className={`${sizeClass} rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold ${textClass} shadow-md shrink-0`}>
+    <div
+      className={`${sizeClass} rounded-full bg-accent-soft border border-accent-border flex items-center justify-center text-accent font-bold ${textClass} shrink-0`}
+    >
       {username ? username[0].toUpperCase() : "?"}
     </div>
   );
 
   if (!username) return avatar;
   return (
-    <Link href={`/kullanici/${encodeURIComponent(username)}`} className="shrink-0 hover:opacity-80 transition" title={`${username} profili`}>
+    <Link
+      href={`/kullanici/${encodeURIComponent(username)}`}
+      className="shrink-0 hover:opacity-85 transition"
+      title={`${username} profili`}
+    >
       {avatar}
     </Link>
   );
 }
 
-export default function CommentSection({ type, itemId, episodeId = null, chapterId = null }) {
+function CommentText({ content }) {
+  const [revealed, setRevealed] = useState(false);
+  const { isSpoiler, body } = parseSpoilerContent(content);
+
+  if (!isSpoiler) {
+    return (
+      <p className="text-ink-secondary text-sm leading-relaxed break-words whitespace-pre-line">
+        {body}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1">
+      {!revealed ? (
+        <button
+          type="button"
+          onClick={() => setRevealed(true)}
+          className="w-full text-left rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 hover:bg-amber-500/15 transition flex items-center justify-between gap-2"
+        >
+          <span className="inline-flex items-center gap-1.5 font-semibold">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            Spoiler içeren yorum — görüntülemek için tıkla
+          </span>
+          <Eye className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+        </button>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" size="sm" className="text-amber-300 border-amber-500/30">
+              Spoiler
+            </Badge>
+            <button
+              type="button"
+              onClick={() => setRevealed(false)}
+              className="text-[11px] text-ink-muted hover:text-ink-primary inline-flex items-center gap-1"
+            >
+              <EyeOff className="h-3 w-3" />
+              Gizle
+            </button>
+          </div>
+          <p className="text-ink-secondary text-sm leading-relaxed break-words whitespace-pre-line">
+            {body}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CommentSection({
+  type,
+  itemId,
+  episodeId = null,
+  chapterId = null,
+}) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
+  const [isSpoiler, setIsSpoiler] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Yanıt sistemi: hangi yorumun altında yanıt formu açık?
+  const [submitting, setSubmitting] = useState(false);
+  const [replySubmitting, setReplySubmitting] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState("");
+  const [replySpoiler, setReplySpoiler] = useState(false);
+  const [sortOrder, setSortOrder] = useState("newest");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [highlightedId, setHighlightedId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
-  // --- Giriş Kontrolü ve Yorumları Çekme ---
-  useEffect(() => {
-    // 1. Kullanıcı giriş yapmış mı?
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      setIsAuthenticated(!!token);
+  const loadComments = useCallback(async () => {
+    let path = "";
+    if (type === "webtoon" && episodeId) {
+      path = `/comments/webtoon/${episodeId}`;
+    } else if (type === "novel" && chapterId) {
+      path = `/comments/novel/${chapterId}`;
+    } else {
+      setLoading(false);
+      return;
     }
 
-    // 2. Yorumları Getir
-    loadComments();
-  }, [itemId, episodeId, chapterId]);
-
-  // Bildirimden #comment-ID ile gelindiyse ilgili yoruma kaydır
-  useEffect(() => {
-    if (loading || comments.length === 0) return;
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
-    if (!hash.startsWith("#comment-")) return;
-    const tryScroll = () => {
-      const el = document.querySelector(hash);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("ring-2", "ring-blue-500");
-        setTimeout(() => el.classList.remove("ring-2", "ring-blue-500"), 2500);
-        return true;
-      }
-      return false;
-    };
-    if (!tryScroll()) {
-      // Yanıt henüz DOM'a oturmamış olabilir
-      setTimeout(tryScroll, 300);
-    }
-  }, [loading, comments]);
-
-  const loadComments = async () => {
     try {
-      let url = "";
-
-      // Hangi türün yorumlarını çekeceğiz?
-      if (type === "webtoon" && episodeId) {
-        url = `${API}/comments/webtoon/${episodeId}`;
-      } else if (type === "novel" && chapterId) {
-        url = `${API}/comments/novel/${chapterId}`;
-      } else {
-        // Eğer ID'ler henüz gelmediyse bekle
-        return;
-      }
-
-      const res = await fetch(url);
+      const res = await apiFetch(path, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setComments(Array.isArray(data) ? data : []);
@@ -93,23 +153,95 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
     } finally {
       setLoading(false);
     }
-  };
+  }, [type, episodeId, chapterId]);
 
-  // Ortak gönderim: parentId null ise ana yorum, doluysa yanıt
-  const submitComment = async (content, parentId = null) => {
-    if (!content.trim()) return false;
+  useEffect(() => {
+    const token = getUserToken();
+    setIsAuthenticated(Boolean(token));
 
-    const token = localStorage.getItem("token");
+    if (token) {
+      apiFetch("/auth/me", { auth: "user", cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) setCurrentUser(data);
+        })
+        .catch(() => {});
+    } else {
+      setCurrentUser(null);
+    }
+
+    setLoading(true);
+    loadComments();
+  }, [itemId, episodeId, chapterId, loadComments]);
+
+  const { rootComments, repliesByParent } = useMemo(() => {
+    const roots = comments.filter((c) => !c.parent_id);
+    roots.sort((a, b) => {
+      const da = new Date(a.created_at).getTime();
+      const db = new Date(b.created_at).getTime();
+      return sortOrder === "oldest" ? da - db : db - da;
+    });
+
+    const repliesMap = {};
+    comments.forEach((c) => {
+      if (c.parent_id) {
+        if (!repliesMap[c.parent_id]) repliesMap[c.parent_id] = [];
+        repliesMap[c.parent_id].push(c);
+      }
+    });
+    Object.values(repliesMap).forEach((list) =>
+      list.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+    );
+
+    return { rootComments: roots, repliesByParent: repliesMap };
+  }, [comments, sortOrder]);
+
+  // Deep-link #comment-ID scroll + React highlight
+  useEffect(() => {
+    if (loading || comments.length === 0 || typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#comment-")) return;
+
+    const targetIdNum = Number(hash.replace("#comment-", ""));
+    if (!Number.isFinite(targetIdNum)) return;
+
+    const targetComment = comments.find((c) => c.id === targetIdNum);
+    if (targetComment) {
+      const rootId = targetComment.parent_id || targetComment.id;
+      const rootIndex = rootComments.findIndex((c) => c.id === rootId);
+      if (rootIndex >= visibleCount) {
+        setVisibleCount(rootIndex + 5);
+      }
+    }
+
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`comment-${targetIdNum}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightedId(targetIdNum);
+        setTimeout(() => setHighlightedId(null), 2600);
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [loading, comments, rootComments, visibleCount]);
+
+  const submitComment = async (rawContent, spoilerFlag, parentId = null) => {
+    const trimmed = rawContent.trim();
+    if (!trimmed) return false;
+
+    const token = getUserToken();
     if (!token) {
-      alert("Lütfen önce giriş yapın!");
+      toast.info("Yorum yazmak için giriş yapmalısın.");
       return false;
     }
 
-    const payload = { content };
-
-    if (parentId) {
-      payload.parent_id = parentId;
-    }
+    const finalContent = spoilerFlag ? `${SPOILER_PREFIX} ${trimmed}` : trimmed;
+    const payload = { content: finalContent };
+    if (parentId) payload.parent_id = parentId;
     if (type === "webtoon") {
       payload.webtoon_episode_id = episodeId;
     } else {
@@ -117,129 +249,200 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
     }
 
     try {
-      const res = await fetch(`${API}/comments/`, {
+      const res = await apiFetch("/comments/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        auth: "user",
+        json: payload,
       });
 
-      const data = await res.json();
-
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        loadComments();
+        await loadComments();
+        toast.success(parentId ? "Yanıtın eklendi." : "Yorumun yayınlandı.");
         return true;
-      } else {
-        alert(data.detail || "Yorum gönderilirken bir hata oluştu.");
-        return false;
       }
+
+      toast.error(data.detail || "Yorum gönderilirken bir hata oluştu.");
+      return false;
     } catch (err) {
       console.error("Yorum hatası:", err);
-      alert("Sunucuyla bağlantı kurulamadı.");
+      toast.error("Sunucuyla bağlantı kurulamadı.");
       return false;
     }
   };
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
-    const ok = await submitComment(newComment);
-    if (ok) setNewComment("");
+    if (submitting || !newComment.trim()) return;
+    setSubmitting(true);
+    const ok = await submitComment(newComment, isSpoiler);
+    if (ok) {
+      setNewComment("");
+      setIsSpoiler(false);
+    }
+    setSubmitting(false);
   };
 
   const handleReplySubmit = async (e, parentId) => {
     e.preventDefault();
-    const ok = await submitComment(replyText, parentId);
+    if (replySubmitting || !replyText.trim()) return;
+    setReplySubmitting(true);
+    const ok = await submitComment(replyText, replySpoiler, parentId);
     if (ok) {
       setReplyText("");
+      setReplySpoiler(false);
       setReplyingTo(null);
+    }
+    setReplySubmitting(false);
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (deletingId) return;
+    setDeletingId(commentId);
+    try {
+      const res = await apiFetch(`/comments/${commentId}`, {
+        method: "DELETE",
+        auth: "user",
+      });
+      if (res.ok) {
+        toast.success("Yorum silindi.");
+        await loadComments();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.detail || "Yorum silinemedi.");
+      }
+    } catch {
+      toast.error("Sunucuyla bağlantı kurulamadı.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
-  if (loading) return <div className="text-gray-500 text-sm py-4">Yorumlar yükleniyor...</div>;
+  const canModerate =
+    currentUser?.role === "admin" || currentUser?.role === "editor";
 
-  // --- Yorumları ağaca çevir: ana yorumlar + altlarındaki yanıtlar ---
-  const rootComments = comments.filter((c) => !c.parent_id);
-  const repliesByParent = {};
-  comments.forEach((c) => {
-    if (c.parent_id) {
-      if (!repliesByParent[c.parent_id]) repliesByParent[c.parent_id] = [];
-      repliesByParent[c.parent_id].push(c);
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    try {
+      return new Date(dateStr).toLocaleDateString("tr-TR", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "";
     }
-  });
-  // Yanıtlar eskiden yeniye sıralansın (sohbet akışı gibi okunur)
-  Object.values(repliesByParent).forEach((list) =>
-    list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-  );
+  };
+
+  const visibleRoots = rootComments.slice(0, visibleCount);
+  const hasMore = rootComments.length > visibleCount;
 
   const renderReplyForm = (parentId) => (
-    <form onSubmit={(e) => handleReplySubmit(e, parentId)} className="mt-3 relative">
+    <form
+      onSubmit={(e) => handleReplySubmit(e, parentId)}
+      className="mt-3 rounded-xl border border-subtle bg-canvas/80 p-3 space-y-2.5"
+    >
       <textarea
-        className="w-full bg-[#141414] text-gray-200 p-3 rounded-lg border border-gray-800 outline-none focus:border-blue-500/50 transition-all resize-none min-h-[70px] text-sm placeholder:text-gray-600"
+        className="w-full bg-surface text-ink-primary p-3 rounded-lg border border-subtle outline-none focus:border-accent-border transition resize-none min-h-[76px] text-sm placeholder:text-ink-muted"
         placeholder="Yanıtını yaz..."
         value={replyText}
         onChange={(e) => setReplyText(e.target.value)}
         autoFocus
         required
       />
-      <div className="flex justify-end gap-2 mt-2">
-        <button
-          type="button"
-          onClick={() => { setReplyingTo(null); setReplyText(""); }}
-          className="px-4 py-1.5 rounded-full text-xs font-bold text-gray-400 hover:text-white transition"
-        >
-          Vazgeç
-        </button>
-        <button
-          type="submit"
-          className="bg-white text-black hover:bg-blue-600 hover:text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow"
-        >
-          YANITLA
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="inline-flex items-center gap-2 text-xs text-ink-secondary cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={replySpoiler}
+            onChange={(e) => setReplySpoiler(e.target.checked)}
+            className="rounded border-white/20 bg-surface accent-brand"
+          />
+          <span>Spoiler içerir</span>
+        </label>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setReplyingTo(null);
+              setReplyText("");
+              setReplySpoiler(false);
+            }}
+          >
+            Vazgeç
+          </Button>
+          <Button
+            type="submit"
+            variant="accent"
+            size="sm"
+            loading={replySubmitting}
+            disabled={!replyText.trim()}
+          >
+            <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            Yanıtla
+          </Button>
+        </div>
       </div>
     </form>
   );
 
-  // isReply=true iken yanıt butonu KÖK yorumun id'sini kullanır;
-  // böylece yanıta verilen yanıt da aynı zincirin altında görünür.
   const renderCommentBody = (c, isReply = false, rootId = null) => {
     const replyTarget = rootId || c.id;
-    // Aynı zincirde iki form açılmasın diye form anahtarı yorumun kendi id'si
     const formKey = c.id;
 
     return (
-      <div className="flex gap-4">
-        {/* Avatar */}
+      <div className="flex gap-3 sm:gap-3.5">
         <Avatar
           username={c.user_username}
           image={c.user_profile_image}
-          sizeClass={isReply ? "w-8 h-8" : "w-10 h-10"}
+          sizeClass={isReply ? "w-8 h-8" : "w-9 h-9"}
           textClass={isReply ? "text-xs" : "text-sm"}
         />
 
-        {/* İçerik */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Link
-              href={`/kullanici/${encodeURIComponent(c.user_username)}`}
-              className="text-blue-400 font-bold text-sm hover:underline"
-            >
-              {c.user_username}
-            </Link>
-            <span className="text-sm text-gray-600">• {new Date(c.created_at).toLocaleDateString()}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={`/kullanici/${encodeURIComponent(c.user_username)}`}
+                className="text-accent font-semibold text-sm hover:underline truncate"
+              >
+                {c.user_username}
+              </Link>
+              <span className="text-xs text-ink-muted">
+                {formatDate(c.created_at)}
+              </span>
+            </div>
+
+            {canModerate && (
+              <button
+                type="button"
+                onClick={() => handleDeleteComment(c.id)}
+                disabled={deletingId === c.id}
+                className="text-xs text-ink-muted hover:text-rose-400 transition inline-flex items-center gap-1"
+                title="Yorumu sil"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Sil</span>
+              </button>
+            )}
           </div>
-          <p className="text-gray-300 text-sm leading-relaxed break-words">{c.content}</p>
+
+          <CommentText content={c.content} />
 
           {isAuthenticated && (
             <button
+              type="button"
               onClick={() => {
                 setReplyingTo(replyingTo === formKey ? null : formKey);
                 setReplyText("");
+                setReplySpoiler(false);
               }}
-              className="mt-2 text-xs font-bold text-gray-500 hover:text-blue-400 transition"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-accent transition"
             >
-              ↩ Yanıtla
+              <Reply className="h-3.5 w-3.5" aria-hidden="true" />
+              Yanıtla
             </button>
           )}
 
@@ -249,71 +452,155 @@ export default function CommentSection({ type, itemId, episodeId = null, chapter
     );
   };
 
+  if (loading) {
+    return (
+      <section className="space-y-4 py-4">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-5 w-8 rounded-full" />
+        </div>
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <Skeleton className="h-20 w-full rounded-xl" />
+      </section>
+    );
+  }
+
   return (
-    <section>
-      {/* Başlık */}
-      <div className="flex items-center gap-3 mb-8">
-        <h3 className="text-xl md:text-2xl font-bold text-white">Yorumlar</h3>
-        <span className="bg-blue-600 text-white text-sm font-bold px-2 py-1 rounded-full shadow-lg border border-blue-400">
-          {comments.length}
-        </span>
+    <section className="pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2.5">
+          <MessageSquare className="h-5 w-5 text-accent" aria-hidden="true" />
+          <h3 className="text-lg md:text-xl font-bold text-ink-primary">
+            Yorumlar
+          </h3>
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-accent-soft text-accent border border-accent-border tabular-nums">
+            {comments.length}
+          </span>
+        </div>
+
+        {rootComments.length > 1 && (
+          <button
+            type="button"
+            onClick={() =>
+              setSortOrder((prev) => (prev === "newest" ? "oldest" : "newest"))
+            }
+            className="inline-flex items-center gap-1.5 rounded-lg border border-subtle bg-surface px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-hover hover:text-ink-primary transition"
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" aria-hidden="true" />
+            {sortOrder === "newest" ? "En Yeni" : "En Eski"}
+          </button>
+        )}
       </div>
 
-      {/* Yorum Yapma Formu */}
       {!isAuthenticated ? (
-        <div className="bg-[#1a1a1a] p-8 rounded-2xl border border-dashed border-gray-700 text-center mb-10">
-          <p className="text-gray-400 mb-4 text-sm">Yorum yapmak ve tartışmaya katılmak için giriş yapmalısın.</p>
-          <Link href="/login" className="px-6 py-2.5 bg-white text-black rounded-full font-bold text-sm hover:bg-blue-500 hover:text-white transition-all shadow-lg">
+        <div className="bg-surface p-6 rounded-2xl border border-dashed border-white/15 text-center mb-8">
+          <Lock className="h-5 w-5 text-ink-muted mx-auto mb-2" aria-hidden="true" />
+          <p className="text-ink-secondary mb-4 text-sm">
+            Yorum yapmak ve tartışmaya katılmak için giriş yapmalısın.
+          </p>
+          <Link
+            href="/login"
+            className="inline-flex items-center justify-center h-9 px-5 rounded-xl bg-accent text-[#0B0B0F] font-semibold text-sm hover:brightness-110 transition"
+          >
             Giriş Yap
           </Link>
         </div>
       ) : (
-        <form onSubmit={handleCommentSubmit} className="mb-10 relative group">
+        <form
+          onSubmit={handleCommentSubmit}
+          className="mb-8 rounded-2xl border border-subtle bg-surface p-4 space-y-3"
+        >
           <textarea
-            className="w-full bg-[#1a1a1a] text-gray-200 p-4 rounded-xl border border-gray-800 outline-none focus:border-blue-500/50 focus:bg-[#202020] transition-all resize-none min-h-[120px] text-sm placeholder:text-gray-600 shadow-inner"
-            placeholder="Bölüm hakkında ne düşünüyorsun?"
+            className="w-full bg-canvas/70 text-ink-primary p-3.5 rounded-xl border border-subtle outline-none focus:border-accent-border transition resize-none min-h-[104px] text-sm placeholder:text-ink-muted"
+            placeholder="Bölüm hakkında düşüncelerini paylaş..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             required
           />
-          <button
-            type="submit"
-            className="absolute bottom-4 right-4 bg-white text-black hover:bg-blue-600 hover:text-white px-5 py-2 rounded-full text-sm font-bold transition-all shadow-lg"
-          >
-            GÖNDER
-          </button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="inline-flex items-center gap-2 text-xs text-ink-secondary cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isSpoiler}
+                onChange={(e) => setIsSpoiler(e.target.checked)}
+                className="rounded border-white/20 bg-canvas accent-brand"
+              />
+              <span>Spoiler içerir</span>
+            </label>
+
+            <Button
+              type="submit"
+              variant="accent"
+              size="sm"
+              loading={submitting}
+              disabled={!newComment.trim()}
+            >
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+              Gönder
+            </Button>
+          </div>
         </form>
       )}
 
-      {/* Yorum Listesi */}
-      <div className="space-y-4">
+      <div className="space-y-3.5">
         {rootComments.length === 0 ? (
-          <p className="text-gray-600 text-sm italic">Henüz yorum yapılmamış. İlk yorumu sen yap!</p>
+          <div className="rounded-2xl border border-subtle bg-surface/60 py-10 text-center">
+            <p className="text-ink-muted text-sm">
+              Henüz yorum yapılmamış. İlk yorumu sen yap!
+            </p>
+          </div>
         ) : (
-          rootComments.map((c) => (
-            <div
-              key={c.id}
-              id={`comment-${c.id}`}
-              className="bg-[#1a1a1a] p-5 rounded-xl border border-gray-800/50 hover:border-gray-700 transition-all scroll-mt-24"
-            >
-              {renderCommentBody(c)}
+          visibleRoots.map((c) => {
+            const isHighlighted = highlightedId === c.id;
+            return (
+              <div
+                key={c.id}
+                id={`comment-${c.id}`}
+                className={`bg-surface p-4 sm:p-5 rounded-2xl border transition-all scroll-mt-24 ${
+                  isHighlighted
+                    ? "border-accent ring-2 ring-accent/40"
+                    : "border-subtle hover:border-hover"
+                }`}
+              >
+                {renderCommentBody(c)}
 
-              {/* Yanıtlar */}
-              {repliesByParent[c.id] && repliesByParent[c.id].length > 0 && (
-                <div className="mt-4 ml-6 md:ml-12 space-y-3 border-l-2 border-gray-800 pl-4">
-                  {repliesByParent[c.id].map((r) => (
-                    <div
-                      key={r.id}
-                      id={`comment-${r.id}`}
-                      className="bg-[#141414] p-4 rounded-lg border border-gray-800/50 scroll-mt-24"
-                    >
-                      {renderCommentBody(r, true, c.id)}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))
+                {repliesByParent[c.id] && repliesByParent[c.id].length > 0 && (
+                  <div className="mt-4 ml-5 sm:ml-10 space-y-2.5 border-l border-white/10 pl-3.5 sm:pl-4">
+                    {repliesByParent[c.id].map((r) => {
+                      const replyHighlighted = highlightedId === r.id;
+                      return (
+                        <div
+                          key={r.id}
+                          id={`comment-${r.id}`}
+                          className={`bg-canvas/70 p-3.5 rounded-xl border transition-all scroll-mt-24 ${
+                            replyHighlighted
+                              ? "border-accent ring-2 ring-accent/40"
+                              : "border-subtle"
+                          }`}
+                        >
+                          {renderCommentBody(r, true, c.id)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+
+        {hasMore && (
+          <div className="pt-3 text-center">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+            >
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              Daha Fazla Göster ({rootComments.length - visibleCount} kaldı)
+            </Button>
+          </div>
         )}
       </div>
     </section>

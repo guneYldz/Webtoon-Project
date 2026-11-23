@@ -1,207 +1,300 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { Search, ShieldAlert, ShieldCheck, Ban, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch, clearAdminToken, getAdminToken } from "@/lib/apiClient";
+import { Skeleton } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  AdminPageHeader,
+  AdminConfirmDialog,
+  AdminPagination,
+  adminCardClass,
+  adminInputClass,
+  adminSelectClass,
+} from "../_components/AdminUi";
 
 export default function UsersListPage() {
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState("");
-    const [roleFilter, setRoleFilter] = useState("");
-    const [page, setPage] = useState(1);
-    const [pagination, setPagination] = useState({});
+  const router = useRouter();
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<any>({});
+  const [banTarget, setBanTarget] = useState<any>(null);
+  const [updatingBan, setUpdatingBan] = useState(false);
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    const token = getAdminToken();
+    if (!token) {
+      router.replace("/login-admin");
+      return;
+    }
 
-    const fetchUsers = async () => {
-        setLoading(true);
-        try {
-            // 1. Token'ı al
-            const token = sessionStorage.getItem("access_token") ||
-                sessionStorage.getItem("admin_token") ||
-                sessionStorage.getItem("token");
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: "20" });
+      if (search) params.append("search", search);
+      if (roleFilter) params.append("role", roleFilter);
 
-            console.log("🔍 DEBUG: Fetching users with token:", token ? "Exists" : "MISSING");
+      const res = await apiFetch(`/admin/users?${params}`, {
+        auth: "admin",
+        cache: "no-store",
+      });
 
-            if (!token) {
-                window.location.href = "/login-admin";
-                return;
-            }
+      if (res.status === 401) {
+        clearAdminToken();
+        toast.error("Oturum süresi doldu.");
+        router.replace("/login-admin");
+        return;
+      }
 
-            const params = new URLSearchParams({ page: page.toString(), limit: "20" });
-            if (search) params.append("search", search);
-            if (roleFilter) params.append("role", roleFilter);
-
-            const res = await fetch(`${API}/admin/users?${params}`, {
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                }
-            });
-
-            console.log("🔍 DEBUG: Users response status:", res.status);
-
-            if (res.ok) {
-                const data = await res.json();
-                if (data.status === "success") {
-                    setUsers(data.data);
-                    setPagination(data.pagination);
-                }
-            } else {
-                console.error("❌ Kullanıcı listesi yüklenemedi. Status:", res.status);
-                if (res.status === 401) {
-                    alert("Oturum süresi dolmuş veya yetkiniz yok. Lütfen tekrar giriş yapın.");
-                    sessionStorage.removeItem("access_token");
-                    sessionStorage.removeItem("admin_token");
-                    window.location.href = "/login-admin";
-                }
-            }
-        } catch (error) {
-            console.error("❌ Kullanıcı listesi yüklenemedi:", error);
-        } finally {
-            setLoading(false);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "success") {
+          setUsers(data.data || []);
+          setPagination(data.pagination || {});
         }
-    };
+      }
+    } catch (error) {
+      console.error("Kullanıcı listesi yüklenemedi:", error);
+      toast.error("Kullanıcılar yüklenemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, roleFilter, search, router]);
 
-    useEffect(() => {
+  useEffect(() => {
+    fetchUsers();
+  }, [page, roleFilter]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    fetchUsers();
+  };
+
+  const executeToggleBan = async () => {
+    if (!banTarget) return;
+    setUpdatingBan(true);
+    try {
+      const form = new FormData();
+      form.append("is_active", String(!banTarget.is_active));
+
+      const res = await apiFetch(`/admin/users/${banTarget.id}`, {
+        method: "PUT",
+        auth: "admin",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.status === "success") {
+        toast.success(data.message || "Kullanıcı durumu güncellendi.");
+        setBanTarget(null);
         fetchUsers();
-    }, [page, roleFilter]);
+      } else {
+        toast.error(data.detail || "İşlem başarısız.");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Hata oluştu.");
+    } finally {
+      setUpdatingBan(false);
+    }
+  };
 
-    const handleSearch = (e) => {
-        e.preventDefault();
-        setPage(1);
-        fetchUsers();
-    };
+  return (
+    <div className="max-w-6xl mx-auto">
+      <AdminPageHeader
+        title="Üyeler"
+        description="Kayıtlı kullanıcı hesaplarını arayın ve erişim durumunu yönetin."
+      />
 
-    const toggleBan = async (userId, currentStatus) => {
-        try {
-            const form = new FormData();
-            form.append("is_active", (!currentStatus).toString());
+      <div className={`${adminCardClass} p-4 mb-6`}>
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="h-4 w-4 text-ink-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Kullanıcı adı veya e-posta ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={`${adminInputClass} pl-10`}
+            />
+          </div>
 
-            const res = await fetch(`${API}/admin/users/${userId}`, {
-                method: "PUT",
-                headers: {
-                    "Authorization": `Bearer ${sessionStorage.getItem("admin_token")}`
-                },
-                body: form
-            });
-            const data = await res.json();
-            if (data.status === "success") {
-                alert(data.message);
-                fetchUsers();
-            }
-        } catch (error) {
-            alert("Hata: " + error.message);
-        }
-    };
+          <select
+            value={roleFilter}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setPage(1);
+            }}
+            className={adminSelectClass}
+          >
+            <option value="">Tüm Roller</option>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
 
-    return (
-        <div className="p-0 sm:p-2">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl sm:text-3xl font-bold">Kullanıcılar</h1>
-            </div>
+          <Button type="submit" variant="secondary">
+            Ara
+          </Button>
+        </form>
+      </div>
 
-            <div className="bg-white p-4 rounded-lg shadow mb-6">
-                <form onSubmit={handleSearch} className="flex gap-3 flex-col sm:flex-row flex-wrap">
-                    <input
-                        type="text"
-                        placeholder="Kullanıcı veya email ara..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="flex-1 min-w-0 px-4 py-2 border rounded-lg"
-                    />
-                    <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }} className="px-4 py-2 border rounded-lg">
-                        <option value="">Tüm Roller</option>
-                        <option value="user">User</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                    <button type="submit" className="bg-gray-800 text-white px-6 py-2 rounded-lg hover:bg-gray-900">Ara</button>
-                </form>
-            </div>
-
-            {loading && <div className="text-center py-8"><p className="text-gray-500">Yükleniyor...</p></div>}
-
-            {!loading && (
-                <>
-                    {/* Mobil kartlar */}
-                    <div className="md:hidden space-y-3">
-                        {users.map((user) => (
-                            <div key={user.id} className="bg-white rounded-xl shadow p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <p className="font-bold text-gray-900 truncate">{user.username}</p>
-                                        <p className="text-sm text-gray-500 break-all">{user.email}</p>
-                                        <p className="text-xs text-gray-400 mt-1">ID {user.id}</p>
-                                    </div>
-                                    <span className={`shrink-0 px-2 py-1 text-xs rounded-full ${user.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
-                                        {user.role}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                                    {user.is_active ? <span className="text-green-600 text-sm">✓ Aktif</span> : <span className="text-red-600 text-sm">⛔ Yasaklı</span>}
-                                    <button
-                                        onClick={() => toggleBan(user.id, user.is_active)}
-                                        className={`text-sm font-semibold ${user.is_active ? "text-red-600" : "text-green-600"}`}
-                                    >
-                                        {user.is_active ? "Yasakla" : "Yasağı Kaldır"}
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                        {users.length === 0 && <div className="text-center py-8 text-gray-500">Kullanıcı yok.</div>}
-                    </div>
-
-                    {/* Masaüstü tablo */}
-                    <div className="hidden md:block bg-white rounded-lg shadow overflow-x-auto">
-                    <table className="w-full min-w-[640px]">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">ID</th>
-                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Kullanıcı Adı</th>
-                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Email</th>
-                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Rol</th>
-                                <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 uppercase">Durum</th>
-                                <th className="px-6 py-3 text-right text-sm font-medium text-gray-500 uppercase">İşlemler</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {users.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 text-sm text-gray-900">{user.id}</td>
-                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{user.username}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500">{user.email}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-sm rounded-full ${user.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}`}>
-                                            {user.role}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        {user.is_active ? <span className="text-green-600">✓ Aktif</span> : <span className="text-red-600">⛔ Yasaklı</span>}
-                                    </td>
-                                    <td className="px-6 py-4 text-right space-x-2">
-                                        <button
-                                            onClick={() => toggleBan(user.id, user.is_active)}
-                                            className={`text-sm ${user.is_active ? "text-red-600 hover:text-red-800" : "text-green-600 hover:text-green-800"}`}
-                                        >
-                                            {user.is_active ? "Yasakla" : "Yasağı Kaldır"}
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {users.length === 0 && <div className="text-center py-8 text-gray-500">Kullanıcı yok.</div>}
-                    </div>
-                </>
-            )}
-
-            {pagination.pages > 1 && (
-                <div className="flex justify-center gap-2 mt-6">
-                    <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-4 py-2 border rounded-lg disabled:opacity-50">Önceki</button>
-                    <span className="px-4 py-2">Sayfa {page} / {pagination.pages}</span>
-                    <button onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))} disabled={page === pagination.pages} className="px-4 py-2 border rounded-lg disabled:opacity-50">Sonraki</button>
-                </div>
-            )}
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 rounded-xl" />
+          ))}
         </div>
-    );
+      ) : (
+        <>
+          <div className="md:hidden space-y-3">
+            {users.map((user) => (
+              <div key={user.id} className={`${adminCardClass} p-4`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-ink-primary truncate">
+                      {user.username}
+                    </p>
+                    <p className="text-xs text-ink-secondary break-all">
+                      {user.email}
+                    </p>
+                    <p className="text-[11px] text-ink-muted mt-1">
+                      ID #{user.id}
+                    </p>
+                  </div>
+                  <Badge variant={user.role === "admin" ? "novel" : "webtoon"}>
+                    {user.role}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-subtle">
+                  {user.is_active ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Aktif
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-semibold">
+                      <Ban className="h-3.5 w-3.5" />
+                      Yasaklı
+                    </span>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setBanTarget(user)}
+                    className={user.is_active ? "text-rose-400" : "text-emerald-400"}
+                  >
+                    {user.is_active ? "Yasakla" : "Yasağı Kaldır"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {users.length === 0 && (
+              <div className="text-center py-10 text-ink-muted text-sm">
+                Kullanıcı bulunamadı.
+              </div>
+            )}
+          </div>
+
+          <div className={`hidden md:block ${adminCardClass} overflow-x-auto`}>
+            <table className="w-full min-w-[640px] text-left">
+              <thead className="bg-canvas/70 border-b border-subtle text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                <tr>
+                  <th className="px-5 py-3.5">ID</th>
+                  <th className="px-5 py-3.5">Kullanıcı Adı</th>
+                  <th className="px-5 py-3.5">E-posta</th>
+                  <th className="px-5 py-3.5">Rol</th>
+                  <th className="px-5 py-3.5">Durum</th>
+                  <th className="px-5 py-3.5 text-right">İşlem</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-subtle">
+                {users.map((user) => (
+                  <tr key={user.id} className="hover:bg-white/[0.02]">
+                    <td className="px-5 py-3.5 text-xs text-ink-muted tabular-nums">
+                      #{user.id}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm font-semibold text-ink-primary">
+                      {user.username}
+                    </td>
+                    <td className="px-5 py-3.5 text-sm text-ink-secondary">
+                      {user.email}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Badge variant={user.role === "admin" ? "novel" : "webtoon"}>
+                        {user.role}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {user.is_active ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          Aktif
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-rose-400 text-xs font-semibold">
+                          <ShieldAlert className="h-3.5 w-3.5" />
+                          Yasaklı
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setBanTarget(user)}
+                        className={
+                          user.is_active
+                            ? "text-rose-400 hover:bg-rose-500/10"
+                            : "text-emerald-400 hover:bg-emerald-500/10"
+                        }
+                      >
+                        {user.is_active ? "Yasakla" : "Yasağı Kaldır"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {users.length === 0 && (
+              <div className="text-center py-10 text-ink-muted text-sm">
+                Kullanıcı bulunamadı.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <AdminPagination
+        page={page}
+        totalPages={pagination.pages || 1}
+        onPageChange={setPage}
+      />
+
+      <AdminConfirmDialog
+        open={Boolean(banTarget)}
+        onOpenChange={(open) => !open && setBanTarget(null)}
+        title={banTarget?.is_active ? "Kullanıcıyı Yasakla" : "Yasağı Kaldır"}
+        description={
+          banTarget?.is_active
+            ? `${banTarget?.username} kullanıcısının site erişimini yasaklamak istiyor musunuz?`
+            : `${banTarget?.username} kullanıcısının yasağını kaldırmak istiyor musunuz?`
+        }
+        confirmLabel={banTarget?.is_active ? "Yasakla" : "Yasağı Kaldır"}
+        variant={banTarget?.is_active ? "danger" : "primary"}
+        loading={updatingBan}
+        onConfirm={executeToggleBan}
+      />
+    </div>
+  );
 }

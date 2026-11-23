@@ -2,79 +2,220 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Koyu antrasit üstte, aşağı doğru asil mora yumuşak geçiş */
+/* ==========================================================================
+   Kaos Manga — Obsidian & Amethyst Design System Tokens
+   ========================================================================== */
+
+:root {
+  /* Core Surfaces */
+  --bg-canvas: #0B0B0F;
+  --bg-canvas-rgb: 11 11 15;
+  --bg-surface: #13131A;
+  --bg-surface-rgb: 19 19 26;
+  --bg-elevated: #1C1C26;
+  --bg-elevated-rgb: 28 28 38;
+  --bg-glass: rgba(19, 19, 26, 0.78);
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --border-brand: rgba(168, 85, 247, 0.45);
+
+  /* Text Hierarchy (WCAG AA+ on #0B0B0F / #13131A / #1C1C26) */
+  --text-primary: #F4F4F6;
+  --text-secondary: #B0B0BC;
+  --text-muted: #8E8E9E;
+
+  /* Default Global Accent (Amethyst Brand) */
+  --accent: #A855F7;
+  --accent-rgb: 168 85 247;
+  --accent-soft: rgba(168, 85, 247, 0.15);
+  --accent-border: rgba(168, 85, 247, 0.35);
+
+  /* Default Reader Surface Fallback (Charcoal) */
+  --reader-bg: #121216;
+  --reader-text: #E4E4E7;
+  --reader-muted: #A1A1AA;
+  --reader-surface: #1B1B23;
+  --reader-border: rgba(255, 255, 255, 0.09);
+}
+
+/* ==========================================================================
+   Scoped Series Format Accents (ONLY on Series Detail & Reader Containers)
+   Global chrome stays strictly Obsidian + Amethyst.
+   ========================================================================== */
+
+[data-series-type="WEBTOON"] {
+  --accent: #38BDF8;
+  --accent-rgb: 56 189 248;
+  --accent-soft: rgba(56, 189, 248, 0.14);
+  --accent-border: rgba(56, 189, 248, 0.35);
+}
+
+[data-series-type="MANGA"] {
+  --accent: #F59E0B;
+  --accent-rgb: 245 158 11;
+  --accent-soft: rgba(245, 158, 11, 0.14);
+  --accent-border: rgba(245, 158, 11, 0.35);
+}
+
+[data-series-type="NOVEL"] {
+  --accent: #A855F7;
+  --accent-rgb: 168 85 247;
+  --accent-soft: rgba(168, 85, 247, 0.15);
+  --accent-border: rgba(168, 85, 247, 0.35);
+}
+
+/* ==========================================================================
+   Distraction-Free Reader Surface Themes
+   ========================================================================== */
+
+[data-reader-theme="oled"] {
+  --reader-bg: #000000;
+  --reader-text: #E5E5E7;
+  --reader-muted: #8E8E93;
+  --reader-surface: #0D0D12;
+  --reader-border: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+}
+
+[data-reader-theme="charcoal"] {
+  --reader-bg: #121216;
+  --reader-text: #E4E4E7;
+  --reader-muted: #A1A1AA;
+  --reader-surface: #1B1B23;
+  --reader-border: rgba(255, 255, 255, 0.09);
+  color-scheme: dark;
+}
+
+[data-reader-theme="sepia"] {
+  --reader-bg: #F4ECD8;
+  --reader-text: #3B2F22;
+  --reader-muted: #786552;
+  --reader-surface: #EBE0C6;
+  --reader-border: rgba(59, 47, 34, 0.14);
+  color-scheme: light;
+}
+
+[data-reader-theme="paper"] {
+  --reader-bg: #F8FAFC;
+  --reader-text: #1E293B;
+  --reader-muted: #64748B;
+  --reader-surface: #FFFFFF;
+  --reader-border: rgba(30, 41, 59, 0.12);
+  color-scheme: light;
+}
+
+/* ==========================================================================
+   Base Document & Scoped Site Ambient Canvas
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
 html {
-  background-color: #121212;
+  background-color: var(--bg-canvas);
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  position: relative;
-  isolation: isolate;
-  background-color: transparent;
-  color: #e0e0e0;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
   font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-body::before {
+/* Scoped ambient top purple radial glow — used ONLY in (site) layout so (reader) stays pure */
+.site-canvas {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  background-color: var(--bg-canvas);
+}
+
+.site-canvas::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    #121212 0%,
-    #151218 42%,
-    #1c152e 72%,
-    #2a1848 100%
-  );
+  background:
+    radial-gradient(ellipse 80% 45% at 50% -10%, rgba(168, 85, 247, 0.13), transparent 62%),
+    radial-gradient(ellipse 55% 35% at 85% 0%, rgba(99, 102, 241, 0.07), transparent 55%);
 }
 
-/* Scrollbar (Kaydırma çubuğu) Güzelleştirme */
+/* ==========================================================================
+   Scrollbars & Utility Helpers
+   ========================================================================== */
+
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a1a;
+  background: var(--bg-canvas);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 4px;
+  background: #272734;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #3f3f52;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
 }
 
 /* Breadcrumb links */
 nav[aria-label="breadcrumb"] a,
 .breadcrumb a,
-.breadcrumbs a,
-div[class*="breadcrumb"] a {
-  color: #9ca3af !important;
+.breadcrumbs a {
+  color: var(--text-secondary);
+  transition: color 150ms ease;
 }
 
 nav[aria-label="breadcrumb"] a:hover,
 .breadcrumb a:hover,
-.breadcrumbs a:hover,
-div[class*="breadcrumb"] a:hover {
-  color: #ffffff !important;
+.breadcrumbs a:hover {
+  color: var(--text-primary);
 }
 
-/* Remove any white backgrounds that might leak through */
-* {
-  box-sizing: border-box;
+/* ==========================================================================
+   Novel Reader Typography (Turkish Hyphenation + Theme-Safe Prose)
+   ========================================================================== */
+
+.prose-novel-justified {
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  text-wrap: pretty;
 }
 
-/* Novel okuma alanı HTML içerik stilleri */
+.novel-content {
+  color: var(--reader-text);
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
 .novel-content b,
 .novel-content strong {
   font-weight: 700;
-  color: #ffffff;
+  color: inherit;
 }
 
 .novel-content i,
@@ -84,12 +225,21 @@ div[class*="breadcrumb"] a:hover {
 
 .novel-content u {
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .novel-content strike,
 .novel-content s {
   text-decoration: line-through;
   opacity: 0.7;
+}
+
+.novel-content blockquote {
+  border-left: 3px solid var(--accent-border);
+  padding-left: 1.15rem;
+  margin: 1.5rem 0;
+  color: var(--reader-muted);
+  font-style: italic;
 }
 
 .novel-content ol {
@@ -110,29 +260,39 @@ div[class*="breadcrumb"] a:hover {
 }
 
 .novel-content p {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.45rem;
   line-height: inherit;
   letter-spacing: inherit;
   word-spacing: inherit;
-  text-indent: var(--novel-indent, 2rem);
+  text-indent: var(--novel-indent, 0);
 }
 
+.novel-content hr {
+  border: 0;
+  border-top: 1px solid var(--reader-border);
+  margin: 2rem auto;
+  width: 40%;
+}
+
+/* Admin scrollable container */
 .admin-scroll {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
 
+/* Range input styling */
 input[type="range"].accent-gray-200 {
   -webkit-appearance: none;
   appearance: none;
 }
+
 input[type="range"].accent-gray-200::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: #e5e5e5;
+  background: var(--text-primary);
   cursor: pointer;
 }

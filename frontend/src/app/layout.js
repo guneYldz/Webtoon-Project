@@ -1,12 +1,13 @@
-import "./globals.css"; // ENABLED: Tailwind PostCSS Build
+import "./globals.css";
+import { Inter, Cinzel, Lora } from "next/font/google";
+import { Toaster } from "sonner";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
-import Navbar from "@/components/Navbar"; // 1. Navbar'ı çağırdık (Import)
 
 export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#121212",
+  themeColor: "#0B0B0F",
 };
 
 export const metadata = {
@@ -15,7 +16,6 @@ export const metadata = {
     default: "Kaos Manga | Türkçe Webtoon, Manga ve Novel Oku",
     template: "%s | Kaos Manga",
   },
-  // 140-160 karakter arası: arama sonucunda kesilmeden görünür
   description:
     "Kaos Manga'da en yeni webtoon, manga ve novelleri Türkçe ve ücretsiz oku. Manhwa ve web novel arşivi her gün güncellenir. Hemen okumaya başla!",
   keywords: [
@@ -53,9 +53,9 @@ export const metadata = {
     googleBot: {
       index: true,
       follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
     },
   },
   openGraph: {
@@ -85,23 +85,33 @@ export const metadata = {
   },
 };
 
-import { Inter, Cinzel } from "next/font/google";
+// Strict 3-font budget — ALL with "latin-ext" for Turkish characters (ğ, ş, ı, İ, ö, ü, ç)
+const inter = Inter({
+  subsets: ["latin", "latin-ext"],
+  variable: "--font-inter",
+  display: "swap",
+  preload: true,
+});
 
-// display: "optional" -> yazi tipi gecikirse tarayici yedek fontta kalir ve
-// sonradan takas yapmaz; "swap" metin kaymasina (CLS) yol aciyordu
-const inter = Inter({ subsets: ["latin"], display: "optional", preload: true });
-// Cinzel sadece baslik/logo yazisinda kullanildigi icin preload edilmiyor:
-// ilk boyamada Inter ile yaris etmesin (FCP/LCP)
 const cinzel = Cinzel({
-  subsets: ["latin"],
-  weight: ["700", "900"],
+  subsets: ["latin", "latin-ext"],
+  weight: ["600", "700", "900"],
   variable: "--font-cinzel",
-  display: "optional",
+  display: "swap",
   preload: false,
   fallback: ["Georgia", "serif"],
-}); // Manga/Fantasy font
+});
 
-// Site geneli yapılandırılmış veri (Google zengin sonuçlar için)
+const lora = Lora({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-lora",
+  display: "swap",
+  preload: false,
+  fallback: ["Georgia", "serif"],
+});
+
 const siteJsonLd = {
   "@context": "https://schema.org",
   "@graph": [
@@ -142,23 +152,30 @@ const siteJsonLd = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="tr">
+    <html
+      lang="tr"
+      className={`${inter.variable} ${cinzel.variable} ${lora.variable} dark`}
+    >
       <head>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
         />
       </head>
-      {/* Renkler globals.css'te tanımlı; inline stil SEO araçlarında uyarı veriyordu */}
-      <body className={`${inter.className} ${cinzel.variable}`}>
+      <body className="font-sans bg-canvas text-ink-primary antialiased selection:bg-brand/30 selection:text-white">
         <GoogleAnalytics gaId="G-JQ0YHH7PL5" />
-        {/* 2. Navbar'ı en tepeye koyduk */}
-        <Navbar />
-
-        {/* 3. Sayfanın geri kalanı (Çocuklar) buraya gelecek */}
-        <main>
-          {children}
-        </main>
+        {children}
+        <Toaster
+          richColors
+          theme="dark"
+          position="bottom-right"
+          toastOptions={{
+            classNames: {
+              toast:
+                "!bg-elevated !border !border-white/10 !text-ink-primary !shadow-2xl",
+            },
+          }}
+        />
       </body>
     </html>
   );

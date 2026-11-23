@@ -2,276 +2,290 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import CategoryPicker from "@/components/CategoryPicker";
+import { Save, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import {
+  apiFetch,
+  getAdminToken,
+  PUBLIC_API_URL,
+  resolveMediaUrl,
+} from "@/lib/apiClient";
+import { Skeleton } from "@/components/ui";
+import {
+  Button,
+  TypedCategoryPicker as CategoryPicker,
+  AdminPageHeader,
+  adminCardClass,
+  adminInputClass,
+  adminTextareaClass,
+  adminSelectClass,
+  adminLabelClass,
+} from "../../../_components/AdminUi";
 
 export default function EditNovelPage({ params }: { params: { id: string } }) {
-    const router = useRouter();
-    const [novel, setNovel] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
+  const [novel, setNovel] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-    const [formData, setFormData] = useState({
-        title: "",
-        summary: "",
-        author: "",
-        status: "ongoing",
-        is_published: false,
-        is_featured: false,
-        source_url: "",
-    });
+  const [formData, setFormData] = useState({
+    title: "",
+    summary: "",
+    author: "",
+    status: "ongoing",
+    is_published: false,
+    is_featured: false,
+    source_url: "",
+  });
 
-    const [coverImage, setCoverImage] = useState<File | null>(null);
-    const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [token, setToken] = useState("");
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
-    const novelId = params.id;
+  const novelId = params.id;
 
-    // Novel verilerini yükle
-    useEffect(() => {
-        const fetchNovel = async () => {
-            try {
-                const token = sessionStorage.getItem("access_token") ||
-                    sessionStorage.getItem("admin_token") ||
-                    sessionStorage.getItem("token");
-                const res = await fetch(`${API}/admin/novels/${novelId}`, {
-                    headers: {
-                        "Authorization": `Bearer ${token}`
-                    }
-                });
-                const data = await res.json();
+  useEffect(() => {
+    setToken(getAdminToken() || "");
 
-                if (data.status === "success") {
-                    const n = data.data;
-                    setNovel(n);
-                    setFormData({
-                        title: n.title || "",
-                        summary: n.summary || "",
-                        author: n.author || "",
-                        status: n.status || "ongoing",
-                        is_published: n.is_published || false,
-                        is_featured: n.is_featured || false,
-                        source_url: n.source_url || "", // Load
-                    });
-                    setSelectedCategoryIds((n.categories || []).map((c: any) => c.id));
-                }
-            } catch (error) {
-                console.error("Novel yüklenemedi:", error);
-                alert("Novel bulunamadı!");
-            } finally {
-                setLoading(false);
-            }
-        };
+    const fetchNovel = async () => {
+      try {
+        const res = await apiFetch(`/admin/novels/${novelId}`, {
+          auth: "admin",
+          cache: "no-store",
+        });
+        const data = await res.json();
 
-        fetchNovel();
-    }, [novelId]);
-
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setSubmitting(true);
-
-        try {
-            const form = new FormData();
-            form.append("title", formData.title);
-            form.append("summary", formData.summary);
-            form.append("author", formData.author); // Novel'e özel
-            form.append("status", formData.status);
-            form.append("is_published", formData.is_published.toString());
-            form.append("is_featured", formData.is_featured.toString());
-            form.append("source_url", formData.source_url || ""); // Her zaman gönder — boşsa backend null yapar
-            form.append("category_ids", selectedCategoryIds.join(","));
-
-            if (coverImage) {
-                form.append("cover_image", coverImage);
-            }
-
-            const putToken = sessionStorage.getItem("access_token") ||
-                sessionStorage.getItem("admin_token") ||
-                sessionStorage.getItem("token");
-            const res = await fetch(`${API}/admin/novels/${novelId}`, {
-                method: "PUT",
-                headers: {
-                    "Authorization": `Bearer ${putToken}`
-                },
-                body: form,
-            });
-
-            const data = await res.json();
-
-            if (data.status === "success" || res.ok) {
-                alert("Novel güncellendi!");
-                router.push("/admin/novels");
-            } else {
-                alert("Hata: " + (data.detail || "Bilinmeyen hata"));
-            }
-        } catch (error: any) {
-            alert("Güncelleme hatası: " + error.message);
-        } finally {
-            setSubmitting(false);
+        if (data.status === "success" && data.data) {
+          const n = data.data;
+          setNovel(n);
+          setFormData({
+            title: n.title || "",
+            summary: n.summary || "",
+            author: n.author || "",
+            status: n.status || "ongoing",
+            is_published: Boolean(n.is_published),
+            is_featured: Boolean(n.is_featured),
+            source_url: n.source_url || "",
+          });
+          setSelectedCategoryIds((n.categories || []).map((c: any) => c.id));
+        } else {
+          toast.error("Novel bulunamadı.");
         }
+      } catch (error) {
+        console.error("Novel yüklenemedi:", error);
+        toast.error("Novel yüklenirken hata oluştu.");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    if (loading) {
-        return (
-            <div className="p-6">
-                <p>Yükleniyor...</p>
-            </div>
-        );
-    }
+    fetchNovel();
+  }, [novelId]);
 
-    if (!novel) {
-        return (
-            <div className="p-6">
-                <p className="text-red-600">Novel bulunamadı!</p>
-            </div>
-        );
-    }
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSubmitting(true);
 
+    try {
+      const form = new FormData();
+      form.append("title", formData.title);
+      form.append("summary", formData.summary);
+      form.append("author", formData.author);
+      form.append("status", formData.status);
+      form.append("is_published", String(formData.is_published));
+      form.append("is_featured", String(formData.is_featured));
+      form.append("source_url", formData.source_url || "");
+      form.append("category_ids", selectedCategoryIds.join(","));
+
+      if (coverImage) form.append("cover_image", coverImage);
+
+      const res = await apiFetch(`/admin/novels/${novelId}`, {
+        method: "PUT",
+        auth: "admin",
+        body: form,
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok || data.status === "success") {
+        toast.success("Novel güncellendi.");
+        router.push("/admin/novels");
+      } else {
+        toast.error(data.detail || "Güncelleme başarısız oldu.");
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Güncelleme hatası.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
     return (
-        <div className="p-6 max-w-4xl">
-            <h1 className="text-3xl font-bold mb-6">Novel Düzenle: {novel.title}</h1>
-
-            <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow space-y-6">
-                {/* Başlık */}
-                <div>
-                    <label className="block text-sm font-medium mb-2">Başlık *</label>
-                    <input
-                        type="text"
-                        required
-                        value={formData.title}
-                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-
-                {/* Yazar */}
-                <div>
-                    <label className="block text-sm font-medium mb-2">Yazar *</label>
-                    <input
-                        type="text"
-                        required
-                        value={formData.author}
-                        onChange={(e) => setFormData({ ...formData, author: e.target.value })}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-
-                {/* Özet */}
-                <div>
-                    <label className="block text-sm font-medium mb-2">Özet</label>
-                    <textarea
-                        rows={5}
-                        value={formData.summary}
-                        onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                </div>
-
-                {/* Kategoriler */}
-                <div>
-                    <label className="block text-sm font-medium mb-2">Kategoriler</label>
-                    <CategoryPicker
-                        api={API}
-                        token={typeof window !== "undefined" ? (sessionStorage.getItem("admin_token") || sessionStorage.getItem("access_token") || "") : ""}
-                        selectedIds={selectedCategoryIds}
-                        onChange={setSelectedCategoryIds}
-                    />
-                </div>
-
-                {/* Durum */}
-                <div>
-                    <label className="block text-sm font-medium mb-2">Durum</label>
-                    <select
-                        value={formData.status}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                        className="w-full px-4 py-2 border rounded-lg"
-                    >
-                        <option value="ongoing">Devam Ediyor</option>
-                        <option value="completed">Tamamlandı</option>
-                    </select>
-                </div>
-
-                {/* Yayın Durumu */}
-                <div className="flex items-center gap-3">
-                    <input
-                        type="checkbox"
-                        id="is_published"
-                        checked={formData.is_published}
-                        onChange={(e) => setFormData({ ...formData, is_published: e.target.checked })}
-                        className="w-5 h-5"
-                    />
-                    <label htmlFor="is_published" className="font-medium">
-                        Yayında (Kullanıcılara görünür)
-                    </label>
-                </div>
-
-                {/* ÖNE ÇIKAN */}
-                <div className="flex items-center gap-3">
-                    <input
-                        type="checkbox"
-                        id="is_featured"
-                        checked={formData.is_featured}
-                        onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
-                        className="w-5 h-5"
-                    />
-                    <label htmlFor="is_featured" className="font-medium">
-                        ⭐ Öne Çıkan (Listelerde üstte görünür)
-                    </label>
-                </div>
-
-                {/* Source URL */}
-                <div>
-                    <label className="block text-sm font-medium mb-2">Kaynak URL (Opsiyonel)</label>
-                    <input
-                        type="url"
-                        value={formData.source_url}
-                        onChange={(e) => setFormData({ ...formData, source_url: e.target.value })}
-                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="https://orijinal-kaynak.com/..."
-                    />
-                </div>
-
-                {/* Kapak Resmi */}
-                <div>
-                    <label className="block text-sm font-medium mb-2">Kapak Resmi</label>
-                    {novel.cover_image && (
-                        <div className="mb-2">
-                            <img
-                                src={`${API}/${novel.cover_image}`}
-                                alt="Mevcut Kapak"
-                                className="h-24 rounded border"
-                            />
-                            <p className="text-sm text-gray-500 mt-1">Mevcut kapak</p>
-                        </div>
-                    )}
-                    <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setCoverImage(e.target.files?.[0] || null)}
-                        className="w-full px-4 py-2 border rounded-lg"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                        Yeni resim yüklerseniz eskisi değiştirilir
-                    </p>
-                </div>
-
-                {/* Butonlar */}
-                <div className="flex gap-4">
-                    <button
-                        type="submit"
-                        disabled={submitting}
-                        className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                    >
-                        {submitting ? "Kaydediliyor..." : "Güncelle"}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => router.back()}
-                        className="bg-gray-200 px-8 py-3 rounded-lg hover:bg-gray-300"
-                    >
-                        İptal
-                    </button>
-                </div>
-            </form>
-        </div>
+      <div className="max-w-4xl mx-auto space-y-4">
+        <Skeleton className="h-9 w-64" />
+        <Skeleton className="h-96 rounded-2xl" />
+      </div>
     );
+  }
+
+  if (!novel) {
+    return (
+      <div className="max-w-4xl mx-auto text-center py-12">
+        <p className="text-rose-400 mb-4">Novel bulunamadı!</p>
+        <Button variant="secondary" onClick={() => router.back()}>
+          Geri Dön
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <AdminPageHeader
+        title="Novel Düzenle"
+        description={novel.title}
+        actions={
+          <Button variant="secondary" size="sm" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+            Geri
+          </Button>
+        }
+      />
+
+      <form onSubmit={handleSubmit} className={`${adminCardClass} p-6 space-y-6`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className={adminLabelClass}>Başlık *</label>
+            <input
+              type="text"
+              required
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className={adminInputClass}
+            />
+          </div>
+
+          <div>
+            <label className={adminLabelClass}>Yazar *</label>
+            <input
+              type="text"
+              required
+              value={formData.author}
+              onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+              className={adminInputClass}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className={adminLabelClass}>Özet</label>
+          <textarea
+            rows={5}
+            value={formData.summary}
+            onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+            className={adminTextareaClass}
+          />
+        </div>
+
+        <div>
+          <label className={adminLabelClass}>Kategoriler</label>
+          <CategoryPicker
+            api={PUBLIC_API_URL}
+            token={token}
+            selectedIds={selectedCategoryIds}
+            onChange={setSelectedCategoryIds}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className={adminLabelClass}>Durum</label>
+            <select
+              value={formData.status}
+              onChange={(e) =>
+                setFormData({ ...formData, status: e.target.value })
+              }
+              className={`${adminSelectClass} w-full`}
+            >
+              <option value="ongoing">Devam Ediyor</option>
+              <option value="completed">Tamamlandı</option>
+            </select>
+          </div>
+
+          <div>
+            <label className={adminLabelClass}>Kaynak URL (Opsiyonel)</label>
+            <input
+              type="url"
+              value={formData.source_url}
+              onChange={(e) =>
+                setFormData({ ...formData, source_url: e.target.value })
+              }
+              className={adminInputClass}
+              placeholder="https://orijinal-kaynak.com/..."
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="flex items-center gap-3 p-3.5 rounded-xl bg-canvas border border-subtle cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.is_published}
+              onChange={(e) =>
+                setFormData({ ...formData, is_published: e.target.checked })
+              }
+              className="w-4 h-4 accent-brand rounded"
+            />
+            <span className="text-sm font-medium text-ink-primary">
+              Yayında (Kullanıcılara görünür)
+            </span>
+          </label>
+
+          <label className="flex items-center gap-3 p-3.5 rounded-xl bg-canvas border border-subtle cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.is_featured}
+              onChange={(e) =>
+                setFormData({ ...formData, is_featured: e.target.checked })
+              }
+              className="w-4 h-4 accent-brand rounded"
+            />
+            <span className="text-sm font-medium text-ink-primary">
+              Öne Çıkan (Listelerde üstte görünür)
+            </span>
+          </label>
+        </div>
+
+        <div>
+          <label className={adminLabelClass}>Kapak Resmi</label>
+          {novel.cover_image && (
+            <div className="mb-3">
+              <img
+                src={resolveMediaUrl(novel.cover_image)}
+                alt="Mevcut Kapak"
+                className="h-28 rounded-xl border border-subtle object-cover"
+              />
+            </div>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setCoverImage(e.target.files?.[0] || null)}
+            className="w-full text-xs text-ink-secondary file:mr-3 file:py-2 file:px-3.5 file:rounded-lg file:border file:border-subtle file:bg-elevated file:text-ink-primary file:font-semibold hover:file:bg-white/10"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 pt-2 border-t border-subtle">
+          <Button type="submit" variant="primary" loading={submitting}>
+            <Save className="h-4 w-4" />
+            Güncelle
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => router.back()}>
+            İptal
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
 }

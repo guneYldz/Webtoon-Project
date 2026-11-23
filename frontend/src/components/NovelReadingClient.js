@@ -1,382 +1,454 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation"; // useParams'ı props olarak alacağız
-import CommentSection from "@/components/CommentSection";
-import ChapterReactions from "@/components/ChapterReactions";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { Crimson_Pro, Cinzel, Lato } from "next/font/google";
-import { API } from "@/api";
-import Breadcrumbs from "@/components/Breadcrumbs";
-import RecommendedSeries from "@/components/RecommendedSeries";
+import DOMPurify from "isomorphic-dompurify";
+import {
+  Calendar,
+  Eye,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  SlidersHorizontal,
+} from "lucide-react";
+import { apiFetch } from "@/lib/apiClient";
+import { formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
+import { useReadingHistory } from "@/lib/readingHistory";
+import { Button, Skeleton } from "@/components/ui";
+import ReaderShell from "@/components/ReaderShell";
 import ReadingSettingsSheet, {
-    DEFAULT_READING_SETTINGS,
-    loadReadingSettings,
-    saveReadingSettings,
-    getReadingStyle,
+  DEFAULT_NOVEL_SETTINGS,
+  loadNovelSettings,
+  saveNovelSettings,
 } from "@/components/ReadingSettingsSheet";
+import ChapterReactions from "@/components/ChapterReactions";
+import CommentSection from "@/components/CommentSection";
+import RecommendedSeries from "@/components/RecommendedSeries";
 
-const crimson = Crimson_Pro({ subsets: ["latin"], weight: ["400", "600"], display: "swap" });
-const cinzel = Cinzel({ subsets: ["latin"], weight: ["700", "900"], display: "swap" });
-const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
+const COLUMN_WIDTHS = {
+  narrow: "max-w-xl",
+  standard: "max-w-3xl",
+  wide: "max-w-5xl",
+};
 
-// Props olarak slug ve chapterNumber'ı yukarıdan alıyoruz
-export default function NovelReadingClient({ slug, chapterNumber }) {
-    const router = useRouter();
+function sanitizeNovelHtml(rawHtml) {
+  return DOMPurify.sanitize(String(rawHtml || ""), {
+    FORBID_TAGS: ["script", "style", "iframe", "object", "embed"],
+    FORBID_ATTR: ["style", "color", "bgcolor", "face", "class"],
+  });
+}
 
-    const [chapter, setChapter] = useState(null);
-    const [allChapters, setAllChapters] = useState([]); // Tüm bölümleri tutacak state
-    const [loading, setLoading] = useState(true);
-    const [showNavbar, setShowNavbar] = useState(true);
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [savedSettings, setSavedSettings] = useState(DEFAULT_READING_SETTINGS);
-    const [draftSettings, setDraftSettings] = useState(DEFAULT_READING_SETTINGS);
-    const lastScrollY = useRef(0);
+function estimateReadingMinutes(rawContent) {
+  const plain = String(rawContent || "")
+    .replace(/<[^>]+>/g, " ")
+    .trim();
+  if (!plain) return 1;
+  const words = plain.split(/\s+/).length;
+  return Math.max(1, Math.round(words / 210));
+}
 
-    useEffect(() => {
-        const loaded = loadReadingSettings();
-        setSavedSettings(loaded);
-        setDraftSettings(loaded);
-    }, []);
+export default function NovelReadingClient({
+  slug,
+  chapterNumber,
+  initialChapter = null,
+  initialChapters = [],
+}) {
+  const [chapter, setChapter] = useState(initialChapter);
+  const [allChapters, setAllChapters] = useState(initialChapters);
+  const [loading, setLoading] = useState(!initialChapter);
+  const [error, setError] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_NOVEL_SETTINGS);
+  const [scrollPct, setScrollPct] = useState(0);
 
-    useEffect(() => {
-        loadChapter();
-    }, [slug, chapterNumber]);
+  const lastSavedPctRef = useRef(-1);
 
-    useEffect(() => {
-        const handleScroll = () => {
-            const currentScrollY = window.scrollY;
-            if (currentScrollY > lastScrollY.current && currentScrollY > 50) {
-                setShowNavbar(false);
-            } else {
-                setShowNavbar(true);
-            }
-            lastScrollY.current = currentScrollY;
-        };
-        window.addEventListener("scroll", handleScroll);
-        return () => window.removeEventListener("scroll", handleScroll);
-    }, []);
+  const { hydrated, getSeriesProgress, recordChapterRead, updateScrollProgress } =
+    useReadingHistory();
 
-    const loadChapter = async () => {
-        try {
-            setLoading(true);
-            // Client tarafında fetch (Cookie ve Sayaç için önemli)
-            const res = await fetch(`${API}/novels/${slug}/chapters/${chapterNumber}`, {
-                cache: "no-store",
-                credentials: "include"
-            });
+  useEffect(() => {
+    setSettings(loadNovelSettings());
+  }, []);
 
-            if (!res.ok) throw new Error("Bölüm yüklenemedi");
+  // Load chapter (and ping view count with real browser IP + credentials)
+  useEffect(() => {
+    if (!slug || !chapterNumber) return;
+    let cancelled = false;
 
-            const data = await res.json();
-            setChapter(data);
+    const load = async () => {
+      if (!initialChapter) {
+        setLoading(true);
+        setError(null);
+      }
 
-            // --- EK: TÜM BÖLÜMLERİ ÇEK (Dropdown İçin) ---
-            // Novel ID veya Slug üzerinden ana veriyi çekip bölümleri alıyoruz.
-            if (slug) {
-                try {
-                    // Novel detay endpoint'inden tüm bölümleri alabiliriz
-                    const novelRes = await fetch(`${API}/novels/${slug}`);
-                    if (novelRes.ok) {
-                        const novelData = await novelRes.json();
-                        if (novelData.chapters) {
-                            // Bölümleri numarasına göre sırala (Büyükten küçüğe veya Küçükten büyüğe - Genelde okuma sırası küçükten büyüğe ama listede bulmak için)
-                            // Dropdown için genelde Küçükten Büyüğe (1, 2, 3...) daha mantıklıdır ama en yeniyi görmek için tersi de olabilir. 
-                            // Kullanıcı "ilk 10 tane görünsün" dedi, standart sıralama yapalım.
-                            const sortedChapters = [...novelData.chapters].sort((a, b) => a.chapter_number - b.chapter_number);
-                            setAllChapters(sortedChapters);
-                        }
-                    }
-                } catch (novelErr) {
-                    console.error("Novel detay hatası:", novelErr);
-                }
-            }
+      try {
+        const res = await apiFetch(
+          `/novels/${slug}/chapters/${chapterNumber}`,
+          {
+            cache: "no-store",
+            credentials: "include",
+          }
+        );
 
-            window.scrollTo(0, 0);
-        } catch (err) {
-            console.error("Hata:", err);
-        } finally {
-            setLoading(false);
+        if (res.ok) {
+          const fresh = await res.json();
+          if (!cancelled) {
+            setChapter(fresh);
+            setError(null);
+          }
+        } else if (!initialChapter && !cancelled) {
+          setError("Bölüm bulunamadı.");
         }
-    };
-
-    const activeSettings = settingsOpen ? draftSettings : savedSettings;
-    const readingStyle = getReadingStyle(activeSettings);
-
-    const openSettings = () => {
-        setDraftSettings(savedSettings);
-        setSettingsOpen(true);
-    };
-
-    const closeSettings = () => {
-        setDraftSettings(savedSettings);
-        setSettingsOpen(false);
-    };
-
-    const handleSaveSettings = () => {
-        saveReadingSettings(draftSettings);
-        setSavedSettings(draftSettings);
-        setSettingsOpen(false);
-    };
-
-    const handleResetSettings = () => {
-        setDraftSettings({ ...DEFAULT_READING_SETTINGS });
-    };
-
-    const formatContent = (text) => {
-        if (!text) return null;
-
-        const indentClass = readingStyle.indent ? "indent-8" : "indent-0";
-        const paraStyle = {
-            lineHeight: readingStyle.lineHeight,
-            letterSpacing: `${readingStyle.letterSpacingEm}em`,
-            wordSpacing: `${readingStyle.wordSpacingEm}em`,
-        };
-
-        // İçerik zaten HTML etiketleri içeriyorsa (editörden geliyorsa) direkt render et
-        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(text);
-
-        if (hasHtmlTags) {
-            return (
-                <div
-                    className="novel-content mb-8 text-justify"
-                    style={{
-                        lineHeight: readingStyle.lineHeight,
-                        fontSize: `${readingStyle.fontSizePx}px`,
-                        letterSpacing: `${readingStyle.letterSpacingEm}em`,
-                        wordSpacing: `${readingStyle.wordSpacingEm}em`,
-                        ["--novel-indent"]: readingStyle.indent ? "2rem" : "0",
-                    }}
-                    dangerouslySetInnerHTML={{ __html: text }}
-                />
-            );
+      } catch (err) {
+        console.error("Novel bölüm yükleme hatası:", err);
+        if (!initialChapter && !cancelled) {
+          setError("Bölüm yüklenirken bağlantı hatası oluştu.");
         }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
 
-        // Düz metin ise satır satır parçala
-        return text.split('\n').map((para, index) => {
-            if (!para.trim()) return <br key={index} className="mb-4" />;
-            return (
-                <p
-                    key={index}
-                    className={`mb-8 text-justify ${indentClass}`}
-                    style={{ ...paraStyle, fontSize: `${readingStyle.fontSizePx}px` }}
-                >
-                    {para}
-                </p>
-            );
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, chapterNumber, initialChapter]);
+
+  // Fetch chapter list if not provided via SSR
+  useEffect(() => {
+    if (!slug || initialChapters.length > 0) return;
+    let cancelled = false;
+
+    apiFetch(`/novels/${slug}`, { cache: "force-cache" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.chapters) {
+          const sorted = [...data.chapters].sort(
+            (a, b) => Number(b.chapter_number) - Number(a.chapter_number)
+          );
+          setAllChapters(sorted);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, initialChapters.length]);
+
+  // Record chapter read in history
+  useEffect(() => {
+    if (!chapter || !chapter.novel_id) return;
+    recordChapterRead({
+      type: "novel",
+      seriesType: "NOVEL",
+      seriesId: chapter.novel_id,
+      slug: String(slug),
+      title: chapter.novel_title || "",
+      coverImage: chapter.novel_cover || "",
+      lastChapterId: chapter.id,
+      lastChapterNumber: chapter.chapter_number,
+      lastChapterTitle: chapter.title,
+      lastChapterUrl: `/novel/${slug}/bolum/${chapter.chapter_number}`,
+      chapterKey: chapter.chapter_number,
+    });
+  }, [chapter?.id, chapter?.novel_id, slug, recordChapterRead]);
+
+  // Track scroll progress
+  useEffect(() => {
+    if (!chapter) return;
+
+    const onScroll = () => {
+      const maxScroll =
+        document.documentElement.scrollHeight - window.innerHeight;
+      const pct =
+        maxScroll > 0
+          ? Math.min(100, Math.max(0, Math.round((window.scrollY / maxScroll) * 100)))
+          : 100;
+      setScrollPct(pct);
+
+      if (
+        chapter.novel_id &&
+        Math.abs(pct - lastSavedPctRef.current) >= 5
+      ) {
+        lastSavedPctRef.current = pct;
+        updateScrollProgress("novel", chapter.novel_id, pct, {
+          lastChapterId: chapter.id,
+          lastChapterNumber: chapter.chapter_number,
         });
+      }
     };
 
-    const formatDate = (dateString) => {
-        if (!dateString) return "Tarih Yok";
-        try {
-            return new Date(dateString).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-        } catch (e) { return "Tarih Hatalı"; }
-    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [chapter, updateScrollProgress]);
 
-    if (loading) return (
-        <div className="min-h-screen bg-[#121212] font-sans pb-40 overflow-x-hidden">
-            {/* Loading Header Preservation */}
-            <div className="relative bg-[#1a1a1a] shadow-2xl border-b border-gray-800 mb-12 h-[400px] flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-gray-400 text-sm animate-pulse tracking-widest">Bölüm Yükleniyor...</p>
-                </div>
-            </div>
+  const seriesHref = `/novel/${slug}`;
+  const prevHref = chapter?.prev_chapter
+    ? `${seriesHref}/bolum/${chapter.prev_chapter}`
+    : null;
+  const nextHref = chapter?.next_chapter
+    ? `${seriesHref}/bolum/${chapter.next_chapter}`
+    : null;
 
-            <main className="container mx-auto max-w-4xl px-4 md:px-8">
-                <div className="space-y-4 opacity-10">
-                    <div className="h-4 bg-gray-700 rounded w-full"></div>
-                    <div className="h-4 bg-gray-700 rounded w-5/6"></div>
-                    <div className="h-4 bg-gray-700 rounded w-full"></div>
-                </div>
-            </main>
-        </div>
-    );
-    if (!chapter) return <div className="min-h-screen bg-[#121212] text-white flex justify-center items-center">Bölüm Bulunamadı</div>;
+  const chapterOptions = useMemo(
+    () =>
+      allChapters.map((ch) => ({
+        value: ch.chapter_number,
+        number: ch.chapter_number,
+        title: ch.title,
+        href: `${seriesHref}/bolum/${ch.chapter_number}`,
+      })),
+    [allChapters, seriesHref]
+  );
 
+  const progressEntry =
+    hydrated && chapter?.novel_id
+      ? getSeriesProgress("novel", chapter.novel_id)
+      : null;
+
+  const readingMinutes = useMemo(
+    () => estimateReadingMinutes(chapter?.content),
+    [chapter?.content]
+  );
+
+  const sanitizedHtml = useMemo(() => {
+    if (!chapter?.content) return null;
+    const hasHtml = /<[a-z][\s\S]*>/i.test(chapter.content);
+    if (!hasHtml) return null;
+    return sanitizeNovelHtml(chapter.content);
+  }, [chapter?.content]);
+
+  const handleSettingsChange = (next) => {
+    setSettings(next);
+    saveNovelSettings(next);
+  };
+
+  const handleResetSettings = () => {
+    setSettings({ ...DEFAULT_NOVEL_SETTINGS });
+    saveNovelSettings(DEFAULT_NOVEL_SETTINGS);
+  };
+
+  if (loading) {
     return (
-        <div className={`min-h-screen bg-[#121212] font-sans text-gray-200 pb-40 overflow-x-hidden`}>
-            {/* 1. ÜST KAPAK ALANI */}
-            <div className="relative bg-[#1a1a1a] text-white shadow-2xl border-b border-gray-800 mb-12">
-                <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-[50px] scale-110" style={{ backgroundImage: chapter.novel_cover ? `url(${API}/${chapter.novel_cover})` : 'none', backgroundColor: '#2d1b4e' }}></div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/60 to-transparent"></div>
-                <div className="relative container mx-auto max-w-6xl px-6 py-16 flex flex-col items-center gap-8 z-10 text-center">
-
-                    {/* Breadcrumbs En Üstte */}
-                    <div className="absolute top-4 left-4 sm:left-8 z-20">
-                        <Breadcrumbs items={[
-                            { label: "Anasayfa", href: "/" },
-                            { label: "Romanlar", href: "/seriler" },
-                            { label: chapter.novel_title, href: `/novel/${slug}` },
-                            { label: `Bölüm ${chapter.chapter_number}`, href: null }
-                        ]} />
-                    </div>
-
-                    {chapter.novel_cover && (
-                        <div className="w-40 md:w-48 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600/50 shadow-2xl hover:scale-105 transition-transform duration-500">
-                            <img
-                                src={`${API}/${chapter.novel_cover}`}
-                                alt={chapter.novel_title}
-                                className="w-full h-auto object-cover"
-                            />
-                        </div>
-                    )}
-                    <div className="flex-1 pb-2">
-                        <Link href={`/novel/${slug}`} className="inline-block mb-4 px-4 py-1.5 rounded-full bg-purple-600/20 border border-purple-500/30 text-purple-300 text-sm font-bold tracking-widest uppercase hover:bg-purple-600 hover:text-white transition">
-                            {chapter.novel_title || "Roman Serisi"}
-                        </Link>
-                        <h1 className={`${cinzel.className} text-3xl md:text-5xl lg:text-6xl font-black text-white drop-shadow-2xl leading-tight mb-4`}>
-                            {chapter.title}
-                        </h1>
-                        <div className="flex flex-wrap items-center justify-center gap-4 text-gray-400 text-sm font-medium">
-                            <span className="bg-[#121212]/80 px-3 py-1 rounded border border-gray-700">Bölüm #{chapter.chapter_number}</span>
-                            <span className="flex items-center gap-1">📅 {formatDate(chapter.created_at)}</span>
-                            <span className="flex items-center gap-1 text-purple-400 bg-purple-900/20 px-2 py-1 rounded">👁️ {chapter.view_count || 0}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. OKUMA ALANI */}
-            <main
-                className={`container mx-auto relative z-10 transition-[max-width] duration-300 ${
-                    readingStyle.fullWidth ? "max-w-6xl" : "max-w-4xl"
-                }`}
-                style={{
-                    paddingLeft: `${readingStyle.paddingPx}px`,
-                    paddingRight: `${readingStyle.paddingPx}px`,
-                }}
-            >
-
-                {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
-                <div className="flex justify-center mb-8">
-                    <div className="relative w-full max-w-xs">
-                        <select
-                            className="w-full bg-[#1a1a1a] text-gray-300 border border-gray-700 rounded-lg px-4 py-3 appearance-none outline-none focus:border-purple-500 transition cursor-pointer font-sans"
-                            onChange={(e) => router.push(`/novel/${slug}/bolum/${e.target.value}`)}
-                            value={chapter.chapter_number} // Value chapter_number olarak ayarlandı
-                        >
-                            <option value="" disabled>Bölüm Seçin</option>
-                            {allChapters.map((chap) => (
-                                <option key={chap.id} value={chap.chapter_number}>
-                                    Bölüm {chap.chapter_number}
-                                </option>
-                            ))}
-                        </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                            ▼
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex justify-center mb-10 opacity-40 text-purple-500 text-2xl">❖</div>
-                <article
-                    className={`${crimson.className} text-[#e5e5e5] transition-[font-size] duration-200`}
-                    style={{
-                        fontSize: `${readingStyle.fontSizePx}px`,
-                        lineHeight: readingStyle.lineHeight,
-                        letterSpacing: `${readingStyle.letterSpacingEm}em`,
-                        wordSpacing: `${readingStyle.wordSpacingEm}em`,
-                    }}
-                >
-                    {formatContent(chapter.content)}
-                </article>
-                <div className="flex justify-center mt-12 opacity-40 text-purple-500 text-2xl">❖</div>
-
-                {/* --- YENİ: ALT NAVİGASYON --- */}
-                <div className="flex items-center justify-between text-gray-400 font-medium text-sm md:text-base border-t border-b border-gray-800 py-6 mt-12 font-sans">
-
-                    <button
-                        onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)}
-                        disabled={!chapter.prev_chapter}
-                        className={`flex items-center gap-2 hover:text-white transition ${!chapter.prev_chapter ? 'opacity-30 cursor-not-allowed' : ''}`}
-                    >
-                        <span>‹</span>
-                        <span>Önceki</span>
-                    </button>
-
-                    <Link href={`/novel/${slug}`} className="hover:text-white transition border-l border-r border-gray-800 px-6 md:px-12 text-center">
-                        Seri Sayfasına Dön
-                    </Link>
-
-                    <button
-                        onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)}
-                        disabled={!chapter.next_chapter}
-                        className={`flex items-center gap-2 hover:text-white transition ${!chapter.next_chapter ? 'opacity-30 cursor-not-allowed' : ''}`}
-                    >
-                        <span>Sonraki</span>
-                        <span>›</span>
-                    </button>
-                </div>
-
-            </main>
-
-            {/* 3. YORUM VE ÖNERİ ALANI */}
-            <div className={`mt-16 max-w-4xl mx-auto ${lato.className} px-4`}>
-                <RecommendedSeries type="novel" />
-
-                <div className="border-t border-gray-800 pt-12">
-                    <ChapterReactions type="novel" targetId={chapter.id} />
-                    <CommentSection type="novel" itemId={chapter.novel_id} chapterId={chapter.id} />
-                </div>
-            </div>
-
-            {/* 4. SABİT ALT BAR */}
-            <div className={`fixed bottom-0 left-0 w-full z-[999] h-16 transition-transform duration-300 ${showNavbar || settingsOpen ? "translate-y-0" : "translate-y-full"}`}>
-                <div className="flex justify-center w-full h-full">
-                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-purple-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-full px-4 sm:px-6 gap-2">
-                        <Link href={`/novel/${slug}`} className="text-gray-400 hover:text-purple-400 font-medium flex items-center gap-2 transition group shrink-0">
-                            <span className="text-xl group-hover:-translate-x-1 transition">←</span>
-                            <span className={`hidden sm:inline ${lato.className} text-sm font-bold tracking-widest uppercase`}>Seri</span>
-                        </Link>
-
-                        <button
-                            type="button"
-                            onClick={openSettings}
-                            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg text-gray-500/60 hover:text-gray-300 hover:bg-white/5 transition"
-                            aria-label="Okuma ayarları"
-                            title="Okuma ayarları"
-                        >
-                            <svg
-                                className="w-6 h-6"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden
-                            >
-                                <path d="M12 6.5c-1.4-1.15-3.3-1.75-5.7-1.75H3.5v13.5c1 .3 2.2.55 3.5.55 2.15 0 3.9-.55 5-1.55" />
-                                <path d="M12 6.5c1.4-1.15 3.3-1.75 5.7-1.75H20.5v13.5c-1 .3-2.2.55-3.5.55-2.15 0-3.9-.55-5-1.55" />
-                                <path d="M12 6.5v11.3" />
-                                <path d="M5.8 8.6h3.2M5.8 10.8h3.2M5.8 13h3.2M5.8 15.2h2.2" />
-                                <path d="M15 8.6h3.2M15 10.8h3.2M15 13h3.2M15 15.2h2.2" />
-                            </svg>
-                        </button>
-
-                        <div className="flex flex-col items-center justify-center px-1 min-w-0 flex-1">
-                            <h2 className={`text-sm font-bold text-gray-200 max-w-[100px] sm:max-w-xs truncate text-center ${lato.className} tracking-wide`}>{chapter.title}</h2>
-                            <span className="text-sm text-purple-500 font-black tracking-widest">#{chapter.chapter_number}</span>
-                        </div>
-                        <div className={`flex gap-2 sm:gap-3 shrink-0 ${lato.className}`}>
-                            <button onClick={() => chapter.prev_chapter && router.push(`/novel/${slug}/bolum/${chapter.prev_chapter}`)} disabled={!chapter.prev_chapter} className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-purple-400 transition">Önceki</button>
-                            <button onClick={() => chapter.next_chapter && router.push(`/novel/${slug}/bolum/${chapter.next_chapter}`)} disabled={!chapter.next_chapter} className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-purple-600 border border-purple-500 text-sm font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-purple-500 transition shadow-lg">Sonraki</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <ReadingSettingsSheet
-                open={settingsOpen}
-                onClose={closeSettings}
-                settings={draftSettings}
-                onChange={setDraftSettings}
-                onSave={handleSaveSettings}
-                onReset={handleResetSettings}
-            />
+      <div className="min-h-screen bg-canvas px-4 py-16">
+        <div className="max-w-3xl mx-auto space-y-5">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-10 w-3/4" />
+          <div className="space-y-3 pt-6">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-11/12" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
         </div>
+      </div>
     );
+  }
+
+  if (error || !chapter) {
+    return (
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center text-center gap-4 px-4">
+        <p className="text-ink-secondary">{error || "Bölüm bulunamadı."}</p>
+        <Link
+          href={seriesHref}
+          className="text-sm font-semibold text-accent hover:underline"
+        >
+          Seriye Dön
+        </Link>
+      </div>
+    );
+  }
+
+  const chNumStr = formatChapterNumber(chapter.chapter_number);
+  const customTitle =
+    chapter.title && !isAutoChapterTitle(chapter.title) ? chapter.title : null;
+
+  const fontClass =
+    settings.fontFamily === "sans" ? "font-sans" : "font-serif";
+  const alignClass =
+    settings.align === "justify" ? "prose-novel-justified" : "text-left";
+  const widthClass =
+    COLUMN_WIDTHS[settings.maxWidth] || COLUMN_WIDTHS.standard;
+
+  return (
+    <ReaderShell
+      seriesType="NOVEL"
+      readerTheme={settings.theme}
+      seriesTitle={chapter.novel_title}
+      seriesHref={seriesHref}
+      chapterLabel={`Bölüm ${chNumStr}`}
+      chapterSubLabel={`~${readingMinutes} dk`}
+      chapters={chapterOptions}
+      currentChapterValue={chapter.chapter_number}
+      readChapterIds={progressEntry?.readChapterIds || []}
+      prevHref={prevHref}
+      nextHref={nextHref}
+      onOpenSettings={() => setSettingsOpen(true)}
+      settingsOpen={settingsOpen}
+      scrollPct={scrollPct}
+    >
+      {/* Compact Chapter Intro Header */}
+      <div
+        className={`mx-auto ${widthClass} pt-6 pb-6 border-b border-[var(--reader-border)]`}
+        style={{
+          paddingLeft: `${settings.paddingPx}px`,
+          paddingRight: `${settings.paddingPx}px`,
+        }}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <Link
+              href={seriesHref}
+              className="text-xs font-semibold uppercase tracking-wider text-accent hover:underline"
+            >
+              {chapter.novel_title || "Novel"}
+            </Link>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-[var(--reader-text)] mt-1 leading-snug">
+              {customTitle || `Bölüm ${chNumStr}`}
+            </h1>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-[var(--reader-border)] bg-[var(--reader-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--reader-text)] hover:border-accent-border transition"
+            title="Yazı tipi, boyut ve tema ayarları"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 text-accent" />
+            <span>Görünüm</span>
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--reader-muted)] mt-3">
+          <span>Bölüm #{chNumStr}</span>
+          {chapter.created_at && (
+            <span className="inline-flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+              {new Date(chapter.created_at).toLocaleDateString("tr-TR", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3.5 w-3.5" aria-hidden="true" />~{readingMinutes} dk okuma
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            {(chapter.view_count || 0).toLocaleString("tr-TR")}
+          </span>
+        </div>
+      </div>
+
+      {/* Novel Reading Prose */}
+      <main
+        className={`mx-auto ${widthClass} py-8 transition-[max-width] duration-200`}
+        style={{
+          paddingLeft: `${settings.paddingPx}px`,
+          paddingRight: `${settings.paddingPx}px`,
+        }}
+      >
+        <article
+          className={`${fontClass} ${alignClass} text-[var(--reader-text)] transition-[font-size] duration-150`}
+          style={{
+            fontSize: `${settings.fontSizePx}px`,
+            lineHeight: settings.lineHeight,
+            ["--novel-indent"]: settings.indent ? "1.75rem" : "0",
+          }}
+        >
+          {sanitizedHtml !== null ? (
+            <div
+              className="novel-content"
+              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+            />
+          ) : (
+            <div className="novel-content">
+              {String(chapter.content || "")
+                .split("\n")
+                .map((para, idx) =>
+                  !para.trim() ? (
+                    <br key={idx} />
+                  ) : (
+                    <p key={idx}>{para}</p>
+                  )
+                )}
+            </div>
+          )}
+        </article>
+      </main>
+
+      {/* Post-Chapter Footer (Always crisp Obsidian dark surface for Engagement) */}
+      <div className="bg-canvas text-ink-primary border-t border-subtle mt-8">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="grid grid-cols-3 gap-2.5">
+            {prevHref ? (
+              <Link
+                href={prevHref}
+                className="h-12 rounded-xl bg-surface border border-subtle hover:border-hover px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-primary transition"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                <span>Önceki</span>
+              </Link>
+            ) : (
+              <span className="h-12 rounded-xl bg-surface/40 border border-subtle px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-muted opacity-40 cursor-not-allowed">
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                <span>Önceki</span>
+              </span>
+            )}
+
+            <Link
+              href={seriesHref}
+              className="h-12 rounded-xl bg-surface border border-subtle hover:border-hover px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-secondary hover:text-ink-primary transition"
+            >
+              <Layers className="h-4 w-4" aria-hidden="true" />
+              <span>Bölümler</span>
+            </Link>
+
+            {nextHref ? (
+              <Link
+                href={nextHref}
+                className="h-12 rounded-xl bg-accent text-[#0B0B0F] hover:brightness-110 px-3 flex items-center justify-center gap-1.5 text-sm font-bold shadow-md transition"
+              >
+                <span>Sonraki</span>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            ) : (
+              <span className="h-12 rounded-xl bg-surface/40 border border-subtle px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-muted opacity-40 cursor-not-allowed">
+                <span>Sonraki</span>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </span>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <ChapterReactions type="novel" targetId={chapter.id} />
+          </div>
+
+          <div id="yorumlar" className="mt-4 scroll-mt-16">
+            <CommentSection
+              type="novel"
+              itemId={chapter.novel_id}
+              chapterId={chapter.id}
+            />
+          </div>
+
+          <RecommendedSeries type="novel" currentId={chapter.novel_id} />
+        </div>
+      </div>
+
+      <ReadingSettingsSheet
+        mode="novel"
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onChange={handleSettingsChange}
+        onReset={handleResetSettings}
+      />
+    </ReaderShell>
+  );
 }

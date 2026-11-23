@@ -3,8 +3,32 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { FolderUp, UploadCloud, FileImage } from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch, getAdminToken } from "@/lib/apiClient";
 import { seriesTypeLabel } from "@/lib/seriesType";
-import { defaultChapterTitle, formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
+import {
+  defaultChapterTitle,
+  formatChapterNumber,
+  isAutoChapterTitle,
+} from "@/lib/chapterTitle";
+import { Button, Skeleton, Tabs, TabsList, TabsTrigger } from "@/components/ui";
+import {
+  AdminPageHeader,
+  adminCardClass,
+  adminInputClass,
+  adminSelectClass,
+  adminLabelClass,
+} from "../_components/AdminUi";
+
+function naturalSortFiles(fileList) {
+  return Array.from(fileList || []).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
 
 function BolumEkle() {
   const searchParams = useSearchParams();
@@ -13,16 +37,11 @@ function BolumEkle() {
 
   const [loading, setLoading] = useState(false);
   const [webtoons, setWebtoons] = useState([]);
-
-  const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
-
   const [mode, setMode] = useState("single");
-
   const [selectedWebtoon, setSelectedWebtoon] = useState(preselectedId);
   const [title, setTitle] = useState("");
   const [episodeNumber, setEpisodeNumber] = useState("");
   const [files, setFiles] = useState(null);
-
   const [bulkLogs, setBulkLogs] = useState([]);
 
   useEffect(() => {
@@ -31,23 +50,18 @@ function BolumEkle() {
 
   useEffect(() => {
     const load = async () => {
-      const token =
-        sessionStorage.getItem("access_token") ||
-        sessionStorage.getItem("admin_token") ||
-        sessionStorage.getItem("token");
+      const token = getAdminToken();
       let list = [];
       try {
         if (token) {
-          const res = await fetch(`${API}/admin/webtoon/list`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const res = await apiFetch("/admin/webtoon/list", { auth: "admin" });
           if (res.ok) {
             const data = await res.json();
             list = Array.isArray(data) ? data : data.data || [];
           }
         }
         if (!list.length) {
-          const res = await fetch(`${API}/webtoons/?limit=1000`);
+          const res = await apiFetch("/webtoons/?limit=1000");
           if (res.ok) {
             const data = await res.json();
             list = Array.isArray(data) ? data : data.data || [];
@@ -59,7 +73,7 @@ function BolumEkle() {
       setWebtoons(list);
     };
     load();
-  }, [API]);
+  }, []);
 
   const visibleWebtoons = webtoons.filter((w) => {
     if (typeFilter !== "WEBTOON" && typeFilter !== "MANGA") return true;
@@ -70,8 +84,8 @@ function BolumEkle() {
     typeFilter === "MANGA"
       ? "Manga Bölümü Yükle"
       : typeFilter === "WEBTOON"
-        ? "Webtoon Bölümü Yükle"
-        : "Webtoon / Manga Bölümü Yükle";
+      ? "Webtoon Bölümü Yükle"
+      : "Webtoon / Manga Bölümü Yükle";
 
   const onEpisodeNumberChange = (value) => {
     setEpisodeNumber(value);
@@ -81,10 +95,36 @@ function BolumEkle() {
     }
   };
 
+  const addLog = (msg) => setBulkLogs((prev) => [...prev, msg]);
+
+  async function uploadOneEpisode(webtoonId, epTitle, epNum, epFiles) {
+    const formData = new FormData();
+    formData.append("webtoon_id", webtoonId);
+    formData.append("title", defaultChapterTitle(epTitle, epNum));
+    formData.append("episode_number", epNum);
+
+    const sortedFiles = naturalSortFiles(epFiles);
+    for (let i = 0; i < sortedFiles.length; i++) {
+      formData.append("resimler", sortedFiles[i]);
+    }
+
+    const response = await apiFetch("/episodes/ekle", {
+      method: "POST",
+      auth: "admin",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || "API Hatası");
+    }
+    return response.json();
+  }
+
   const handleSingleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedWebtoon || !files) {
-      alert("Lütfen seri ve resim seçin.");
+    if (!selectedWebtoon || !files || files.length === 0) {
+      toast.error("Lütfen seri ve görselleri seçin.");
       return;
     }
 
@@ -92,9 +132,12 @@ function BolumEkle() {
     try {
       const epTitle = defaultChapterTitle(title, episodeNumber);
       await uploadOneEpisode(selectedWebtoon, epTitle, episodeNumber, files);
-      alert("✅ Bölüm Başarıyla Yüklendi!");
+      toast.success("Bölüm başarıyla yüklendi!");
+      setTitle("");
+      setEpisodeNumber("");
+      setFiles(null);
     } catch (error) {
-      alert("❌ Hata: " + error.message);
+      toast.error(error.message || "Bölüm yüklenemedi.");
     } finally {
       setLoading(false);
     }
@@ -102,8 +145,8 @@ function BolumEkle() {
 
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedWebtoon || !files) {
-      alert("Lütfen seri ve bir ANA KLASÖR seçin.");
+    if (!selectedWebtoon || !files || files.length === 0) {
+      toast.error("Lütfen seri ve ana klasörü seçin.");
       return;
     }
 
@@ -111,79 +154,49 @@ function BolumEkle() {
     setBulkLogs([]);
 
     const episodesMap = {};
-
     Array.from(files).forEach((file) => {
-      const pathParts = file.webkitRelativePath.split("/");
+      const pathParts = (file.webkitRelativePath || "").split("/");
       if (pathParts.length < 2) return;
       const folderName = pathParts[pathParts.length - 2];
       if (!file.type.startsWith("image/")) return;
-      if (!episodesMap[folderName]) {
-        episodesMap[folderName] = [];
-      }
+      if (!episodesMap[folderName]) episodesMap[folderName] = [];
       episodesMap[folderName].push(file);
     });
 
-    const folderNames = Object.keys(episodesMap);
-    let successCount = 0;
+    const folderNames = Object.keys(episodesMap).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+    );
 
-    addLog(`📂 Toplam ${folderNames.length} bölüm klasörü bulundu. Yükleme başlıyor...`);
+    let successCount = 0;
+    addLog(`Toplam ${folderNames.length} bölüm klasörü bulundu. Yükleme başlıyor...`);
 
     for (const folderName of folderNames) {
       const numberMatch = folderName.match(/(\d+(\.\d+)?)/);
       const epNum = numberMatch ? numberMatch[0] : null;
 
       if (!epNum) {
-        addLog(`⚠️ "${folderName}" klasöründen bölüm numarası okunamadı, atlanıyor.`);
+        addLog(`"${folderName}" klasöründen bölüm numarası okunamadı, atlanıyor.`);
         continue;
       }
 
-      addLog(`⏳ Bölüm ${epNum} (${folderName}) yükleniyor...`);
-
+      addLog(`Bölüm ${epNum} (${folderName}) yükleniyor...`);
       try {
-        const epFiles = episodesMap[folderName];
-        await uploadOneEpisode(selectedWebtoon, `Bölüm ${formatChapterNumber(epNum)}`, epNum, epFiles);
-        addLog(`✅ Bölüm ${epNum} başarıyla yüklendi!`);
+        await uploadOneEpisode(
+          selectedWebtoon,
+          `Bölüm ${formatChapterNumber(epNum)}`,
+          epNum,
+          episodesMap[folderName]
+        );
+        addLog(`✓ Bölüm ${epNum} başarıyla yüklendi.`);
         successCount++;
       } catch (error) {
-        addLog(`❌ Bölüm ${epNum} yüklenemedi: ${error.message}`);
+        addLog(`✗ Bölüm ${epNum} yüklenemedi: ${error.message}`);
       }
     }
 
     setLoading(false);
-    alert(`İşlem Tamamlandı! ${successCount}/${folderNames.length} bölüm yüklendi.`);
+    toast.success(`İşlem tamamlandı: ${successCount}/${folderNames.length} bölüm yüklendi.`);
   };
-
-  async function uploadOneEpisode(webtoonId, epTitle, epNum, epFiles) {
-    const token =
-      sessionStorage.getItem("access_token") ||
-      sessionStorage.getItem("admin_token") ||
-      sessionStorage.getItem("token");
-    const formData = new FormData();
-
-    formData.append("webtoon_id", webtoonId);
-    formData.append("title", defaultChapterTitle(epTitle, epNum));
-    formData.append("episode_number", epNum);
-
-    for (let i = 0; i < epFiles.length; i++) {
-      formData.append("resimler", epFiles[i]);
-    }
-
-    const response = await fetch(`${API}/episodes/ekle`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.detail || "API Hatası");
-    }
-    return await response.json();
-  }
-
-  const addLog = (msg) => setBulkLogs((prev) => [...prev, msg]);
 
   const typeHref = (t) => {
     const params = new URLSearchParams();
@@ -194,148 +207,180 @@ function BolumEkle() {
   };
 
   return (
-    <div className="bg-gray-900 text-gray-100 rounded-xl py-6 px-4">
-      <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-2xl mx-auto border border-gray-700">
+    <div className="max-w-2xl mx-auto">
+      <AdminPageHeader
+        title={pageTitle}
+        description="Tek bölüm yükleyin veya bölüm klasörlerini topluca içe aktarın (sayfalar doğal sıralanır)."
+      />
 
-        <h1 className="text-3xl font-bold mb-4 text-green-400 border-b border-gray-700 pb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-          <span>🎬 {pageTitle}</span>
-
-          <div className="text-sm flex gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("single")}
-              className={`px-3 py-1 rounded transition ${mode === "single" ? "bg-green-600 text-white" : "bg-gray-700 text-gray-400"}`}
+      <div className={`${adminCardClass} p-6 space-y-6`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-subtle">
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={typeHref("")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                !typeFilter
+                  ? "bg-brand-soft border-brand-border text-white"
+                  : "bg-canvas border-subtle text-ink-secondary hover:text-ink-primary"
+              }`}
             >
-              Tek Bölüm
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("bulk")}
-              className={`px-3 py-1 rounded transition ${mode === "bulk" ? "bg-green-600 text-white" : "bg-gray-700 text-gray-400"}`}
+              Tümü
+            </Link>
+            <Link
+              href={typeHref("WEBTOON")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                typeFilter === "WEBTOON"
+                  ? "bg-sky-500/20 border-sky-500/40 text-sky-300"
+                  : "bg-canvas border-subtle text-ink-secondary hover:text-ink-primary"
+              }`}
             >
-              Toplu (Klasör)
-            </button>
+              Webtoon
+            </Link>
+            <Link
+              href={typeHref("MANGA")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                typeFilter === "MANGA"
+                  ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                  : "bg-canvas border-subtle text-ink-secondary hover:text-ink-primary"
+              }`}
+            >
+              Manga
+            </Link>
           </div>
-        </h1>
 
-        <div className="flex flex-wrap gap-2 mb-6">
-          <Link
-            href={typeHref("")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${!typeFilter ? "bg-green-600 text-white" : "bg-gray-700 text-gray-300"}`}
-          >
-            Tümü
-          </Link>
-          <Link
-            href={typeHref("WEBTOON")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${typeFilter === "WEBTOON" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
-          >
-            Webtoon
-          </Link>
-          <Link
-            href={typeHref("MANGA")}
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${typeFilter === "MANGA" ? "bg-orange-600 text-white" : "bg-gray-700 text-gray-300"}`}
-          >
-            Manga
-          </Link>
+          <Tabs value={mode} onValueChange={setMode}>
+            <TabsList>
+              <TabsTrigger value="single">Tek Bölüm</TabsTrigger>
+              <TabsTrigger value="bulk">Toplu (Klasör)</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
-        <form onSubmit={mode === "single" ? handleSingleSubmit : handleBulkSubmit} className="space-y-6">
-
+        <form
+          onSubmit={mode === "single" ? handleSingleSubmit : handleBulkSubmit}
+          className="space-y-5"
+        >
           <div>
-            <label className="block text-gray-400 font-medium mb-1">
-              {typeFilter === "MANGA" ? "Hangi Manga?" : typeFilter === "WEBTOON" ? "Hangi Webtoon?" : "Hangi Webtoon / Manga?"}
+            <label className={adminLabelClass}>
+              {typeFilter === "MANGA"
+                ? "Hangi Manga?"
+                : typeFilter === "WEBTOON"
+                ? "Hangi Webtoon?"
+                : "Hangi Webtoon / Manga?"}
             </label>
             <select
               value={selectedWebtoon}
               onChange={(e) => setSelectedWebtoon(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-green-500 outline-none"
+              className={`${adminSelectClass} w-full`}
               required
             >
               <option value="">Seçiniz...</option>
               {visibleWebtoons.map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.title} ({seriesTypeLabel(w.type, w.typeLabel) === "MANGA" ? "Manga" : "Webtoon"})
+                  {w.title} (
+                  {seriesTypeLabel(w.type, w.typeLabel) === "MANGA"
+                    ? "Manga"
+                    : "Webtoon"}
+                  )
                 </option>
               ))}
             </select>
             {visibleWebtoons.length === 0 && (
-              <p className="text-sm text-gray-500 mt-2">Bu türe ait seri bulunamadı.</p>
+              <p className="text-xs text-ink-muted mt-1.5">
+                Bu türe ait seri bulunamadı.
+              </p>
             )}
           </div>
 
-          {mode === "single" && (
+          {mode === "single" ? (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-400 font-medium mb-1">Bölüm No</label>
+                  <label className={adminLabelClass}>Bölüm No *</label>
                   <input
                     type="number"
                     step="any"
                     placeholder="1"
                     value={episodeNumber}
                     onChange={(e) => onEpisodeNumberChange(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-green-500 outline-none"
+                    className={adminInputClass}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-400 font-medium mb-1">Bölüm Başlığı</label>
+                  <label className={adminLabelClass}>Bölüm Başlığı</label>
                   <input
                     type="text"
                     placeholder="Bölüm 1"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-green-500 outline-none"
+                    className={adminInputClass}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Boş bırakırsan otomatik “Bölüm {episodeNumber || "1"}” olur.</p>
+                  <p className="text-[11px] text-ink-muted mt-1">
+                    Boş bırakırsanız otomatik “Bölüm {episodeNumber || "1"}” olur.
+                  </p>
                 </div>
               </div>
 
               <div>
-                <label className="block text-gray-400 font-medium mb-1">Resimler (Çoklu Seç)</label>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => setFiles(e.target.files)}
-                  className="w-full bg-gray-700 text-gray-300 p-2 rounded border border-gray-600 cursor-pointer"
-                  required
-                />
+                <label className={adminLabelClass}>Sayfa Görselleri (Çoklu) *</label>
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-subtle hover:border-brand/50 rounded-xl p-5 cursor-pointer bg-canvas/60 transition text-center">
+                  <FileImage className="h-7 w-7 text-ink-muted mb-2" />
+                  <span className="text-xs text-ink-secondary">
+                    {files && files.length > 0
+                      ? `${files.length} görsel seçildi`
+                      : "Görselleri seçin (1.jpg, 2.jpg...)"}
+                  </span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => setFiles(e.target.files)}
+                    className="sr-only"
+                    required
+                  />
+                </label>
               </div>
             </>
-          )}
-
-          {mode === "bulk" && (
-            <div className="bg-gray-750 p-4 rounded-lg border border-dashed border-gray-600">
-              <label className="block text-green-400 font-bold mb-2">📂 Ana Klasörü Seç</label>
-              <p className="text-sm text-gray-400 mb-3">
-                İçinde &quot;Bölüm 1&quot;, &quot;Bölüm 2&quot; gibi klasörler olan ana klasörü seçin. Sistem klasör isimlerinden bölüm numarasını anlayacaktır.
+          ) : (
+            <div className="rounded-xl border border-dashed border-subtle bg-canvas/60 p-5 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-ink-primary">
+                <FolderUp className="h-4 w-4 text-brand" />
+                <span>Ana Klasörü Seçin</span>
+              </div>
+              <p className="text-xs text-ink-secondary">
+                İçinde &ldquo;Bölüm 1&rdquo;, &ldquo;Bölüm 2&rdquo; gibi alt
+                klasörler bulunan ana klasörü seçin. Bölüm numaraları ve sayfa
+                sıraları otomatik çözümlenir.
               </p>
               <input
                 type="file"
                 {...{ webkitdirectory: "", directory: "" }}
                 onChange={(e) => setFiles(e.target.files)}
-                className="w-full bg-gray-700 text-gray-300 p-2 rounded border border-gray-600 cursor-pointer"
+                className="w-full text-xs text-ink-secondary file:mr-3 file:py-2 file:px-3.5 file:rounded-lg file:border file:border-subtle file:bg-elevated file:text-ink-primary file:font-semibold"
                 required
               />
 
-              <div className="mt-4 bg-black p-3 rounded h-40 overflow-y-auto text-sm font-mono text-green-300 border border-gray-700">
-                {bulkLogs.length === 0 ? "İşlem bekleniyor..." : bulkLogs.map((log, i) => (
-                  <div key={i}>{log}</div>
-                ))}
+              <div className="bg-canvas p-3 rounded-xl h-40 overflow-y-auto text-xs font-mono text-emerald-300 border border-subtle space-y-1">
+                {bulkLogs.length === 0 ? (
+                  <span className="text-ink-muted">İşlem bekleniyor...</span>
+                ) : (
+                  bulkLogs.map((log, i) => <div key={i}>{log}</div>)
+                )}
               </div>
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
-            disabled={loading}
-            className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-green-600 hover:bg-green-500 hover:shadow-green-500/30"
-              }`}
+            variant="primary"
+            size="lg"
+            loading={loading}
+            className="w-full"
           >
-            {loading ? "İşleniyor..." : (mode === "single" ? "Bölümü Yayınla 🚀" : "Toplu Yüklemeyi Başlat 🚀")}
-          </button>
-
+            <UploadCloud className="h-4 w-4" />
+            {mode === "single" ? "Bölümü Yayınla" : "Toplu Yüklemeyi Başlat"}
+          </Button>
         </form>
       </div>
     </div>
@@ -344,7 +389,14 @@ function BolumEkle() {
 
 export default function BolumEklePage() {
   return (
-    <Suspense fallback={<div className="text-gray-500 p-8">Yükleniyor...</div>}>
+    <Suspense
+      fallback={
+        <div className="max-w-2xl mx-auto space-y-4">
+          <Skeleton className="h-8 w-52" />
+          <Skeleton className="h-96 rounded-2xl" />
+        </div>
+      }
+    >
       <BolumEkle />
     </Suspense>
   );

@@ -2,15 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { API } from "@/api";
+import {
+  ThumbsUp,
+  Laugh,
+  Heart,
+  Sparkles,
+  Flame,
+  Frown,
+} from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch, getUserToken } from "@/lib/apiClient";
 
 const REACTIONS = [
-  { key: "upvote", emoji: "👍", label: "Beğen" },
-  { key: "funny", emoji: "😄", label: "Komik" },
-  { key: "love", emoji: "😍", label: "Sevdim" },
-  { key: "surprised", emoji: "😮", label: "Şaşırtıcı" },
-  { key: "angry", emoji: "😡", label: "Kızgın" },
-  { key: "sad", emoji: "😢", label: "Üzücü" },
+  { key: "upvote", icon: ThumbsUp, label: "Beğen", tint: "text-sky-400" },
+  { key: "funny", icon: Laugh, label: "Komik", tint: "text-amber-400" },
+  { key: "love", icon: Heart, label: "Sevdim", tint: "text-rose-400" },
+  { key: "surprised", icon: Sparkles, label: "Şaşırtıcı", tint: "text-purple-400" },
+  { key: "angry", icon: Flame, label: "Kızgın", tint: "text-orange-400" },
+  { key: "sad", icon: Frown, label: "Üzücü", tint: "text-indigo-400" },
 ];
 
 const emptyCounts = () =>
@@ -28,63 +37,88 @@ export default function ChapterReactions({ type, targetId }) {
 
   useEffect(() => {
     if (!type || !targetId) return;
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    fetch(`${API}/reactions/${type}/${targetId}`, { headers })
+    let cancelled = false;
+
+    const token = getUserToken();
+    apiFetch(`/reactions/${type}/${targetId}`, {
+      auth: token ? "user" : "none",
+      cache: "no-store",
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!data) return;
+        if (!data || cancelled) return;
         setCounts({ ...emptyCounts(), ...(data.counts || {}) });
         setTotal(data.total || 0);
         setMine(data.mine || null);
       })
       .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [type, targetId]);
 
   const onPick = async (key) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token = getUserToken();
     if (!token) {
-      router.push("/login");
+      toast.info("Tepki vermek için giriş yapmalısın.", {
+        action: {
+          label: "Giriş Yap",
+          onClick: () => router.push("/login"),
+        },
+      });
       return;
     }
+
     if (busy) return;
     setBusy(true);
     try {
-      const res = await fetch(`${API}/reactions/${type}/${targetId}`, {
+      const res = await apiFetch(`/reactions/${type}/${targetId}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ reaction: key }),
+        auth: "user",
+        json: { reaction: key },
       });
+
       if (res.status === 401) {
-        router.push("/login");
+        toast.info("Oturumun sona erdi, lütfen tekrar giriş yap.", {
+          action: {
+            label: "Giriş Yap",
+            onClick: () => router.push("/login"),
+          },
+        });
         return;
       }
-      if (!res.ok) return;
+
+      if (!res.ok) {
+        toast.error("Tepki kaydedilemedi.");
+        return;
+      }
+
       const data = await res.json();
       setCounts({ ...emptyCounts(), ...(data.counts || {}) });
       setTotal(data.total || 0);
       setMine(data.mine || null);
+    } catch {
+      toast.error("Tepki gönderilirken bağlantı hatası oluştu.");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <section className="w-full py-10 px-2">
+    <section className="w-full py-8">
       <div className="text-center mb-6">
-        <h3 className="text-xl md:text-2xl font-black text-white tracking-tight">
-          Ne düşünüyorsun?
+        <h3 className="text-lg md:text-xl font-bold text-ink-primary tracking-tight">
+          Bu bölümü nasıl buldun?
         </h3>
-        <p className="text-gray-400 text-sm mt-1">
-          {total} tepki
+        <p className="text-ink-muted text-xs mt-1 font-medium">
+          {total.toLocaleString("tr-TR")} tepki
         </p>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-2 gap-y-4 max-w-md sm:max-w-2xl mx-auto w-full px-1">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5 max-w-2xl mx-auto w-full">
         {REACTIONS.map((r) => {
+          const Icon = r.icon;
           const selected = mine === r.key;
           return (
             <button
@@ -92,21 +126,30 @@ export default function ChapterReactions({ type, targetId }) {
               type="button"
               onClick={() => onPick(r.key)}
               disabled={busy}
-              className="flex flex-col items-center gap-1.5 min-w-0 w-full group"
               aria-pressed={selected}
               aria-label={r.label}
+              className={`group flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 transition-all duration-200 ease-smooth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-60 ${
+                selected
+                  ? "bg-accent-soft border-accent-border text-ink-primary shadow-sm"
+                  : "bg-surface border-subtle text-ink-secondary hover:border-hover hover:bg-elevated hover:text-ink-primary"
+              }`}
             >
+              <div className="flex items-center gap-1.5">
+                <Icon
+                  className={`h-4 w-4 transition-transform duration-200 group-hover:scale-110 ${
+                    selected ? "text-accent" : r.tint
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="text-sm font-bold tabular-nums">
+                  {counts[r.key] || 0}
+                </span>
+              </div>
               <span
-                className={`flex items-center justify-center gap-1 px-2 py-2 rounded-full border backdrop-blur-md transition w-full max-w-[5.75rem] ${
-                  selected
-                    ? "bg-blue-600/20 border-blue-500 text-white shadow-[0_0_16px_rgba(59,130,246,0.35)]"
-                    : "bg-black/50 border-white/10 text-gray-200 hover:border-gray-500 hover:bg-black/70"
+                className={`text-[11px] font-medium leading-tight ${
+                  selected ? "text-ink-primary" : "text-ink-muted group-hover:text-ink-secondary"
                 }`}
               >
-                <span className="text-lg leading-none">{r.emoji}</span>
-                <span className="text-sm font-bold tabular-nums">{counts[r.key] || 0}</span>
-              </span>
-              <span className={`text-xs font-semibold text-center leading-tight ${selected ? "text-white" : "text-gray-400 group-hover:text-gray-200"}`}>
                 {r.label}
               </span>
             </button>

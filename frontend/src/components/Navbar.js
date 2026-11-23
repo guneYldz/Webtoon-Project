@@ -1,40 +1,73 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
-import Image from "next/image"; // Image import edildi
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { API } from "@/api";
+import { toast } from "sonner";
+import {
+  Menu,
+  Search,
+  User,
+  Heart,
+  Settings,
+  LogOut,
+  ChevronDown,
+  Home,
+  Compass,
+  Layers,
+  Sparkles,
+  Megaphone,
+  Shield,
+  BookPlus,
+  FilePlus2,
+  BookOpen,
+  X,
+} from "lucide-react";
+import { apiFetch, resolveMediaUrl } from "@/lib/apiClient";
 import NotificationBell from "@/components/NotificationBell";
+import {
+  Button,
+  Badge,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui";
+
+const NAV_LINKS = [
+  { href: "/", label: "Ana Sayfa", icon: Home },
+  { href: "/kesfet", label: "Keşfet", icon: Compass },
+  { href: "/seriler", label: "Seriler", icon: Layers },
+  { href: "/yeniler", label: "Yeniler", icon: Sparkles },
+  { href: "/duyurular", label: "Duyurular", icon: Megaphone },
+];
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const buttonRef = useRef(null);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
-  const [isMounted, setIsMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef(null);
 
   const pathname = usePathname();
   const router = useRouter();
 
-  const isReadingPage = pathname.includes("/bolum") || pathname.includes("/oku");
-
   const checkUser = async () => {
-    const token = localStorage.getItem("token");
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
       setUser(null);
       return;
     }
 
     try {
-      const res = await fetch("https://kaosmanga.net/api/auth/me", {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
+      const res = await apiFetch("/auth/me", { auth: "user" });
       if (res.ok) {
         const userData = await res.json();
         setUser(userData);
@@ -54,329 +87,476 @@ export default function Navbar() {
     return () => window.removeEventListener("auth-change", checkUser);
   }, [pathname]);
 
+  // Cmd+K / Ctrl+K shortcut for Quick Search
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target) &&
-        buttonRef.current && !buttonRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Scroll kilidi - Mobil menü açıkken arka plan kaymasın
-  useEffect(() => {
-    if (isMobileMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-  }, [isMobileMenuOpen]);
-
-  // ESC tuşu ile kapatma
-  useEffect(() => {
-    const handleEsc = (event) => {
-      if (event.key === "Escape") {
-        setIsMobileMenuOpen(false);
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      } else if (e.key === "Escape" && isSearchOpen) {
+        setIsSearchOpen(false);
       }
     };
-    if (isMobileMenuOpen) {
-      window.addEventListener("keydown", handleEsc);
-    }
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [isMobileMenuOpen]);
-
-  // Portal için mount durumu ve pozisyon hesaplama
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSearchOpen]);
 
   useEffect(() => {
-    if (isDropdownOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 12, // 12px gap
-        right: window.innerWidth - rect.right
-      });
+    if (isSearchOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
     }
-  }, [isDropdownOpen]);
+  }, [isSearchOpen]);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const trimmed = searchQuery.trim();
+    setIsSearchOpen(false);
+    setIsMobileMenuOpen(false);
+    if (trimmed) {
+      router.push(`/kesfet?q=${encodeURIComponent(trimmed)}`);
+    } else {
+      router.push("/kesfet");
+    }
+  };
 
   const handleLogout = () => {
-    localStorage.clear();
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("username");
     window.dispatchEvent(new Event("auth-change"));
     setUser(null);
-    setIsDropdownOpen(false);
+    setIsMobileMenuOpen(false);
+    toast.success("Oturum kapatıldı.");
     router.push("/login");
+  };
+
+  const isActiveLink = (href) => {
+    if (!pathname) return false;
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   if (pathname?.startsWith("/admin") || pathname === "/login-admin") {
     return null;
   }
 
-  return (
-    <nav
-      className={`bg-[#1a1a1a] border-b border-gray-800 z-[1000] h-24 max-h-24 shadow-md ${isReadingPage ? "relative" : "sticky top-0"
-        }`}
-    >
-      <div className="container mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
+  const isStaff = user?.role === "admin" || user?.role === "editor";
 
-        {/* SOL: HAMBURGER & LOGO */}
-        <div className="flex items-center gap-2">
-          {/* HAMBURGER BUTONU (Mobil) */}
+  return (
+    <header className="sticky top-0 z-40 h-16 md:h-[68px] w-full bg-glass backdrop-blur-xl border-b border-subtle transition-colors">
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6 h-full flex items-center justify-between gap-3">
+        {/* LEFT: Mobile Trigger + Brand */}
+        <div className="flex items-center gap-2.5">
           <button
+            type="button"
             onClick={() => setIsMobileMenuOpen(true)}
-            className="md:hidden text-gray-400 hover:text-white transition p-2 -ml-2"
+            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-xl text-ink-secondary hover:text-ink-primary hover:bg-white/[0.06] transition-colors"
             aria-label="Menüyü Aç"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
+            <Menu className="h-5 w-5" />
           </button>
 
-          <Link href="/" title="Kaos Manga - Ana Sayfa" className="flex items-center gap-4 group">
-            {/* Logo - Optimized size */}
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 group-hover:scale-105 transition duration-300 overflow-hidden rounded-full">
+          <Link
+            href="/"
+            title="Kaos Manga - Ana Sayfa"
+            className="flex items-center gap-3 group focus-visible:outline-none"
+          >
+            <div className="relative h-10 w-10 sm:h-11 sm:w-11 overflow-hidden rounded-full bg-black ring-1 ring-purple-500/35 shadow-[0_0_14px_rgba(168,85,247,0.28)] group-hover:ring-brand group-hover:scale-105 transition duration-300">
               <Image
                 src="/logo.png"
                 alt="Kaos Manga Logo"
                 fill
-                className="object-cover scale-125"
-                sizes="80px"
-                quality={90}
+                className="object-cover"
+                sizes="44px"
+                quality={95}
               />
             </div>
 
-            <span
-              className="text-xl sm:text-2xl font-black text-white tracking-widest group-hover:text-purple-400 transition bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-500 hidden sm:block"
-              style={{ fontFamily: 'var(--font-cinzel), serif' }}
-            >
+            <span className="font-display text-lg sm:text-xl font-black tracking-widest bg-clip-text text-transparent bg-gradient-to-r from-white via-purple-200 to-purple-400 group-hover:from-purple-300 group-hover:to-indigo-400 transition hidden sm:block">
               KAOS MANGA
             </span>
           </Link>
         </div>
 
-        {/* ORTA: LİNKLER */}
-        <div className="hidden md:flex items-center gap-6 text-base font-medium text-gray-400">
-          <Link href="/" title="Ana Sayfa" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
-            Ana Sayfa
-          </Link>
-          <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
-            Keşfet
-          </Link>
-          <Link href="/seriler" title="Tüm Webtoon, Manga ve Novel Serileri" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
-            Seriler
-          </Link>
-          <Link href="/yeniler" title="Yeni Eklenen Seriler" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
-            Yeniler
-          </Link>
-          <Link href="/duyurular" title="Duyurular" className="hover:text-white transition hover:bg-white/5 px-3 py-2 rounded-md">
-            Duyurular
-          </Link>
-        </div>
-
-        {/* SAĞ: BİLDİRİM + PROFİL ALANI */}
-        <div className="flex items-center gap-1 sm:gap-2">
-          <NotificationBell user={user} />
-
-          <div className="relative">
-          {user ? (
-            <div>
-              <button
-                ref={buttonRef}
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 py-1.5 px-3 rounded-full border border-gray-700 transition duration-300 focus:outline-none"
+        {/* CENTER: Desktop Navigation */}
+        <nav
+          aria-label="Ana Navigasyon"
+          className="hidden md:flex items-center gap-1"
+        >
+          {NAV_LINKS.map((link) => {
+            const active = isActiveLink(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`relative px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
+                  active
+                    ? "text-ink-primary bg-white/[0.07] font-semibold shadow-sm ring-1 ring-inset ring-white/10"
+                    : "text-ink-secondary hover:text-ink-primary hover:bg-white/[0.04]"
+                }`}
               >
-                <span className="text-base font-bold text-gray-200 hidden sm:block max-w-[150px] truncate">
-                  {user.username}
-                </span>
-
-                {user.profile_image ? (
-                  <img
-                    src={`${API}/${user.profile_image}`}
-                    alt={user.username || "Profil"}
-                    className="w-8 h-8 rounded-full object-cover shadow-md border border-gray-600"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white text-base font-bold shadow-md">
-                    {user.username ? user.username.charAt(0).toUpperCase() : "U"}
-                  </div>
+                {link.label}
+                {active && (
+                  <span className="absolute inset-x-3 -bottom-[11px] h-0.5 rounded-full bg-brand" />
                 )}
+              </Link>
+            );
+          })}
+        </nav>
 
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-4 h-4 text-gray-400 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
+        {/* RIGHT: Quick Search + Notifications + User Dropdown */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Expandable Desktop Quick Search / Trigger */}
+          {isSearchOpen ? (
+            <form
+              onSubmit={handleSearchSubmit}
+              className="relative flex items-center animate-fade-in"
+            >
+              <Search className="h-4 w-4 text-ink-muted absolute left-3 pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Seri ara..."
+                className="h-9 w-44 sm:w-64 rounded-xl border border-brand/50 bg-surface pl-9 pr-8 text-xs sm:text-sm text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40"
+              />
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen(false)}
+                className="absolute right-2 text-ink-muted hover:text-ink-primary p-0.5"
+                aria-label="Aramayı Kapat"
+              >
+                <X className="h-3.5 w-3.5" />
               </button>
-
-              {/* Dropdown Portal ile render ediliyor - hiçbir overflow veya z-index sorunu yok! */}
-              {isDropdownOpen && isMounted && createPortal(
-                <div
-                  ref={dropdownRef}
-                  className="fixed w-64 bg-[#1e1e1e] border border-gray-700 rounded-lg shadow-2xl py-2 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200"
-                  style={{
-                    top: `${dropdownPosition.top}px`,
-                    right: `${dropdownPosition.right}px`
-                  }}
-                >
-
-                  <div className="px-4 py-2 border-b border-gray-700 mb-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <p className="text-base text-gray-500">Hesap:</p>
-                      <span className={`text-base px-1.5 py-0.5 rounded font-bold uppercase ${user.role === 'admin' ? 'bg-red-900/50 text-red-200 border border-red-800' :
-                        user.role === 'editor' ? 'bg-yellow-900/50 text-yellow-200 border border-yellow-800' :
-                          'bg-blue-900/50 text-blue-200 border border-blue-800'
-                        }`}>
-                        {user.role || 'user'}
-                      </span>
-                    </div>
-                    <p className="text-base font-bold text-white truncate">{user.username}</p>
-                  </div>
-
-                  {/* 👇 GÜNCELLENEN YÖNETİM BUTONLARI 👇 */}
-                  {(user.role === "admin" || user.role === "editor") && (
-                    <>
-                      <div className="px-4 py-1 text-base font-bold text-gray-500 uppercase tracking-wider mt-1">
-                        Webtoon & Manga
-                      </div>
-                      <Link href="/admin/webtoon-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
-                        📚 Webtoon & Manga Ekle
-                      </Link>
-                      <Link href="/admin/bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-blue-400 hover:bg-gray-800 hover:pl-6 transition-all">
-                        🎬 Bölüm Yükle
-                      </Link>
-
-                      <div className="px-4 py-1 text-base font-bold text-gray-500 uppercase tracking-wider mt-2 border-t border-gray-800 pt-2">
-                        Roman Yönetimi
-                      </div>
-                      <Link href="/admin/novel-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-purple-400 hover:bg-gray-800 hover:pl-6 transition-all">
-                        📖 Roman Ekle
-                      </Link>
-                      <Link href="/admin/novel-bolum-ekle" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-1.5 text-base text-purple-400 hover:bg-gray-800 hover:pl-6 transition-all">
-                        📝 Roman Bölümü Yükle
-                      </Link>
-                      <div className="border-t border-gray-700 my-1"></div>
-                    </>
-                  )}
-
-                  <Link href="/profil" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-base text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2">
-                    👤 Profilim
-                  </Link>
-
-                  <Link
-                    href="/favoriler"
-                    className="block px-4 py-2 text-base text-gray-300 hover:bg-gray-700 hover:text-white flex items-center gap-2"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    ❤️ Favorilerim
-                  </Link>
-
-                  <Link href="/ayarlar" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-base text-gray-300 hover:bg-gray-800 hover:text-white transition">
-                    ⚙️ Ayarlar
-                  </Link>
-
-                  <div className="border-t border-gray-700 my-1"></div>
-
-                  <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-base text-red-400 hover:bg-red-900/20 hover:text-red-300 transition text-left">
-                    🚪 Çıkış Yap
-                  </button>
-                </div>,
-                document.body
-              )}
-            </div>
+            </form>
           ) : (
             <button
-              onClick={() => router.push("/login")}
-              className="flex items-center gap-2 text-gray-400 group hover:text-white transition"
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-subtle bg-surface/80 hover:bg-elevated hover:border-hover px-2.5 sm:px-3 text-xs text-ink-secondary hover:text-ink-primary transition-colors"
+              aria-label="Hızlı Arama"
+              title="Seri Ara (Ctrl+K)"
             >
-              <span className="text-base font-medium hidden sm:block">Giriş Yap</span>
-              <div className="w-9 h-9 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center group-hover:border-gray-500 group-hover:bg-gray-700 transition">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" />
-                </svg>
-              </div>
+              <Search className="h-4 w-4 text-ink-secondary" />
+              <span className="hidden lg:inline text-ink-muted">Ara...</span>
+              <kbd className="hidden lg:inline-flex items-center rounded border border-white/10 bg-canvas/80 px-1.5 py-0.5 text-[10px] font-mono text-ink-muted">
+                ⌘K
+              </kbd>
             </button>
           )}
-        </div>
+
+          <NotificationBell user={user} />
+
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Hesap Menüsü"
+                  className="inline-flex items-center gap-2 rounded-full border border-subtle bg-surface hover:bg-elevated hover:border-hover py-1 pl-1.5 pr-2.5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                >
+                  {user.profile_image ? (
+                    <img
+                      src={resolveMediaUrl(user.profile_image)}
+                      alt={user.username || "Profil"}
+                      className="h-7 w-7 rounded-full object-cover ring-1 ring-white/15"
+                    />
+                  ) : (
+                    <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-brand to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                      {user.username
+                        ? user.username.charAt(0).toUpperCase()
+                        : "U"}
+                    </div>
+                  )}
+                  <span className="text-xs font-semibold text-ink-primary hidden sm:block max-w-[120px] truncate">
+                    {user.username}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-ink-muted" />
+                </button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent align="end" className="w-60">
+                <div className="px-2.5 py-2 border-b border-subtle mb-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-ink-muted">Hesap</span>
+                    <Badge
+                      variant={
+                        user.role === "admin"
+                          ? "new"
+                          : user.role === "editor"
+                          ? "manga"
+                          : "webtoon"
+                      }
+                      size="sm"
+                    >
+                      {user.role || "user"}
+                    </Badge>
+                  </div>
+                  <p className="text-sm font-bold text-ink-primary truncate mt-1">
+                    {user.username}
+                  </p>
+                </div>
+
+                {isStaff && (
+                  <>
+                    <DropdownMenuLabel>Yönetim & İçerik</DropdownMenuLabel>
+                    {user.role === "admin" && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin">
+                          <Shield className="h-4 w-4 text-brand" />
+                          <span>Yönetim Paneli</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/webtoon-ekle">
+                        <BookPlus className="h-4 w-4 text-sky-400" />
+                        <span>Webtoon & Manga Ekle</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/bolum-ekle">
+                        <FilePlus2 className="h-4 w-4 text-sky-400" />
+                        <span>Webtoon Bölümü Yükle</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/novel-ekle">
+                        <BookOpen className="h-4 w-4 text-purple-400" />
+                        <span>Roman Ekle</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/novel-bolum-ekle">
+                        <FilePlus2 className="h-4 w-4 text-purple-400" />
+                        <span>Roman Bölümü Yükle</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+
+                <DropdownMenuItem asChild>
+                  <Link href="/profil">
+                    <User className="h-4 w-4 text-ink-secondary" />
+                    <span>Profilim</span>
+                  </Link>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem asChild>
+                  <Link href="/favoriler">
+                    <Heart className="h-4 w-4 text-rose-400" />
+                    <span>Favorilerim</span>
+                  </Link>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem asChild>
+                  <Link href="/profil?tab=ayarlar">
+                    <Settings className="h-4 w-4 text-ink-secondary" />
+                    <span>Hesap Ayarları</span>
+                  </Link>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem destructive onSelect={handleLogout}>
+                  <LogOut className="h-4 w-4" />
+                  <span>Çıkış Yap</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              aria-label="Giriş Yap"
+              onClick={() => router.push("/login")}
+              className="rounded-xl"
+            >
+              <User className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Giriş Yap</span>
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* MOBİL MENÜ OVERLAY */}
-      {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] md:hidden animate-in fade-in duration-300"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
+      {/* MOBILE NAVIGATION DRAWER (Radix Dialog side="left") */}
+      <Dialog open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+        <DialogContent
+          side="left"
+          className="flex flex-col justify-between p-5 overflow-y-auto"
+        >
+          <div className="space-y-6">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="relative h-9 w-9 overflow-hidden rounded-full bg-black ring-1 ring-purple-500/35 shadow-[0_0_12px_rgba(168,85,247,0.25)]">
+                <Image
+                  src="/logo.png"
+                  alt="Kaos Manga Logo"
+                  fill
+                  sizes="36px"
+                  className="object-cover"
+                />
+              </div>
+              <DialogTitle className="font-display text-base font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-400">
+                KAOS MANGA
+              </DialogTitle>
+            </div>
 
-      {/* MOBİL MENÜ YAN PANEL */}
-      <div className={`fixed top-0 left-0 w-[280px] h-full bg-[#1a1a1a] border-r border-gray-800 z-[2001] md:hidden transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-8">
-            <span
-              className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500"
-              style={{ fontFamily: 'var(--font-cinzel), serif' }}
-            >
-              KAOS MANGA
-            </span>
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-gray-400 hover:text-white p-1"
-              aria-label="Menüyü Kapat"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+            {/* Mobile Search Input */}
+            <form onSubmit={handleSearchSubmit} className="relative">
+              <Search className="h-4 w-4 text-ink-muted absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Webtoon, manga, novel ara..."
+                className="w-full rounded-xl border border-subtle bg-canvas py-2.5 pl-10 pr-3 text-sm text-ink-primary placeholder:text-ink-muted focus:border-brand focus:outline-none"
+              />
+            </form>
 
-          <div className="flex flex-col gap-2">
-            <Link href="/" title="Ana Sayfa" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
-              🏠 Ana Sayfa
-            </Link>
-            <Link href="/kesfet" title="Webtoon, Manga ve Novel Keşfet" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
-              🔍 Keşfet
-            </Link>
-            <Link href="/seriler" title="Tüm Webtoon, Manga ve Novel Serileri" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
-              📚 Seriler
-            </Link>
-            <Link href="/yeniler" title="Yeni Eklenen Seriler" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
-              ✨ Yeniler
-            </Link>
-            <Link href="/duyurular" title="Duyurular" onClick={() => setIsMobileMenuOpen(false)} className="text-gray-300 hover:text-white transition py-3 px-2 rounded-lg hover:bg-white/5 flex items-center gap-3">
-              📢 Duyurular
-            </Link>
-          </div>
+            {/* Primary Links */}
+            <nav className="flex flex-col gap-1">
+              {NAV_LINKS.map((link) => {
+                const Icon = link.icon;
+                const active = isActiveLink(link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-brand/15 text-ink-primary border border-brand/30 font-semibold"
+                        : "text-ink-secondary hover:text-ink-primary hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    <Icon
+                      className={`h-4 w-4 ${
+                        active ? "text-brand" : "text-ink-muted"
+                      }`}
+                    />
+                    <span>{link.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
 
-          <div className="mt-auto border-t border-gray-800 pt-6">
-            {!user ? (
-              <button
-                onClick={() => { setIsMobileMenuOpen(false); router.push("/login"); }}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-xl font-bold hover:shadow-lg hover:shadow-purple-500/20 transition active:scale-95"
-              >
-                Giriş Yap
-              </button>
-            ) : (
-              <div className="flex items-center gap-3 p-2 bg-white/5 rounded-xl">
-                {user.profile_image ? (
-                  <img
-                    src={`${API}/${user.profile_image}`}
-                    alt={user.username || "Profil"}
-                    className="w-10 h-10 rounded-full object-cover border border-gray-600"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-green-400 to-blue-500 flex items-center justify-center text-white font-bold">
-                    {user.username ? user.username.charAt(0).toUpperCase() : "U"}
-                  </div>
+            {/* User Account Links inside Mobile Drawer */}
+            {user && (
+              <div className="space-y-1 border-t border-subtle pt-4">
+                <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-2">
+                  Hesabım
+                </p>
+                <Link
+                  href="/profil"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm text-ink-secondary hover:text-ink-primary hover:bg-white/[0.05]"
+                >
+                  <User className="h-4 w-4 text-ink-muted" />
+                  <span>Profilim</span>
+                </Link>
+                <Link
+                  href="/favoriler"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm text-ink-secondary hover:text-ink-primary hover:bg-white/[0.05]"
+                >
+                  <Heart className="h-4 w-4 text-rose-400" />
+                  <span>Favorilerim</span>
+                </Link>
+                <Link
+                  href="/profil?tab=ayarlar"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm text-ink-secondary hover:text-ink-primary hover:bg-white/[0.05]"
+                >
+                  <Settings className="h-4 w-4 text-ink-muted" />
+                  <span>Hesap Ayarları</span>
+                </Link>
+                {isStaff && (
+                  <Link
+                    href={user.role === "admin" ? "/admin" : "/admin/webtoon-ekle"}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm text-brand hover:bg-brand/10"
+                  >
+                    <Shield className="h-4 w-4" />
+                    <span>Yönetim Araçları</span>
+                  </Link>
                 )}
-                <div className="flex flex-col overflow-hidden">
-                  <span className="text-base font-bold text-white truncate">{user.username}</span>
-                  <span className="text-base text-gray-500 capitalize">{user.role || 'user'}</span>
-                </div>
               </div>
             )}
           </div>
-        </div>
-      </div>
-    </nav>
+
+          {/* Drawer Footer */}
+          <div className="border-t border-subtle pt-4 mt-6">
+            {!user ? (
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="primary"
+                  size="md"
+                  className="w-full"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    router.push("/login");
+                  }}
+                >
+                  <User className="h-4 w-4" />
+                  <span>Giriş Yap</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="w-full"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    router.push("/register");
+                  }}
+                >
+                  <span>Kayıt Ol</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-subtle bg-elevated/60 p-2.5">
+                <Link
+                  href="/profil"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 min-w-0 flex-1"
+                >
+                  {user.profile_image ? (
+                    <img
+                      src={resolveMediaUrl(user.profile_image)}
+                      alt={user.username || "Profil"}
+                      className="h-9 w-9 rounded-full object-cover ring-1 ring-white/15 shrink-0"
+                    />
+                  ) : (
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-brand to-indigo-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                      {user.username
+                        ? user.username.charAt(0).toUpperCase()
+                        : "U"}
+                    </div>
+                  )}
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-bold text-ink-primary truncate">
+                      {user.username}
+                    </span>
+                    <span className="text-xs text-ink-muted capitalize">
+                      {user.role || "user"}
+                    </span>
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-400 hover:bg-rose-500/15 transition-colors shrink-0"
+                  title="Çıkış Yap"
+                  aria-label="Çıkış Yap"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </header>
   );
 }

@@ -1,221 +1,223 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ShieldCheck, Lock, User, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch, setAdminToken } from "@/lib/apiClient";
+import { Button as RawButton } from "@/components/ui";
+
+const Button = RawButton as React.ComponentType<any>;
 
 export default function AdminLoginPage() {
-    const router = useRouter();
-    const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        username: "",
-        password: "",
-    });
-    const [error, setError] = useState("");
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({ username: "", password: "" });
+  const [error, setError] = useState("");
+  const [attempts, setAttempts] = useState(0);
+  const [locked, setLocked] = useState(false);
+  const [lockTime, setLockTime] = useState(0);
 
-    // RATE LIMITING: 5 deneme, 30 saniye kilitleme
-    const [attempts, setAttempts] = useState(0);
-    const [locked, setLocked] = useState(false);
-    const [lockTime, setLockTime] = useState(0);
+  useEffect(() => {
+    const storedAttempts = parseInt(localStorage.getItem("login_attempts") || "0", 10);
+    const storedLockTime = parseInt(localStorage.getItem("lock_time") || "0", 10);
 
-    const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
+    if (storedLockTime > Date.now()) {
+      setLocked(true);
+      setLockTime(storedLockTime);
+    } else {
+      setAttempts(storedAttempts);
+      localStorage.removeItem("lock_time");
+    }
+  }, []);
 
-    // Sayfa yüklendiğinde kilit durumunu kontrol et
-    useEffect(() => {
-        const storedAttempts = parseInt(localStorage.getItem("login_attempts") || "0");
-        const storedLockTime = parseInt(localStorage.getItem("lock_time") || "0");
-
-        if (storedLockTime > Date.now()) {
-            setLocked(true);
-            setLockTime(storedLockTime);
-        } else {
-            setAttempts(storedAttempts);
-            localStorage.removeItem("lock_time");
-        }
-    }, []);
-
-    // Geri sayım için interval
-    useEffect(() => {
-        if (locked && lockTime > Date.now()) {
-            const interval = setInterval(() => {
-                const remaining = lockTime - Date.now();
-                if (remaining <= 0) {
-                    setLocked(false);
-                    setAttempts(0);
-                    localStorage.removeItem("login_attempts");
-                    localStorage.removeItem("lock_time");
-                    setError("");
-                }
-            }, 1000);
-            return () => clearInterval(interval);
-        }
-    }, [locked, lockTime]);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-
-        // Kilitli mi kontrol et
-        if (locked) {
-            const remaining = Math.ceil((lockTime - Date.now()) / 1000);
-            setError(`⏳ Çok fazla hatalı deneme yaptın! ${remaining} saniye sonra tekrar dene.`);
-            return;
-        }
-
-        setLoading(true);
+  useEffect(() => {
+    if (!locked || lockTime <= Date.now()) return;
+    const interval = setInterval(() => {
+      if (lockTime - Date.now() <= 0) {
+        setLocked(false);
+        setAttempts(0);
+        localStorage.removeItem("login_attempts");
+        localStorage.removeItem("lock_time");
         setError("");
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [locked, lockTime]);
 
-        try {
-            const form = new URLSearchParams();
-            form.append("username", formData.username);
-            form.append("password", formData.password);
+  const registerFailedAttempt = (baseMsg: string) => {
+    const next = attempts + 1;
+    setAttempts(next);
+    localStorage.setItem("login_attempts", String(next));
 
-            const res = await fetch(`${API}/auth/giris-yap`, {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: form,
-            });
+    if (next >= 5) {
+      const lockUntil = Date.now() + 30000;
+      setLocked(true);
+      setLockTime(lockUntil);
+      localStorage.setItem("lock_time", String(lockUntil));
+      setError("5 hatalı deneme yapıldı. Lütfen 30 saniye bekleyin.");
+    } else {
+      setError(`${baseMsg} (${5 - next} deneme hakkı kaldı)`);
+    }
+  };
 
-            const data = await res.json();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-            if (!res.ok) {
-                // BAŞARISIZ GİRİŞ - Deneme sayısını artır
-                const newAttempts = attempts + 1;
-                setAttempts(newAttempts);
-                localStorage.setItem("login_attempts", newAttempts.toString());
+    if (locked) {
+      const remaining = Math.ceil((lockTime - Date.now()) / 1000);
+      setError(`Çok fazla hatalı deneme! ${remaining} saniye sonra tekrar dene.`);
+      return;
+    }
 
-                if (newAttempts >= 5) {
-                    // 5 DENEME AŞILDI - 30 SANİYE KİLİTLE
-                    const lockUntil = Date.now() + 30000;
-                    setLocked(true);
-                    setLockTime(lockUntil);
-                    localStorage.setItem("lock_time", lockUntil.toString());
-                    setError("🚫 5 hatalı deneme! 30 saniye beklemelisin.");
-                } else {
-                    setError(`❌ ${data.detail || "Giriş başarısız"} (${5 - newAttempts} deneme hakkın kaldı)`);
-                }
-                setLoading(false);
-                return;
-            }
+    setLoading(true);
+    setError("");
 
-            // ADMIN ROLÜ KONTROLÜ
-            if (data.role !== "admin") {
-                const newAttempts = attempts + 1;
-                setAttempts(newAttempts);
-                localStorage.setItem("login_attempts", newAttempts.toString());
+    try {
+      const form = new URLSearchParams();
+      form.append("username", formData.username);
+      form.append("password", formData.password);
 
-                if (newAttempts >= 5) {
-                    const lockUntil = Date.now() + 30000;
-                    setLocked(true);
-                    setLockTime(lockUntil);
-                    localStorage.setItem("lock_time", lockUntil.toString());
-                    setError("🚫 5 hatalı deneme! 30 saniye beklemelisin.");
-                } else {
-                    setError(`⛔ Bu panel sadece ADMIN kullanıcılar içindir! (${5 - newAttempts} deneme hakkın kaldı)`);
-                }
-                setLoading(false);
-                return;
-            }
+      const res = await apiFetch("/auth/giris-yap", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+      });
 
-            // BAŞARILI GİRİŞ - Tüm denemeleri sıfırla
-            localStorage.removeItem("login_attempts");
-            localStorage.removeItem("lock_time");
+      const data = await res.json().catch(() => ({}));
 
-            // Token'ı kaydet (Tarayıcı kapanınca silinecek - SessionStorage)
-            sessionStorage.setItem("admin_token", data.access_token);
-            sessionStorage.setItem("access_token", data.access_token);
-            sessionStorage.setItem("token", data.access_token);
+      if (!res.ok) {
+        registerFailedAttempt(data.detail || "Giriş başarısız");
+        setLoading(false);
+        return;
+      }
 
-            sessionStorage.setItem("admin_user", data.username);
-            sessionStorage.setItem("admin_role", data.role);
+      if (data.role !== "admin") {
+        registerFailedAttempt("Bu panel sadece admin kullanıcılar içindir");
+        setLoading(false);
+        return;
+      }
 
-            // Admin paneline yönlendir
-            router.push("/admin");
-        } catch (err) {
-            setError(err.message);
-            setLoading(false);
-        }
-    };
+      localStorage.removeItem("login_attempts");
+      localStorage.removeItem("lock_time");
 
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center px-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-                {/* Logo ve Başlık */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
-                        <span className="text-3xl">🔐</span>
-                    </div>
-                    <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Panel</h1>
-                    <p className="text-gray-500">Sadece admin kullanıcılar girebilir</p>
-                </div>
+      setAdminToken(data.access_token, {
+        role: data.role,
+        username: data.username,
+      });
 
-                {/* Hata Mesajı */}
-                {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                        {error}
-                    </div>
-                )}
+      toast.success("Admin paneline giriş yapıldı.");
+      router.push("/admin");
+    } catch (err: any) {
+      setError(err?.message || "Sunucuyla bağlantı kurulamadı.");
+      setLoading(false);
+    }
+  };
 
-                {/* Kilit Uyarısı */}
-                {locked && (
-                    <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-lg mb-4">
-                        ⏳ Hesap kilitli! {Math.ceil((lockTime - Date.now()) / 1000)} saniye bekle.
-                    </div>
-                )}
-
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Kullanıcı Adı veya Email
-                        </label>
-                        <input
-                            type="text"
-                            required
-                            disabled={locked}
-                            value={formData.username}
-                            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                            placeholder="admin"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Şifre
-                        </label>
-                        <input
-                            type="password"
-                            required
-                            disabled={locked}
-                            value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                            placeholder="••••••••"
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading || locked}
-                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? "Giriş yapılıyor..." : locked ? "Kilitli" : "Giriş Yap"}
-                    </button>
-                </form>
-
-                {/* Footer */}
-                <div className="mt-6 text-center">
-                    <a href="/" className="text-sm text-gray-500 hover:text-gray-700">
-                        ← Ana Sayfaya Dön
-                    </a>
-                </div>
-
-                {/* Deneme Sayısı Göstergesi */}
-                {!locked && attempts > 0 && (
-                    <div className="mt-4 text-center text-sm text-gray-500">
-                        {attempts}/5 deneme yapıldı
-                    </div>
-                )}
-            </div>
+  return (
+    <div className="min-h-screen bg-canvas flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-surface border border-subtle rounded-2xl p-8 shadow-2xl">
+        <div className="text-center mb-7">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-soft border border-brand-border text-brand mb-4">
+            <ShieldCheck className="h-7 w-7" aria-hidden="true" />
+          </div>
+          <h1 className="text-2xl font-bold text-ink-primary tracking-tight">
+            Admin Girişi
+          </h1>
+          <p className="text-sm text-ink-secondary mt-1">
+            Yönetim paneline erişmek için admin hesabıyla oturum açın.
+          </p>
         </div>
-    );
+
+        {error && (
+          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 px-4 py-3 rounded-xl text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-ink-secondary mb-1.5">
+              Kullanıcı Adı veya E-posta
+            </label>
+            <div className="relative">
+              <User className="h-4 w-4 text-ink-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                required
+                disabled={locked}
+                value={formData.username}
+                onChange={(e) =>
+                  setFormData({ ...formData, username: e.target.value })
+                }
+                placeholder="admin"
+                className="w-full h-11 pl-10 pr-4 rounded-xl bg-canvas border border-subtle text-sm text-ink-primary placeholder:text-ink-muted outline-none focus:border-brand/60 disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-ink-secondary mb-1.5">
+              Şifre
+            </label>
+            <div className="relative">
+              <Lock className="h-4 w-4 text-ink-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                disabled={locked}
+                value={formData.password}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
+                placeholder="••••••••"
+                className="w-full h-11 pl-10 pr-10 rounded-xl bg-canvas border border-subtle text-sm text-ink-primary placeholder:text-ink-muted outline-none focus:border-brand/60 disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink-primary"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            loading={loading}
+            disabled={locked}
+            className="w-full mt-2"
+          >
+            {locked ? "Geçici Olarak Kilitli" : "Giriş Yap"}
+          </Button>
+        </form>
+
+        {!locked && attempts > 0 && (
+          <p className="mt-4 text-center text-xs text-ink-muted">
+            {attempts}/5 hatalı deneme
+          </p>
+        )}
+
+        <div className="mt-6 pt-5 border-t border-subtle text-center">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-secondary hover:text-ink-primary transition"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Ana Sayfaya Dön
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
 }

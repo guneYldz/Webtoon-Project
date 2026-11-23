@@ -1,143 +1,160 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { API } from "@/api";
+import { useRouter } from "next/navigation";
+import { Heart, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch, getUserToken } from "@/lib/apiClient";
 
-export default function FavoriteButton({ type, id, className }) {
+export default function FavoriteButton({ type, id, className = "" }) {
+  const router = useRouter();
   const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  // 1. Sayfa Yüklendiğinde Backend'e Sor: "Bu ID favoride mi?"
   useEffect(() => {
-    if (!id || !type) return;
+    if (!id || !type) {
+      setChecking(false);
+      return;
+    }
 
+    let cancelled = false;
     const checkStatus = async () => {
-      const token = localStorage.getItem("token");
-      // Eğer giriş yapılmamışsa kontrol etme, direkt beyaz kalsın
+      const token = getUserToken();
       if (!token) {
-        setChecking(false);
+        if (!cancelled) setChecking(false);
         return;
       }
 
       try {
-        // Backend'indeki: router.get("/check/{type}/{id}") endpointine istek atıyoruz
-        const res = await fetch(`${API}/favorites/check/${type}/${id}`, {
+        const res = await apiFetch(`/favorites/check/${type}/${id}`, {
           method: "GET",
-          headers: { 
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          },
+          auth: "user",
+          cache: "no-store",
         });
 
-        if (res.ok) {
+        if (res.ok && !cancelled) {
           const data = await res.json();
-          // Backend { "is_favorited": true/false } dönüyor
-          setIsFavorite(data.is_favorited);
+          setIsFavorite(Boolean(data?.is_favorited));
         }
       } catch (err) {
         console.error("Favori kontrol hatası:", err);
       } finally {
-        setChecking(false);
+        if (!cancelled) setChecking(false);
       }
     };
 
     checkStatus();
+    return () => {
+      cancelled = true;
+    };
   }, [id, type]);
 
-  // 2. Tıklayınca Ekle/Çıkar
   const toggleFavorite = async () => {
-    const token = localStorage.getItem("token");
-    
+    const token = getUserToken();
     if (!token) {
-      alert("Favorilere eklemek için giriş yapmalısın! 🔒");
+      toast.info("Favorilere eklemek için giriş yapmalısın.", {
+        action: {
+          label: "Giriş Yap",
+          onClick: () => router.push("/login"),
+        },
+      });
       return;
     }
 
-    if (!id) return;
+    if (!id || loading) return;
 
     setLoading(true);
-
-    // Hız hissi için (Optimistic Update)
     const previousState = isFavorite;
     setIsFavorite(!isFavorite);
 
-    // Backend'deki FavoriteCreate şemasına uygun payload
     const payload = type === "novel" ? { novel_id: id } : { webtoon_id: id };
 
     try {
-      const res = await fetch(`${API}/favorites/toggle`, {
+      const res = await apiFetch("/favorites/toggle", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        auth: "user",
+        json: payload,
       });
 
-      if (!res.ok) {
-        // Hata olursa eski haline döndür
+      if (res.status === 401) {
         setIsFavorite(previousState);
-        alert("İşlem başarısız oldu.");
-      } else {
-        // Backend'den gelen kesin cevabı alıp state'i güncelle (Garanti olsun)
-        const data = await res.json();
-        if (data.is_favorited !== undefined) {
-             setIsFavorite(data.is_favorited);
-        }
+        toast.info("Oturumun sona erdi, lütfen tekrar giriş yap.", {
+          action: {
+            label: "Giriş Yap",
+            onClick: () => router.push("/login"),
+          },
+        });
+        return;
       }
+
+      if (!res.ok) {
+        setIsFavorite(previousState);
+        toast.error("Favori işlemi başarısız oldu.");
+        return;
+      }
+
+      const data = await res.json();
+      if (data?.is_favorited !== undefined) {
+        setIsFavorite(Boolean(data.is_favorited));
+      }
+      toast.success(
+        (data?.is_favorited ?? !previousState)
+          ? "Favorilere eklendi."
+          : "Favorilerden çıkarıldı."
+      );
     } catch (err) {
-      console.error("Bağlantı Hatası:", err);
+      console.error("Favori hatası:", err);
       setIsFavorite(previousState);
+      toast.error("Sunucuyla bağlantı kurulamadı.");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- STİL AYARLARI (KIRMIZI BUTON) ---
-  
-  // Varsayılan Stiller
-  const activeClass = "bg-red-600 border-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.6)] opacity-100";
-  const inactiveClass = "bg-white text-gray-800 border-gray-300 hover:border-red-500 hover:text-red-600 hover:bg-red-50";
+  const defaultBase =
+    "h-11 px-5 rounded-xl font-semibold text-sm border transition-all duration-200 ease-smooth inline-flex items-center justify-center gap-2 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60";
 
-  let computedClass = "";
-
-  if (checking) {
-      // Yükleniyor durumunda hafif soluk gri
-      computedClass = "opacity-50 cursor-wait bg-gray-200 text-gray-500 border-gray-300";
-  } else if (className) {
-      // Dışarıdan stil geldiyse (Novel/Webtoon detay sayfasından)
-      // Eğer favorideyse !important ile KIPKIRMIZI yapıyoruz
-      computedClass = `${className} ${isFavorite ? "!bg-red-600 !border-red-600 !text-white !opacity-100 !shadow-[0_0_15px_rgba(220,38,38,0.6)]" : ""}`;
-  } else {
-      // Standart stil
-      computedClass = isFavorite ? activeClass : inactiveClass;
-  }
+  const stateClass = className
+    ? `${className} ${
+        isFavorite
+          ? "!bg-rose-600/90 !border-rose-400/60 !text-white !shadow-md !shadow-rose-950/40"
+          : ""
+      }`
+    : `${defaultBase} ${
+        isFavorite
+          ? "bg-rose-500/20 border-rose-500/50 text-rose-200 hover:bg-rose-500/30 shadow-sm shadow-rose-950/30"
+          : "bg-elevated/90 border-white/15 text-ink-primary hover:border-rose-400/50 hover:text-rose-200 hover:bg-white/[0.06]"
+      }`;
 
   return (
     <button
+      type="button"
       onClick={toggleFavorite}
       disabled={loading || checking || !id}
-      className={`
-        px-6 py-3 rounded-full font-bold text-sm transition-all duration-300 
-        flex items-center gap-2 shadow-lg border backdrop-blur-sm group
-        ${computedClass}
-        ${!id ? "opacity-50 cursor-not-allowed" : ""} 
-      `}
+      aria-pressed={isFavorite}
+      className={`group inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${stateClass}`}
     >
       {loading || checking ? (
-        <span className="flex items-center gap-2">
-           <i className="fa-solid fa-circle-notch fa-spin"></i>
-        </span>
+        <>
+          <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />
+          <span>{checking ? "Kontrol ediliyor..." : "İşleniyor..."}</span>
+        </>
       ) : isFavorite ? (
         <>
-          <i className="fa-solid fa-heart text-lg animate-bounce-short"></i> 
-          Favorilerde
+          <Heart
+            className="h-4 w-4 fill-rose-400 text-rose-400 transition-transform duration-200 group-hover:scale-110 shrink-0"
+            aria-hidden="true"
+          />
+          <span>Favorilerde</span>
         </>
       ) : (
         <>
-          <i className={`fa-regular fa-heart text-lg ${!className ? "group-hover:fa-solid" : ""}`}></i> 
-          Favorilere Ekle
+          <Heart
+            className="h-4 w-4 text-current transition-transform duration-200 group-hover:scale-110 shrink-0"
+            aria-hidden="true"
+          />
+          <span>Favorilere Ekle</span>
         </>
       )}
     </button>

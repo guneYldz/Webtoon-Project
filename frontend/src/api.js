@@ -1,1 +1,20 @@
-export const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
+// Backward-compatible bridge re-exporting from the unified API client.
+export {
+  API,
+  PUBLIC_API_URL,
+  INTERNAL_API_URL,
+  SITE_URL,
+  getApiBaseUrl,
+  getPublicApiBaseUrl,
+  resolveMediaUrl,
+  apiFetch,
+  apiJson,
+  ApiError,
+  getAdminToken,
+  setAdminToken,
+  clearAdminToken,
+  getAdminSession,
+  isAdminAuthenticated,
+  getAdminAuthHeaders,
+  getUserToken,
+} from "@/lib/apiClient";

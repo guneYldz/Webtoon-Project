@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 export default function SeriesSummary({ text, boxed = true }) {
   const [expanded, setExpanded] = useState(false);
@@ -25,13 +26,13 @@ export default function SeriesSummary({ text, boxed = true }) {
     <div
       className={
         boxed
-          ? "bg-white/5 backdrop-blur-sm p-6 rounded-2xl border border-white/10"
+          ? "bg-surface/75 backdrop-blur-md p-5 rounded-2xl border border-subtle"
           : "max-w-4xl"
       }
     >
       <p
         ref={pRef}
-        className={`text-gray-300 text-base md:text-lg leading-relaxed italic ${
+        className={`text-ink-secondary text-sm sm:text-base leading-relaxed whitespace-pre-line ${
           expanded ? "" : "line-clamp-4 md:line-clamp-5"
         }`}
       >
@@ -41,17 +42,17 @@ export default function SeriesSummary({ text, boxed = true }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-4 inline-flex items-center gap-2 text-sm font-bold tracking-wide text-purple-300 hover:text-white transition"
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide text-accent hover:brightness-125 transition"
         >
           {expanded ? (
             <>
               <span>Kısalt</span>
-              <span className="text-xs">▲</span>
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
             </>
           ) : (
             <>
               <span>Devamını oku</span>
-              <span className="text-xs">▼</span>
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
             </>
           )}
         </button>

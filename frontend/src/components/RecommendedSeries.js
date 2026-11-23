@@ -1,79 +1,85 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { API } from "@/api";
+import { Sparkles } from "lucide-react";
+import { apiJson } from "@/lib/apiClient";
+import SeriesCard, { SeriesCardSkeleton } from "@/components/SeriesCard";
 
-export default function RecommendedSeries({ type = "novel" }) {
-    const [recommendations, setRecommendations] = useState([]);
+export default function RecommendedSeries({
+  type = "novel",
+  currentId = null,
+  items = null,
+}) {
+  const [recommendations, setRecommendations] = useState(
+    Array.isArray(items) ? items.slice(0, 3) : []
+  );
+  const [loading, setLoading] = useState(!Array.isArray(items));
 
-    useEffect(() => {
-        const fetchRecommendations = async () => {
-            try {
-                const apiUrl = API || "https://kaosmanga.net/api";
-                // Fetch list of series based on type
-                // Note: Ideally backend should have a /recommendations endpoint. 
-                // For now, we fetch latest/all and pick random.
-                const endpoint = type === "novel" ? "/novels/" : "/webtoons/";
+  useEffect(() => {
+    if (Array.isArray(items)) {
+      setRecommendations(items.slice(0, 3));
+      setLoading(false);
+      return;
+    }
 
-                const res = await fetch(`${apiUrl}${endpoint}`, { cache: "no-store" });
-                if (res.ok) {
-                    const data = await res.json();
-                    // Shuffle and pick 3 items
-                    const shuffled = data.sort(() => 0.5 - Math.random());
-                    setRecommendations(shuffled.slice(0, 3));
-                }
-            } catch (error) {
-                console.error("Failed to load recommendations", error);
-            }
-        };
+    let cancelled = false;
+    const fetchRecommendations = async () => {
+      try {
+        const endpoint =
+          type === "novel" ? "/novels/?limit=12" : "/webtoons/?limit=12";
+        const data = await apiJson(endpoint, { cache: "force-cache" });
+        const list = Array.isArray(data) ? data : data?.data || [];
+        const filtered = list.filter(
+          (item) => currentId === null || String(item.id) !== String(currentId)
+        );
+        // Deterministic rotate by currentId if present, else pick top 3
+        const offset =
+          currentId && filtered.length > 3
+            ? Math.abs(Number(currentId) || 0) % Math.max(1, filtered.length - 2)
+            : 0;
+        if (!cancelled) {
+          setRecommendations(filtered.slice(offset, offset + 3));
+        }
+      } catch (error) {
+        console.error("Önerilen seriler alınamadı:", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
 
-        fetchRecommendations();
-    }, [type]);
+    fetchRecommendations();
+    return () => {
+      cancelled = true;
+    };
+  }, [type, currentId, items]);
 
-    if (recommendations.length === 0) return null;
+  if (!loading && recommendations.length === 0) return null;
 
-    return (
-        <div className="my-16 border-t border-gray-800 pt-8">
-            <h3 className="text-xl font-bold text-gray-200 mb-6 flex items-center gap-2">
-                <span>✨</span> Bunları da Beğenebilirsiniz
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                {recommendations.map((item) => (
-                    <Link
-                        key={item.id}
-                        href={`/${type}/${item.slug}`}
-                        title={`${item.title} Serisine Git`}
-                        className="group block bg-[#1a1a1a] rounded-lg overflow-hidden border border-gray-800 hover:border-purple-500/50 transition"
-                    >
-                        <div className="relative aspect-[2/3] w-full bg-gray-900">
-                            {item.cover_image && (
-                                <Image
-                                    src={`${API}/${item.cover_image}`}
-                                    alt={item.title}
-                                    width={200}
-                                    height={300}
-                                    loading="lazy"
-                                    className="object-cover group-hover:scale-105 transition duration-500"
-                                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 33vw, 200px"
-                                    quality={90}
-                                    style={{ width: '100%', height: 'auto' }}
-                                />
-                            )}
-                        </div>
-                        <div className="p-4">
-                            <h4 className="text-sm font-bold text-gray-200 line-clamp-1 group-hover:text-purple-400 transition">
-                                {item.title}
-                            </h4>
-                            <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
-                                <span>⭐ {item.rating || "4.5"}</span>
-                                <span>👁️ {item.view_count || 0}</span>
-                            </div>
-                        </div>
-                    </Link>
-                ))}
-            </div>
+  return (
+    <section className="my-10 border-t border-subtle pt-8">
+      <h3 className="text-lg font-bold text-ink-primary mb-5 flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-accent" aria-hidden="true" />
+        <span>Bunları da Beğenebilirsiniz</span>
+      </h3>
+
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <SeriesCardSkeleton />
+          <SeriesCardSkeleton />
+          <SeriesCardSkeleton className="hidden sm:flex" />
         </div>
-    );
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {recommendations.map((item) => (
+            <SeriesCard
+              key={item.id}
+              series={item}
+              type={type}
+              variant="compact"
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }

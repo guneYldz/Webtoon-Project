@@ -1,288 +1,472 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
-import CommentSection from "@/components/CommentSection";
-import ChapterReactions from "@/components/ChapterReactions";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Lato } from "next/font/google";
-import ReadingHero from "@/components/ReadingHero";
-import { API } from "@/api";
-import Breadcrumbs from "@/components/Breadcrumbs";
+import {
+  Calendar,
+  Eye,
+  RefreshCw,
+  ImageOff,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+} from "lucide-react";
+import { apiFetch, resolveMediaUrl } from "@/lib/apiClient";
+import { seriesTypeLabel } from "@/lib/seriesType";
+import { formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
+import { useReadingHistory } from "@/lib/readingHistory";
+import { Button, Skeleton } from "@/components/ui";
+import ReaderShell from "@/components/ReaderShell";
+import ReadingSettingsSheet, {
+  DEFAULT_WEBTOON_SETTINGS,
+  loadWebtoonSettings,
+  saveWebtoonSettings,
+} from "@/components/ReadingSettingsSheet";
+import ChapterReactions from "@/components/ChapterReactions";
+import CommentSection from "@/components/CommentSection";
 import RecommendedSeries from "@/components/RecommendedSeries";
 
-const lato = Lato({ subsets: ["latin"], weight: ["400", "700"], display: "swap" });
+const WIDTH_CLASSES = {
+  narrow: "max-w-2xl",
+  standard: "max-w-4xl",
+  wide: "max-w-5xl",
+  full: "max-w-full",
+};
 
-// Props: params.id (seriesId) ve params.episodeId (episodeId)
-export default function WebtoonReadingClient({ seriesId, episodeId, initialEpisode }) {
-    const router = useRouter();
+function WebtoonPanel({ src, alt, eager, brightness }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
-    const [episode, setEpisode] = useState(initialEpisode || null);
-    const [allEpisodes, setAllEpisodes] = useState([]); // Tüm bölümleri tutacak state
-    const [loading, setLoading] = useState(!initialEpisode);
-    const [error, setError] = useState(null);
+  const imgSrc =
+    retryCount > 0
+      ? `${src}${src.includes("?") ? "&" : "?"}retry=${retryCount}`
+      : src;
 
-    const [showNavbar, setShowNavbar] = useState(true);
-    const lastScrollY = useRef(0);
+  const handleRetry = (e) => {
+    e.stopPropagation();
+    setFailed(false);
+    setLoaded(false);
+    setRetryCount((c) => c + 1);
+  };
 
-    // --- 1. KLAVYE İLE GEÇİŞ (EKSTRA ÖZELLİK) ---
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (!episode) return;
-            if (e.key === 'ArrowLeft' && episode.prev_episode_id) {
-                router.push(`/webtoon/${seriesId}/bolum/${episode.prev_episode_id}`);
-            } else if (e.key === 'ArrowRight' && episode.next_episode_id) {
-                router.push(`/webtoon/${seriesId}/bolum/${episode.next_episode_id}`);
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [episode, router, seriesId]);
-
-    // --- 2. VERİ ÇEKME (AKILLI SAYAÇLI) ---
-    useEffect(() => {
-        const fetchData = async () => {
-            // API Adresi - CLIENT tarafında LOCALHOST kullan
-            const apiUrl = API || "https://kaosmanga.net/api";
-
-            let currentEpisode = initialEpisode;
-
-            // Eğer initialEpisode yoksa, client'ta da episode'u çek
-            if (!initialEpisode && episodeId) {
-                try {
-                    setLoading(true);
-                    setError(null);
-
-                    const res = await fetch(`${apiUrl}/episodes/${episodeId}`, {
-                        cache: "no-store",
-                        credentials: "include"
-                    });
-
-                    if (!res.ok) throw new Error("Bölüm yüklenemedi.");
-                    const data = await res.json();
-                    setEpisode(data);
-                    currentEpisode = data;
-                } catch (err) {
-                    console.error("Hata:", err);
-                    setError("Bölüm bulunamadı veya yüklenirken hata oluştu.");
-                    setLoading(false);
-                    return;
-                }
-            }
-
-            // Dropdown için tüm bölümleri çek (her durumda gerekli)
-            if (currentEpisode && seriesId) {
-                try {
-                    const webtoonRes = await fetch(`${apiUrl}/webtoons/${seriesId}`);
-                    if (webtoonRes.ok) {
-                        const webtoonData = await webtoonRes.json();
-                        if (webtoonData.episodes) {
-                            const sortedEpisodes = [...webtoonData.episodes].sort((a, b) => b.episode_number - a.episode_number);
-                            setAllEpisodes(sortedEpisodes);
-                        }
-                    }
-                } catch (err) {
-                    console.error("Bölüm listesi çekilemedi:", err);
-                }
-            }
-
-            setLoading(false);
-        };
-
-        fetchData();
-    }, [episodeId, seriesId, initialEpisode]);
-
-    // --- 3. SCROLL BAR MANTIĞI ---
-    useEffect(() => {
-        const handleScroll = () => {
-            const currentScrollY = window.scrollY;
-            if (currentScrollY > lastScrollY.current && currentScrollY > 100) {
-                setShowNavbar(false);
-            } else {
-                setShowNavbar(true);
-            }
-            lastScrollY.current = currentScrollY;
-        };
-        window.addEventListener("scroll", handleScroll);
-        return () => window.removeEventListener("scroll", handleScroll);
-    }, []);
-
-    if (loading) return (
-        <div className="min-h-screen bg-[#121212] flex items-center justify-center text-gray-400">
-            <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p>Yükleniyor...</p>
-            </div>
-        </div>
-    );
-
-    if (error) return (
-        <div className="min-h-screen bg-[#121212] flex flex-col items-center justify-center text-gray-400 gap-4">
-            <p>{error}</p>
-            <button onClick={() => window.location.reload()} className="text-white bg-gray-800 px-4 py-2 rounded hover:bg-gray-700">
-                Tekrar Dene
-            </button>
-        </div>
-    );
-
-    if (!episode) return null;
-
+  if (failed) {
     return (
-        <div className={`min-h-screen text-gray-200 pb-24 ${lato.className}`} style={{ paddingBottom: '64px' }}>
-
-            {/* BREADCRUMBS (Sayfanın en tepesinde) */}
-            <div className="container mx-auto px-4 mt-4" style={{ minHeight: '60px' }}>
-                <Breadcrumbs items={[
-                    { label: "Anasayfa", href: "/" },
-                    { label: "Webtoonlar", href: "/seriler" },
-                    { label: episode.webtoon_title, href: `/webtoon/${seriesId}` },
-                    { label: `Bölüm ${episode.episode_number}`, href: null }
-                ]} />
-            </div>
-
-
-
-            <ReadingHero
-                title={`Bölüm ${episode.episode_number}`}
-                seriesTitle={episode.webtoon_title}
-                coverImage={episode.webtoon_cover}
-                viewCount={episode.view_count}
-                date={episode.created_at}
-                slug={episode.webtoon_slug || seriesId}
-                type="webtoon"
-            />
-
-            {/* --- YENİ: ÜST BÖLÜM SEÇİCİ --- */}
-            <div className="max-w-4xl mx-auto px-4 md:px-0 mt-8 mb-8">
-                <div className="flex justify-center">
-                    <div className="relative w-full max-w-xs">
-                        <select
-                            id="episode-select"
-                            name="episode-select"
-                            className="w-full bg-[#1a1a1a] text-gray-300 border border-gray-800 rounded-lg px-4 py-3 appearance-none outline-none focus:border-blue-500 transition cursor-pointer"
-                            onChange={(e) => router.push(`/webtoon/${seriesId}/bolum/${e.target.value}`)}
-                            value={episode.id}
-                        >
-                            {/* Bölümler buraya yüklenecek */}
-                            {allEpisodes.map((ep) => (
-                                <option key={ep.id} value={ep.id}>
-                                    Bölüm {ep.episode_number}
-                                </option>
-                            ))}
-                        </select>
-                        {/* Ok ikonu */}
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                            ▼
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* --- RESİM ALANI --- */}
-            <div className="max-w-4xl mx-auto bg-[#121212] shadow-2xl flex flex-col">
-                {episode.images && episode.images.length > 0 ? (
-                    episode.images.map((imgUrl, index) => (
-                        <img
-                            key={index}
-                            src={imgUrl.startsWith("http") ? imgUrl : `${API}/${imgUrl}`}
-                            alt={`Sayfa ${index + 1}`}
-                            className="w-full h-auto block"
-                            loading={index < 2 ? "eager" : "lazy"}
-                            decoding={index < 2 ? "sync" : "async"}
-                        />
-                    ))
-                ) : (
-                    <div className="p-20 text-center text-gray-500" style={{ minHeight: '600px' }}>
-                        <p>Bu bölüme henüz görsel yüklenmemiş.</p>
-                    </div>
-                )}
-            </div>
-
-            {/* 2. ÖNCEKİ - SERİ - SONRAKİ BUTONLARI (Alt Bölüm) */}
-            <div className="max-w-4xl mx-auto px-4 md:px-0 mt-8 mb-8">
-                <div className="flex items-center justify-between text-gray-400 font-medium text-sm md:text-base border-t border-b border-gray-800 py-4">
-
-                    {/* Önceki Butonu */}
-                    <button
-                        onClick={() => episode.prev_episode_id && router.push(`/webtoon/${seriesId}/bolum/${episode.prev_episode_id}`)}
-                        disabled={!episode.prev_episode_id}
-                        className={`flex items-center gap-2 hover:text-white transition ${!episode.prev_episode_id ? 'opacity-30 cursor-not-allowed' : ''}`}
-                    >
-                        <span>‹</span>
-                        <span>Önceki</span>
-                    </button>
-
-                    {/* Seri Sayfasına Dön */}
-                    <Link href={`/webtoon/${episode.webtoon_slug || seriesId}`} className="hover:text-white transition border-l border-r border-gray-800 px-6 md:px-12">
-                        Seri Sayfasına Dön
-                    </Link>
-
-                    {/* Sonraki Butonu */}
-                    <button
-                        onClick={() => episode.next_episode_id && router.push(`/webtoon/${seriesId}/bolum/${episode.next_episode_id}`)}
-                        disabled={!episode.next_episode_id}
-                        className={`flex items-center gap-2 hover:text-white transition ${!episode.next_episode_id ? 'opacity-30 cursor-not-allowed' : ''}`}
-                    >
-                        <span>Sonraki</span>
-                        <span>›</span>
-                    </button>
-                </div>
-            </div>
-
-            {/* Yorum Alanı */}
-            <div className="mt-0 max-w-4xl mx-auto border-t border-gray-800 py-12 px-4 md:px-12">
-                <RecommendedSeries type="webtoon" />
-
-                <div className="mt-12">
-                    <ChapterReactions type="webtoon" targetId={episode.id} />
-                    <CommentSection
-                        type="webtoon"
-                        itemId={episode.webtoon_id}
-                        episodeId={episode.id}
-                    />
-                </div>
-            </div>
-
-            {/* Alt Sabit Bar */}
-            <div
-                className={`fixed bottom-0 left-0 w-full z-[999] transition-transform duration-300 ease-in-out ${showNavbar ? "translate-y-0" : "translate-y-full"
-                    }`}
-            >
-                <div className="flex justify-center w-full">
-                    <div className="w-full max-w-4xl bg-[#121212]/95 backdrop-blur-xl border-t border-blue-500/20 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.8)] flex justify-between items-center text-white h-16 px-6">
-
-                        <Link href={`/webtoon/${episode.webtoon_slug || seriesId}`} className="text-gray-400 hover:text-blue-400 font-medium flex items-center gap-2 transition group">
-                            <span className="text-xl group-hover:-translate-x-1 transition">←</span>
-                            <span className="hidden sm:inline text-sm font-bold tracking-widest uppercase">Seri</span>
-                        </Link>
-
-                        <div className="flex flex-col items-center justify-center px-4">
-                            <h2 className="text-sm font-bold text-gray-200 max-w-[120px] sm:max-w-xs truncate text-center tracking-wide">
-                                {episode.webtoon_title}
-                            </h2>
-                            <span className="text-sm text-blue-500 font-black tracking-widest">BÖLÜM {episode.episode_number}</span>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => episode.prev_episode_id && router.push(`/webtoon/${seriesId}/bolum/${episode.prev_episode_id}`)}
-                                disabled={!episode.prev_episode_id}
-                                className="px-3 py-1.5 rounded-lg bg-[#1a1a1a] border border-white/10 text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-800 hover:text-blue-400 transition"
-                            >
-                                Önceki
-                            </button>
-                            <button
-                                onClick={() => episode.next_episode_id && router.push(`/webtoon/${seriesId}/bolum/${episode.next_episode_id}`)}
-                                disabled={!episode.next_episode_id}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-sm font-bold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-blue-500 transition shadow-lg"
-                            >
-                                Sonraki
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
+      <div
+        data-no-hud-toggle=""
+        className="w-full min-h-[260px] flex flex-col items-center justify-center gap-3 bg-surface/80 border border-subtle text-center px-4 py-12"
+      >
+        <ImageOff className="h-8 w-8 text-ink-muted" aria-hidden="true" />
+        <p className="text-sm text-ink-secondary">
+          Görsel yüklenirken bir sorun oluştu.
+        </p>
+        <Button type="button" variant="secondary" size="sm" onClick={handleRetry}>
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          Tekrar Dene
+        </Button>
+      </div>
     );
+  }
+
+  return (
+    <div className="relative w-full">
+      {!loaded && (
+        <div
+          aria-hidden="true"
+          className="w-full aspect-[9/14] max-h-[640px] skeleton-shimmer bg-white/[0.04]"
+        />
+      )}
+      <img
+        src={imgSrc}
+        alt={alt}
+        loading={eager ? "eager" : "lazy"}
+        decoding={eager ? "sync" : "async"}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+        style={{
+          filter: brightness < 100 ? `brightness(${brightness / 100})` : undefined,
+        }}
+        className={`w-full h-auto block select-none transition-opacity duration-300 ${
+          loaded ? "opacity-100" : "opacity-0 absolute inset-0"
+        }`}
+      />
+    </div>
+  );
+}
+
+export default function WebtoonReadingClient({
+  seriesId,
+  episodeId,
+  initialEpisode = null,
+  initialEpisodes = [],
+}) {
+  const [episode, setEpisode] = useState(initialEpisode);
+  const [allEpisodes, setAllEpisodes] = useState(initialEpisodes);
+  const [loading, setLoading] = useState(!initialEpisode);
+  const [error, setError] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_WEBTOON_SETTINGS);
+  const [scrollPct, setScrollPct] = useState(0);
+
+  const prefetchedNextRef = useRef(null);
+  const lastSavedPctRef = useRef(-1);
+
+  const { hydrated, getSeriesProgress, recordChapterRead, updateScrollProgress } =
+    useReadingHistory();
+
+  useEffect(() => {
+    setSettings(loadWebtoonSettings());
+  }, []);
+
+  // Load episode (and always fire lightweight credentialed view-count ping on mount!)
+  useEffect(() => {
+    if (!episodeId) return;
+    let cancelled = false;
+
+    const loadData = async () => {
+      if (!initialEpisode) {
+        setLoading(true);
+        setError(null);
+      }
+
+      try {
+        const res = await apiFetch(`/episodes/${episodeId}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (res.ok) {
+          const fresh = await res.json();
+          if (!cancelled) {
+            setEpisode(fresh);
+            setError(null);
+          }
+        } else if (!initialEpisode && !cancelled) {
+          setError("Bölüm bulunamadı veya yüklenemedi.");
+        }
+      } catch (err) {
+        console.error("Bölüm yükleme hatası:", err);
+        if (!initialEpisode && !cancelled) {
+          setError("Bölüm yüklenirken bağlantı hatası oluştu.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      cancelled = true;
+    };
+  }, [episodeId, initialEpisode]);
+
+  // Fetch chapter list for switcher if not already passed
+  useEffect(() => {
+    if (!seriesId || initialEpisodes.length > 0) return;
+    let cancelled = false;
+
+    apiFetch(`/webtoons/${seriesId}`, { cache: "force-cache" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.episodes) {
+          const sorted = [...data.episodes].sort(
+            (a, b) => Number(b.episode_number) - Number(a.episode_number)
+          );
+          setAllEpisodes(sorted);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seriesId, initialEpisodes.length]);
+
+  // Record chapter visit in readingHistory
+  useEffect(() => {
+    if (!episode || !episode.webtoon_id) return;
+    const slugOrId = episode.webtoon_slug || seriesId;
+    recordChapterRead({
+      type: "webtoon",
+      seriesType: episode.series_type || "WEBTOON",
+      seriesId: episode.webtoon_id,
+      slug: episode.webtoon_slug || String(seriesId),
+      title: episode.webtoon_title || "",
+      coverImage: episode.webtoon_cover || "",
+      lastChapterId: episode.id,
+      lastChapterNumber: episode.episode_number,
+      lastChapterTitle: episode.title,
+      lastChapterUrl: `/webtoon/${slugOrId}/bolum/${episode.id}`,
+      chapterKey: episode.id,
+    });
+  }, [episode?.id, episode?.webtoon_id, seriesId, recordChapterRead]);
+
+  // Track scroll progress + prefetch next chapter images at >= 80%
+  useEffect(() => {
+    if (!episode) return;
+
+    const onScroll = () => {
+      const maxScroll =
+        document.documentElement.scrollHeight - window.innerHeight;
+      const pct =
+        maxScroll > 0
+          ? Math.min(100, Math.max(0, Math.round((window.scrollY / maxScroll) * 100)))
+          : 100;
+      setScrollPct(pct);
+
+      if (
+        episode.webtoon_id &&
+        Math.abs(pct - lastSavedPctRef.current) >= 5
+      ) {
+        lastSavedPctRef.current = pct;
+        updateScrollProgress("webtoon", episode.webtoon_id, pct, {
+          lastChapterId: episode.id,
+          lastChapterNumber: episode.episode_number,
+        });
+      }
+
+      if (
+        pct >= 80 &&
+        episode.next_episode_id &&
+        prefetchedNextRef.current !== episode.next_episode_id
+      ) {
+        prefetchedNextRef.current = episode.next_episode_id;
+        apiFetch(`/episodes/${episode.next_episode_id}`, {
+          cache: "force-cache",
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((nextEp) => {
+            if (nextEp?.images && Array.isArray(nextEp.images)) {
+              nextEp.images.slice(0, 2).forEach((rawUrl) => {
+                const img = new window.Image();
+                img.src = resolveMediaUrl(rawUrl);
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [episode, updateScrollProgress]);
+
+  const seriesSlugOrId = episode?.webtoon_slug || seriesId;
+  const seriesHref = `/webtoon/${seriesSlugOrId}`;
+  const prevHref = episode?.prev_episode_id
+    ? `${seriesHref}/bolum/${episode.prev_episode_id}`
+    : null;
+  const nextHref = episode?.next_episode_id
+    ? `${seriesHref}/bolum/${episode.next_episode_id}`
+    : null;
+
+  const seriesType = seriesTypeLabel(episode?.series_type);
+
+  const chapterOptions = useMemo(
+    () =>
+      allEpisodes.map((ep) => ({
+        value: ep.id,
+        number: ep.episode_number,
+        title: ep.title,
+        href: `${seriesHref}/bolum/${ep.id}`,
+      })),
+    [allEpisodes, seriesHref]
+  );
+
+  const progressEntry =
+    hydrated && episode?.webtoon_id
+      ? getSeriesProgress("webtoon", episode.webtoon_id)
+      : null;
+
+  const handleSettingsChange = (next) => {
+    setSettings(next);
+    saveWebtoonSettings(next);
+  };
+
+  const handleResetSettings = () => {
+    setSettings({ ...DEFAULT_WEBTOON_SETTINGS });
+    saveWebtoonSettings(DEFAULT_WEBTOON_SETTINGS);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center gap-4 px-4">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-[520px] w-full max-w-2xl rounded-xl" />
+      </div>
+    );
+  }
+
+  if (error || !episode) {
+    return (
+      <div className="min-h-screen bg-canvas flex flex-col items-center justify-center text-center gap-4 px-4">
+        <p className="text-ink-secondary">
+          {error || "Bölüm bulunamadı."}
+        </p>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => window.location.reload()}
+          >
+            Tekrar Dene
+          </Button>
+          <Link
+            href={seriesHref}
+            className="text-sm font-semibold text-accent hover:underline"
+          >
+            Seriye Dön
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const epNumStr = formatChapterNumber(episode.episode_number);
+  const customTitle =
+    episode.title && !isAutoChapterTitle(episode.title) ? episode.title : null;
+
+  return (
+    <ReaderShell
+      seriesType={seriesType}
+      readerTheme={settings.theme}
+      seriesTitle={episode.webtoon_title}
+      seriesHref={seriesHref}
+      chapterLabel={`Bölüm ${epNumStr}`}
+      chapterSubLabel={`${episode.images?.length || 0} Sayfa`}
+      chapters={chapterOptions}
+      currentChapterValue={episode.id}
+      readChapterIds={progressEntry?.readChapterIds || []}
+      prevHref={prevHref}
+      nextHref={nextHref}
+      onOpenSettings={() => setSettingsOpen(true)}
+      settingsOpen={settingsOpen}
+      scrollPct={scrollPct}
+    >
+      {/* Compact ~120px Chapter Intro Header (no 500px ReadingHero!) */}
+      <div className="max-w-4xl mx-auto px-4 pt-4 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.06] mb-3">
+        <div className="min-w-0">
+          <Link
+            href={seriesHref}
+            className="text-xs font-semibold uppercase tracking-wider text-accent hover:underline"
+          >
+            {episode.webtoon_title}
+          </Link>
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight truncate mt-0.5">
+            Bölüm {epNumStr}
+            {customTitle ? ` — ${customTitle}` : ""}
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-ink-muted shrink-0">
+          {episode.created_at && (
+            <span className="inline-flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+              {new Date(episode.created_at).toLocaleDateString("tr-TR")}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1">
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+            {(episode.view_count || 0).toLocaleString("tr-TR")}
+          </span>
+        </div>
+      </div>
+
+      {/* Panel Strip */}
+      <div
+        className={`mx-auto w-full transition-[max-width] duration-200 ${
+          WIDTH_CLASSES[settings.widthPreset] || WIDTH_CLASSES.standard
+        }`}
+      >
+        <div
+          className={`flex flex-col ${settings.panelGap ? "gap-4 px-2 sm:px-0" : "gap-0"}`}
+        >
+          {episode.images && episode.images.length > 0 ? (
+            episode.images.map((rawUrl, index) => (
+              <WebtoonPanel
+                key={`${episode.id}-${index}`}
+                src={resolveMediaUrl(rawUrl)}
+                alt={`${episode.webtoon_title} Bölüm ${epNumStr} Sayfa ${index + 1}`}
+                eager={index < 3}
+                brightness={settings.brightness}
+              />
+            ))
+          ) : (
+            <div className="py-24 text-center text-ink-muted text-sm">
+              Bu bölüme henüz görsel yüklenmemiş.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Post-Chapter Footer (Navigation + Engagement + Recommendations) */}
+      <div className="bg-canvas text-ink-primary border-t border-subtle mt-10">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="grid grid-cols-3 gap-2.5">
+            {prevHref ? (
+              <Link
+                href={prevHref}
+                className="h-12 rounded-xl bg-surface border border-subtle hover:border-hover px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-primary transition"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                <span>Önceki</span>
+              </Link>
+            ) : (
+              <span className="h-12 rounded-xl bg-surface/40 border border-subtle px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-muted opacity-40 cursor-not-allowed">
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                <span>Önceki</span>
+              </span>
+            )}
+
+            <Link
+              href={seriesHref}
+              className="h-12 rounded-xl bg-surface border border-subtle hover:border-hover px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-secondary hover:text-ink-primary transition"
+            >
+              <Layers className="h-4 w-4" aria-hidden="true" />
+              <span>Bölümler</span>
+            </Link>
+
+            {nextHref ? (
+              <Link
+                href={nextHref}
+                className="h-12 rounded-xl bg-accent text-[#0B0B0F] hover:brightness-110 px-3 flex items-center justify-center gap-1.5 text-sm font-bold shadow-md transition"
+              >
+                <span>Sonraki</span>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            ) : (
+              <span className="h-12 rounded-xl bg-surface/40 border border-subtle px-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-muted opacity-40 cursor-not-allowed">
+                <span>Sonraki</span>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </span>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <ChapterReactions type="webtoon" targetId={episode.id} />
+          </div>
+
+          <div id="yorumlar" className="mt-4 scroll-mt-16">
+            <CommentSection
+              type="webtoon"
+              itemId={episode.webtoon_id}
+              episodeId={episode.id}
+            />
+          </div>
+
+          <RecommendedSeries type="webtoon" currentId={episode.webtoon_id} />
+        </div>
+      </div>
+
+      <ReadingSettingsSheet
+        mode="webtoon"
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onChange={handleSettingsChange}
+        onReset={handleResetSettings}
+      />
+    </ReaderShell>
+  );
 }

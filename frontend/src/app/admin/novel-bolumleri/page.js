@@ -1,342 +1,478 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { API } from "@/api";
-import Image from "next/image";
 import Link from "next/link";
+import { Plus, Pencil, Trash2, Eye, AlertCircle, Save } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Editor,
+  EditorProvider,
+  Toolbar,
+  BtnBold,
+  BtnItalic,
+  BtnUnderline,
+  BtnLink,
+  BtnStrikeThrough,
+  BtnNumberedList,
+  BtnBulletList,
+} from "react-simple-wysiwyg";
+import { apiFetch, getAdminToken } from "@/lib/apiClient";
+import {
+  Badge,
+  Button,
+  Skeleton,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  buttonClasses,
+} from "@/components/ui";
+import {
+  AdminPageHeader,
+  AdminConfirmDialog,
+  adminCardClass,
+  adminInputClass,
+  adminSelectClass,
+  adminLabelClass,
+} from "../_components/AdminUi";
 
 export default function NovelChaptersPage() {
-    const [novels, setNovels] = useState([]);
-    const [selectedNovelId, setSelectedNovelId] = useState("");
-    const [novelSlug, setNovelSlug] = useState(""); // Needed for delete url
-    const [chapters, setChapters] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [deleting, setDeleting] = useState(null); // ID of chapter being deleted
+  const [novels, setNovels] = useState([]);
+  const [selectedNovelId, setSelectedNovelId] = useState("");
+  const [novelSlug, setNovelSlug] = useState("");
+  const [chapters, setChapters] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [draftWarning, setDraftWarning] = useState(false);
 
-    const [editingChapter, setEditingChapter] = useState(null); // The chapter currently being edited
-    const [editForm, setEditForm] = useState({
-        title: "",
-        content: "",
-        chapter_number: "",
-        is_published: true
-    });
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-    // 1. Fetch all novels for dropdown (PUBLIC ENDPOINT - Reverted)
-    useEffect(() => {
-        const fetchNovels = async () => {
-            try {
-                // Reverted to Public API
-                const res = await fetch(`${API}/novels/`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setNovels(data);
-                }
-            } catch (err) {
-                console.error("Novel listesi çekilemedi:", err);
-            }
-        };
-        fetchNovels();
-    }, []);
+  const [editingChapter, setEditingChapter] = useState(null);
+  const [updating, setUpdating] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    content: "",
+    chapter_number: "",
+    is_published: true,
+  });
 
-    // 2. Fetch chapters when a novel is selected
-    useEffect(() => {
-        if (!selectedNovelId) {
-            setChapters([]);
-            setNovelSlug("");
+  useEffect(() => {
+    const fetchNovels = async () => {
+      try {
+        const token = getAdminToken();
+        if (token) {
+          const adminRes = await apiFetch("/admin/novel/list", {
+            auth: "admin",
+            cache: "no-store",
+          });
+          if (adminRes.ok) {
+            const data = await adminRes.json();
+            setNovels(Array.isArray(data) ? data : data.data || []);
             return;
+          }
         }
-
-        const fetchChapters = async () => {
-            setLoading(true);
-            try {
-                // Fetch novel details from Public API
-                const res = await fetch(`${API}/novels/${selectedNovelId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setNovels(prev => prev.map(n => n.id === data.id ? data : n)); // Update novel details in list if needed
-                    setNovelSlug(data.slug);
-
-                    // Ensure chapters are sorted
-                    const sortedChapters = (data.chapters || []).sort((a, b) => b.chapter_number - a.chapter_number);
-                    setChapters(sortedChapters);
-                }
-            } catch (err) {
-                console.error("Bölümler çekilemedi:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchChapters();
-    }, [selectedNovelId]);
-
-    // 3. Delete Chapter
-    const handleDelete = async (chapterNumber) => {
-        if (!confirm(`Bölüm ${chapterNumber} silinecek. Emin misiniz?`)) return;
-
-        setDeleting(chapterNumber);
-        try {
-            const token = sessionStorage.getItem("access_token") ||
-                sessionStorage.getItem("admin_token") ||
-                sessionStorage.getItem("token");
-
-            // Delete endpoint expects SLUG
-            const res = await fetch(`${API}/novels/${novelSlug}/chapters/${chapterNumber}`, {
-                method: "DELETE",
-                headers: {
-                    "Authorization": `Bearer ${token}`
-                }
-            });
-
-            if (res.ok) {
-                // Remove from local state
-                setChapters(prev => prev.filter(c => c.chapter_number !== chapterNumber));
-                alert("Bölüm başarıyla silindi.");
-            } else {
-                const errorData = await res.json().catch(() => ({}));
-                alert(`Silme başarısız: ${errorData.detail || "Bilinmeyen hata"}`);
-            }
-        } catch (err) {
-            console.error("Silme hatası:", err);
-            alert("Bir hata oluştu.");
-        } finally {
-            setDeleting(null);
+        const res = await apiFetch("/novels/?limit=1000");
+        if (res.ok) {
+          const data = await res.json();
+          setNovels(Array.isArray(data) ? data : []);
         }
+      } catch (err) {
+        console.error("Novel listesi çekilemedi:", err);
+      }
     };
+    fetchNovels();
+  }, []);
 
-    // 4. Open Edit Modal
-    const handleEditClick = (chapter) => {
-        setEditingChapter(chapter);
-        setEditForm({
-            title: chapter.title,
-            content: chapter.content,
-            chapter_number: chapter.chapter_number,
-            is_published: chapter.is_published ?? true // Default to true if undefined
+  useEffect(() => {
+    if (!selectedNovelId) {
+      setChapters([]);
+      setNovelSlug("");
+      setDraftWarning(false);
+      return;
+    }
+
+    const fetchChapters = async () => {
+      setLoading(true);
+      setDraftWarning(false);
+      try {
+        const res = await apiFetch(`/novels/${selectedNovelId}`, {
+          cache: "no-store",
         });
-    };
 
-    // 5. Submit Edit
-    const handleUpdate = async (e) => {
-        e.preventDefault();
-        if (!editingChapter) return;
-
-        try {
-            const token = sessionStorage.getItem("access_token") ||
-                sessionStorage.getItem("admin_token") ||
-                sessionStorage.getItem("token");
-            const formData = new FormData();
-            formData.append("title", editForm.title);
-            formData.append("content", editForm.content);
-            formData.append("new_chapter_number", editForm.chapter_number);
-            formData.append("is_published", editForm.is_published);
-
-            const res = await fetch(`${API}/novels/${novelSlug}/chapters/${editingChapter.chapter_number}`, {
-                method: "PUT",
-                headers: {
-                    "Authorization": `Bearer ${token}`
-                },
-                body: formData
-            });
-
-            if (res.ok) {
-                const updatedChapter = await res.json();
-
-                // Update local state
-                setChapters(prev => prev.map(c =>
-                    c.id === editingChapter.id
-                        ? { ...c, ...updatedChapter.data, chapter_number: Number(editForm.chapter_number) }
-                        : c
-                ));
-
-                setEditingChapter(null); // Close modal
-                alert("Bölüm güncellendi.");
-            } else {
-                const errorData = await res.json().catch(() => ({}));
-                alert(`Güncelleme başarısız: ${errorData.detail || "Hata"}`);
-            }
-
-        } catch (err) {
-            console.error("Güncelleme hatası:", err);
-            alert("Bir hata oluştu.");
+        if (res.status === 404) {
+          setChapters([]);
+          setDraftWarning(true);
+          return;
         }
+
+        if (res.ok) {
+          const data = await res.json();
+          setNovelSlug(data.slug);
+          const sorted = [...(data.chapters || [])].sort(
+            (a, b) => Number(b.chapter_number) - Number(a.chapter_number)
+          );
+          setChapters(sorted);
+        }
+      } catch (err) {
+        console.error("Bölümler çekilemedi:", err);
+        toast.error("Bölümler yüklenemedi.");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    return (
-        <div className="space-y-8 relative">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 border-b pb-4">
-                <h1 className="text-3xl font-bold text-gray-800">Novel Bölüm Yönetimi</h1>
+    fetchChapters();
+  }, [selectedNovelId]);
+
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await apiFetch(
+        `/novels/${novelSlug}/chapters/${deleteTarget.chapter_number}`,
+        {
+          method: "DELETE",
+          auth: "admin",
+        }
+      );
+
+      if (res.ok) {
+        setChapters((prev) =>
+          prev.filter((c) => c.chapter_number !== deleteTarget.chapter_number)
+        );
+        toast.success("Bölüm silindi.");
+        setDeleteTarget(null);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.detail || "Bölüm silinemedi.");
+      }
+    } catch (err) {
+      console.error("Silme hatası:", err);
+      toast.error("Bir hata oluştu.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleEditClick = (chapter) => {
+    setEditingChapter(chapter);
+    setEditForm({
+      title: chapter.title || "",
+      content: chapter.content || "",
+      chapter_number: chapter.chapter_number,
+      is_published: chapter.is_published ?? true,
+    });
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!editingChapter || updating) return;
+    setUpdating(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("title", editForm.title);
+      formData.append("content", editForm.content);
+      formData.append("new_chapter_number", String(editForm.chapter_number));
+      formData.append("is_published", String(editForm.is_published));
+
+      const res = await apiFetch(
+        `/novels/${novelSlug}/chapters/${editingChapter.chapter_number}`,
+        {
+          method: "PUT",
+          auth: "admin",
+          body: formData,
+        }
+      );
+
+      if (res.ok) {
+        const updatedChapter = await res.json();
+        setChapters((prev) =>
+          prev.map((c) =>
+            c.id === editingChapter.id
+              ? {
+                  ...c,
+                  ...(updatedChapter.data || {}),
+                  title: editForm.title,
+                  content: editForm.content,
+                  is_published: editForm.is_published,
+                  chapter_number: Number(editForm.chapter_number),
+                }
+              : c
+          )
+        );
+        setEditingChapter(null);
+        toast.success("Bölüm güncellendi.");
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.detail || "Güncelleme başarısız.");
+      }
+    } catch (err) {
+      console.error("Güncelleme hatası:", err);
+      toast.error("Bir hata oluştu.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      <AdminPageHeader
+        title="Novel Bölümleri"
+        description="Novel seçerek bölümleri zengin metin editörüyle düzenleyin veya silin."
+        actions={
+          <Link
+            href={
+              selectedNovelId
+                ? `/admin/novel-bolum-ekle?novel_id=${selectedNovelId}`
+                : "/admin/novel-bolum-ekle"
+            }
+            className={buttonClasses({ variant: "primary", size: "md" })}
+          >
+            <Plus className="h-4 w-4" />
+            Bölüm Ekle
+          </Link>
+        }
+      />
+
+      <div className={`${adminCardClass} p-5 mb-6`}>
+        <label className={adminLabelClass}>Novel Seçin</label>
+        <select
+          className={`${adminSelectClass} w-full`}
+          value={selectedNovelId}
+          onChange={(e) => setSelectedNovelId(e.target.value)}
+        >
+          <option value="">-- Bir novel seçin --</option>
+          {novels.map((novel) => (
+            <option key={novel.id} value={novel.id}>
+              {novel.title}
+              {novel.is_published === false ? " [Taslak]" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {selectedNovelId && (
+        <div className={`${adminCardClass} overflow-hidden`}>
+          <div className="p-5 border-b border-subtle flex justify-between items-center gap-3">
+            <h2 className="text-base font-bold text-ink-primary">
+              Bölümler ({chapters.length})
+            </h2>
+            <Link
+              href={`/admin/novel-bolum-ekle?novel_id=${selectedNovelId}`}
+              className={buttonClasses({ variant: "secondary", size: "sm" })}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Bu Seriye Bölüm Ekle
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="p-5 space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 rounded-xl" />
+              ))}
+            </div>
+          ) : draftWarning ? (
+            <div className="p-8 text-center space-y-2">
+              <AlertCircle className="h-7 w-7 text-amber-400 mx-auto" />
+              <p className="text-sm text-ink-primary font-medium">
+                Bu novel henüz Taslak durumunda (yayınlanmamış).
+              </p>
+              <p className="text-xs text-ink-muted">
+                Bölümleri görmek için{" "}
                 <Link
-                    href={selectedNovelId ? `/admin/novel-bolum-ekle?novel_id=${selectedNovelId}` : "/admin/novel-bolum-ekle"}
-                    className="inline-flex items-center justify-center bg-purple-600 text-white px-5 py-2 rounded-lg hover:bg-purple-700 font-semibold"
+                  href={`/admin/novels/${selectedNovelId}/edit`}
+                  className="text-brand hover:underline"
                 >
-                    + Bölüm Ekle
-                </Link>
+                  düzenleme sayfasından
+                </Link>{" "}
+                yayına alabilirsiniz.
+              </p>
             </div>
-
-            {/* Novel Selection */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Novel Seçin</label>
-                <select
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                    value={selectedNovelId}
-                    onChange={(e) => setSelectedNovelId(e.target.value)}
-                >
-                    <option value="">-- Bir Novel Seçin --</option>
-                    {novels.map((novel) => (
-                        <option key={novel.id} value={novel.id}>
-                            {novel.title}
-                        </option>
-                    ))}
-                </select>
+          ) : chapters.length === 0 ? (
+            <div className="p-10 text-center text-ink-muted text-sm">
+              Bu seriye ait bölüm bulunamadı.
             </div>
-
-            {/* Chapter List */}
-            {selectedNovelId && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="p-6 border-b border-gray-100 flex justify-between items-center gap-3">
-                        <h2 className="text-xl font-semibold text-gray-800">Bölümler ({chapters.length})</h2>
-                        <Link
-                            href={`/admin/novel-bolum-ekle?novel_id=${selectedNovelId}`}
-                            className="text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-lg"
-                        >
-                            + Bu seriye bölüm ekle
-                        </Link>
-                    </div>
-
-                    {loading ? (
-                        <div className="p-8 text-center text-gray-500">Bölümler yükleniyor...</div>
-                    ) : chapters.length === 0 ? (
-                        <div className="p-8 text-center text-gray-500">Bu seriye ait bölüm bulunamadı.</div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50 text-gray-600 font-medium border-b">
-                                    <tr>
-                                        <th className="p-4">Bölüm No</th>
-                                        <th className="p-4">Başlık</th>
-                                        <th className="p-4">Durum</th>
-                                        <th className="p-4">İzlenme</th>
-                                        <th className="p-4 text-right">İşlemler</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {chapters.map((chapter) => (
-                                        <tr key={chapter.id} className="hover:bg-gray-50 group transition">
-                                            <td className="p-4 font-bold text-blue-600">#{chapter.chapter_number}</td>
-                                            <td className="p-4 text-gray-800 font-medium">{chapter.title}</td>
-                                            <td className="p-4">
-                                                {chapter.is_published ? (
-                                                    <span className="bg-green-100 text-green-700 py-1 px-2 rounded text-sm font-bold">Yayında</span>
-                                                ) : (
-                                                    <span className="bg-gray-100 text-gray-500 py-1 px-2 rounded text-sm font-bold">Taslak</span>
-                                                )}
-                                            </td>
-                                            <td className="p-4 text-gray-500 text-sm">👁️ {chapter.view_count || 0}</td>
-                                            <td className="p-4 text-right space-x-2">
-                                                <button
-                                                    onClick={() => handleEditClick(chapter)}
-                                                    className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition font-medium text-sm"
-                                                >
-                                                    Düzenle
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(chapter.chapter_number)}
-                                                    disabled={deleting === chapter.chapter_number}
-                                                    className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
-                                                >
-                                                    {deleting === chapter.chapter_number ? "Siliniyor..." : "Sil"}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-canvas/70 border-b border-subtle text-xs font-semibold uppercase tracking-wider text-ink-muted">
+                  <tr>
+                    <th className="px-5 py-3.5">Bölüm No</th>
+                    <th className="px-5 py-3.5">Başlık</th>
+                    <th className="px-5 py-3.5">Durum</th>
+                    <th className="px-5 py-3.5">Okunma</th>
+                    <th className="px-5 py-3.5 text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-subtle">
+                  {chapters.map((chapter) => (
+                    <tr key={chapter.id} className="hover:bg-white/[0.02]">
+                      <td className="px-5 py-3.5 text-sm font-bold text-purple-400 tabular-nums">
+                        #{chapter.chapter_number}
+                      </td>
+                      <td className="px-5 py-3.5 text-sm font-medium text-ink-primary">
+                        {chapter.title}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {chapter.is_published ? (
+                          <Badge variant="ongoing">Yayında</Badge>
+                        ) : (
+                          <Badge variant="completed">Taslak</Badge>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-ink-secondary tabular-nums">
+                        <span className="inline-flex items-center gap-1">
+                          <Eye className="h-3.5 w-3.5 text-ink-muted" />
+                          {(chapter.view_count || 0).toLocaleString("tr-TR")}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditClick(chapter)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Düzenle
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeleteTarget(chapter)}
+                            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Sil
+                          </Button>
                         </div>
-                    )}
-                </div>
-            )}
-
-            {/* EDIT MODEL */}
-            {editingChapter && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
-                            <h3 className="text-xl font-bold text-gray-800">Bölümü Düzenle</h3>
-                            <button
-                                onClick={() => setEditingChapter(null)}
-                                className="text-gray-400 hover:text-gray-600"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleUpdate} className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Bölüm No</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        required
-                                        className="w-full p-2 border rounded-lg"
-                                        value={editForm.chapter_number}
-                                        onChange={e => setEditForm({ ...editForm, chapter_number: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Durum</label>
-                                    <select
-                                        className="w-full p-2 border rounded-lg"
-                                        value={editForm.is_published}
-                                        onChange={e => setEditForm({ ...editForm, is_published: e.target.value === "true" })}
-                                    >
-                                        <option value="true">Yayında</option>
-                                        <option value="false">Taslak (Gizli)</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Bölüm Başlığı</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full p-2 border rounded-lg"
-                                    value={editForm.title}
-                                    onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">İçerik</label>
-                                <textarea
-                                    rows={10}
-                                    required
-                                    className="w-full p-2 border rounded-lg font-mono text-sm"
-                                    value={editForm.content}
-                                    onChange={e => setEditForm({ ...editForm, content: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="pt-4 flex justify-end gap-3 border-t">
-                                <button
-                                    type="button"
-                                    onClick={() => setEditingChapter(null)}
-                                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
-                                >
-                                    İptal
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md hover:shadow-lg"
-                                >
-                                    Kaydet & Güncelle
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-    );
+      )}
+
+      {/* Rich-Text Chapter Edit Dialog */}
+      <Dialog
+        open={Boolean(editingChapter)}
+        onOpenChange={(open) => !open && setEditingChapter(null)}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bölümü Düzenle</DialogTitle>
+            <DialogDescription>
+              Bölüm numarası, başlık ve zengin metin içeriğini güncelleyin.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleUpdate} className="space-y-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={adminLabelClass}>Bölüm No *</label>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  className={adminInputClass}
+                  value={editForm.chapter_number}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, chapter_number: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className={adminLabelClass}>Durum</label>
+                <select
+                  className={`${adminSelectClass} w-full`}
+                  value={String(editForm.is_published)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      is_published: e.target.value === "true",
+                    })
+                  }
+                >
+                  <option value="true">Yayında</option>
+                  <option value="false">Taslak (Gizli)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className={adminLabelClass}>Bölüm Başlığı *</label>
+              <input
+                type="text"
+                required
+                className={adminInputClass}
+                value={editForm.title}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, title: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <label className={adminLabelClass}>İçerik *</label>
+              <div className="text-zinc-900 bg-white rounded-xl overflow-hidden border border-subtle">
+                <EditorProvider>
+                  <Editor
+                    value={editForm.content}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, content: e.target.value })
+                    }
+                    className="min-h-[300px] p-3"
+                  >
+                    <Toolbar>
+                      <BtnBold />
+                      <BtnItalic />
+                      <BtnUnderline />
+                      <BtnStrikeThrough />
+                      <BtnLink />
+                      <BtnNumberedList />
+                      <BtnBulletList />
+                    </Toolbar>
+                  </Editor>
+                </EditorProvider>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setEditingChapter(null)}
+              >
+                İptal
+              </Button>
+              <Button type="submit" variant="primary" loading={updating}>
+                <Save className="h-4 w-4" />
+                Kaydet & Güncelle
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AdminConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Bölümü Sil"
+        description={`Bölüm ${deleteTarget?.chapter_number || ""} kalıcı olarak silinecek. Emin misiniz?`}
+        confirmLabel="Sil"
+        loading={deleting}
+        onConfirm={executeDelete}
+      />
+    </div>
+  );
 }

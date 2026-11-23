@@ -2,156 +2,189 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ImagePlus, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { apiFetch, getAdminToken } from "@/lib/apiClient";
+import { Button } from "@/components/ui";
+import {
+  AdminPageHeader,
+  adminCardClass,
+  adminInputClass,
+  adminTextareaClass,
+  adminLabelClass,
+} from "../_components/AdminUi";
+
+function toTurkishSlug(val) {
+  return String(val || "")
+    .toLowerCase()
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 export default function NovelEkle() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const API = process.env.NEXT_PUBLIC_API_URL || "https://kaosmanga.net/api";
-
-  // Form Verileri
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [author, setAuthor] = useState("");
   const [summary, setSummary] = useState("");
   const [cover, setCover] = useState(null);
+  const [preview, setPreview] = useState(null);
 
-  // Başlık yazıldığında otomatik slug oluşturma (Opsiyonel ama kullanışlı)
   const handleTitleChange = (val) => {
     setTitle(val);
-    const generatedSlug = val
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    setSlug(generatedSlug);
+    setSlug(toTurkishSlug(val));
+  };
+
+  const handleFileChange = (file) => {
+    if (preview) URL.revokeObjectURL(preview);
+    setCover(file || null);
+    setPreview(file ? URL.createObjectURL(file) : null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const token = getAdminToken();
+    if (!token) {
+      toast.error("Önce admin girişi yapmalısınız.");
+      router.push("/login-admin");
+      return;
+    }
+
     if (!cover) {
-      alert("Lütfen bir kapak resmi seçin.");
+      toast.error("Lütfen bir kapak resmi seçin.");
       return;
     }
 
     setLoading(true);
-    const token = sessionStorage.getItem("admin_token");
     const formData = new FormData();
-
     formData.append("title", title);
     formData.append("slug", slug);
     formData.append("author", author);
     formData.append("summary", summary);
-    formData.append("cover", cover); // Dosya objesi
+    formData.append("cover", cover);
 
     try {
-      const response = await fetch(`${API}/novels/ekle`, {
+      const response = await apiFetch("/novels/ekle", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
+        auth: "admin",
         body: formData,
       });
 
       if (!response.ok) {
-        const errData = await response.json();
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.detail || "Roman eklenirken bir hata oluştu.");
       }
 
-      alert("✅ Yeni Roman Başarıyla Oluşturuldu!");
-      router.push("/admin/novel-bolum-ekle"); // Hemen bölüm ekleme sayfasına yönlendir
+      toast.success("Yeni roman başarıyla oluşturuldu!");
+      router.push("/admin/novel-bolum-ekle");
     } catch (error) {
-      alert("❌ Hata: " + error.message);
+      toast.error(error.message || "Roman eklenemedi.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex items-center justify-center py-10 px-4">
-      <div className="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-2xl border border-gray-700">
+    <div className="max-w-2xl mx-auto">
+      <AdminPageHeader
+        title="Yeni Roman (Novel) Oluştur"
+        description="Novel başlığı, slug ve kapak görselini ekleyip bölüm yüklemeye geçin."
+      />
 
-        <h1 className="text-3xl font-bold mb-6 text-purple-400 border-b border-gray-700 pb-4">
-          📚 Yeni Roman (Novel) Oluştur
-        </h1>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-
-          {/* Başlık ve Slug */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-gray-400 font-medium mb-1">Roman Adı</label>
-              <input
-                type="text"
-                placeholder="Örn: Solo Leveling"
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-gray-400 font-medium mb-1">URL (Slug)</label>
-              <input
-                type="text"
-                placeholder="solo-leveling"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Yazar */}
+      <form onSubmit={handleSubmit} className={`${adminCardClass} p-6 space-y-5`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-gray-400 font-medium mb-1">Yazar</label>
+            <label className={adminLabelClass}>Roman Adı *</label>
             <input
               type="text"
-              placeholder="Yazar adı"
-              value={author}
-              onChange={(e) => setAuthor(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+              placeholder="Örn: Shadow Slave"
+              value={title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              className={adminInputClass}
+              required
             />
           </div>
 
-          {/* Özet */}
           <div>
-            <label className="block text-gray-400 font-medium mb-1">Roman Özeti</label>
-            <textarea
-              rows="4"
-              placeholder="Romanın konusunu kısaca yazın..."
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none resize-none"
+            <label className={adminLabelClass}>URL (Slug) *</label>
+            <input
+              type="text"
+              placeholder="shadow-slave"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              className={adminInputClass}
               required
-            ></textarea>
+            />
           </div>
+        </div>
 
-          {/* Kapak Resmi */}
-          <div>
-            <label className="block text-gray-400 font-medium mb-1">Kapak Resmi (JPEG/PNG)</label>
+        <div>
+          <label className={adminLabelClass}>Yazar</label>
+          <input
+            type="text"
+            placeholder="Yazar adı"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            className={adminInputClass}
+          />
+        </div>
+
+        <div>
+          <label className={adminLabelClass}>Roman Özeti *</label>
+          <textarea
+            rows={4}
+            placeholder="Romanın konusunu yazın..."
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            className={adminTextareaClass}
+            required
+          />
+        </div>
+
+        <div>
+          <label className={adminLabelClass}>Kapak Resmi *</label>
+          <label className="relative border-2 border-dashed border-subtle hover:border-brand/50 rounded-xl p-6 text-center cursor-pointer bg-canvas/60 transition flex flex-col items-center justify-center">
             <input
               type="file"
               accept="image/*"
-              onChange={(e) => setCover(e.target.files[0])}
-              className="w-full bg-gray-700 text-gray-300 p-2 rounded border border-gray-600 cursor-pointer"
-              required
+              onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+              className="sr-only"
             />
-          </div>
+            {preview ? (
+              <img
+                src={preview}
+                alt="Önizleme"
+                className="h-36 object-cover rounded-lg shadow-md mb-2 border border-subtle"
+              />
+            ) : (
+              <ImagePlus className="h-8 w-8 text-ink-muted mb-2" />
+            )}
+            <span className="text-xs text-ink-secondary">
+              {cover ? cover.name : "Kapak görseli seçin (JPEG/PNG/WEBP)"}
+            </span>
+          </label>
+        </div>
 
-          {/* Gönder Butonu */}
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg transition transform hover:scale-[1.02] ${loading ? "bg-gray-600 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-500 hover:shadow-purple-500/30"
-              }`}
-          >
-            {loading ? "Oluşturuluyor..." : "Romanı Kaydet 🚀"}
-          </button>
-
-        </form>
-      </div>
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          loading={loading}
+          className="w-full"
+        >
+          <Sparkles className="h-4 w-4" />
+          Romanı Kaydet
+        </Button>
+      </form>
     </div>
   );
 }
