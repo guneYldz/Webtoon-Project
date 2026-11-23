@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -46,100 +46,104 @@ export default function GoogleSignInButton({
   label = "Google ile Devam Et",
 }) {
   const router = useRouter();
-  const wrapperRef = useRef(null);
-  const overlayRef = useRef(null);
-  const initializedRef = useRef(false);
+  const tokenClientRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const redirectToRef = useRef(redirectTo);
+  const routerRef = useRef(router);
   const [submitting, setSubmitting] = useState(false);
-  const [gisReady, setGisReady] = useState(false);
+
+  useEffect(() => {
+    redirectToRef.current = redirectTo;
+  }, [redirectTo]);
+
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const submitAccessToken = useCallback(async (accessToken) => {
+    try {
+      const res = await apiFetch("/auth/google", {
+        method: "POST",
+        credentials: "include",
+        json: { access_token: accessToken },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Google ile giriş yapılamadı.");
+      }
+
+      if (data.access_token) {
+        window.localStorage.setItem("token", data.access_token);
+      }
+      const role = data.role || data.user?.role;
+      const username = data.username || data.user?.username;
+      if (role) window.localStorage.setItem("role", role);
+      if (username) window.localStorage.setItem("username", username);
+
+      window.dispatchEvent(new Event("auth-change"));
+      toast.success(`Hoş geldin, ${username || "Okuyucu"}!`);
+      routerRef.current.push(redirectToRef.current);
+    } catch (err) {
+      console.error("Google giriş hatası:", err);
+      toast.error(err.message || "Google ile giriş başarısız oldu.");
+    } finally {
+      if (isMountedRef.current) setSubmitting(false);
+    }
+  }, []);
+
+  const ensureTokenClient = useCallback(() => {
+    if (tokenClientRef.current) return tokenClientRef.current;
+    if (
+      !GOOGLE_CLIENT_ID ||
+      typeof window === "undefined" ||
+      !window.google?.accounts?.oauth2?.initTokenClient
+    ) {
+      return null;
+    }
+
+    try {
+      tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: "openid email profile",
+        callback: (tokenResponse) => {
+          if (!isMountedRef.current) return;
+          if (tokenResponse?.error || !tokenResponse?.access_token) {
+            setSubmitting(false);
+            if (tokenResponse?.error && tokenResponse.error !== "access_denied") {
+              toast.error("Google ile giriş tamamlanamadı.");
+            }
+            return;
+          }
+          submitAccessToken(tokenResponse.access_token);
+        },
+        error_callback: (err) => {
+          if (!isMountedRef.current) return;
+          setSubmitting(false);
+          if (err?.type === "popup_failed_to_open") {
+            toast.error("Google giriş penceresi açılamadı. Açılır pencerelere izin verin.");
+          }
+        },
+      });
+      return tokenClientRef.current;
+    } catch (err) {
+      console.error("Google OAuth2 istemcisi başlatılamadı:", err);
+      return null;
+    }
+  }, [submitAccessToken]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || typeof window === "undefined") return;
+    if (ensureTokenClient()) return;
 
-    let cancelled = false;
     let pollTimer = null;
-
-    const handleCredentialResponse = async (response) => {
-      if (!response?.credential || cancelled) return;
-      setSubmitting(true);
-      try {
-        const res = await apiFetch("/auth/google", {
-          method: "POST",
-          credentials: "include",
-          json: { credential: response.credential },
-        });
-
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.detail || "Google ile giriş yapılamadı.");
-        }
-
-        if (data.access_token) {
-          window.localStorage.setItem("token", data.access_token);
-        }
-        const role = data.role || data.user?.role;
-        const username = data.username || data.user?.username;
-        if (role) window.localStorage.setItem("role", role);
-        if (username) window.localStorage.setItem("username", username);
-
-        window.dispatchEvent(new Event("auth-change"));
-        toast.success(`Hoş geldin, ${username || "Okuyucu"}!`);
-        router.push(redirectTo);
-      } catch (err) {
-        console.error("Google giriş hatası:", err);
-        toast.error(err.message || "Google ile giriş başarısız oldu.");
-      } finally {
-        if (!cancelled) setSubmitting(false);
-      }
-    };
-
-    const mountGisButton = () => {
-      if (
-        cancelled ||
-        initializedRef.current ||
-        !window.google?.accounts?.id ||
-        !overlayRef.current
-      ) {
-        return false;
-      }
-
-      try {
-        const measuredWidth = wrapperRef.current?.clientWidth || 368;
-        const clampedWidth = Math.max(240, Math.min(400, Math.round(measuredWidth)));
-
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: handleCredentialResponse,
-          ux_mode: "popup",
-          auto_select: false,
-        });
-
-        overlayRef.current.innerHTML = "";
-        window.google.accounts.id.renderButton(overlayRef.current, {
-          type: "standard",
-          theme: "filled_black",
-          size: "large",
-          text: "continue_with",
-          shape: "rectangular",
-          logo_alignment: "center",
-          width: clampedWidth,
-          locale: "tr",
-        });
-
-        initializedRef.current = true;
-        setGisReady(true);
-        return true;
-      } catch (err) {
-        console.error("Google GIS başlatılamadı:", err);
-        return false;
-      }
-    };
-
-    if (mountGisButton()) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
     let script =
       document.getElementById(GSI_SCRIPT_ID) ||
       document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
@@ -154,7 +158,7 @@ export default function GoogleSignInButton({
     }
 
     const onLoad = () => {
-      if (mountGisButton() && pollTimer) {
+      if (ensureTokenClient() && pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
@@ -165,35 +169,38 @@ export default function GoogleSignInButton({
     let attempts = 0;
     pollTimer = setInterval(() => {
       attempts += 1;
-      if (mountGisButton() || attempts >= 80) {
+      if (ensureTokenClient() || attempts >= 80) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
     }, 100);
 
     return () => {
-      cancelled = true;
-      initializedRef.current = false;
       script?.removeEventListener("load", onLoad);
       if (pollTimer) clearInterval(pollTimer);
     };
-  }, [redirectTo, router]);
+  }, [ensureTokenClient]);
 
   if (!GOOGLE_CLIENT_ID) {
     return null;
   }
 
-  const handleFallbackClick = () => {
+  const handleGoogleClick = () => {
     if (submitting) return;
-    if (window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.prompt();
-        return;
-      } catch {
-        // Fall through to informative toast
-      }
+    const tokenClient = ensureTokenClient();
+    if (!tokenClient) {
+      toast.info("Google giriş servisi hazırlanıyor, lütfen birazdan tekrar deneyin.");
+      return;
     }
-    toast.info("Google giriş servisi hazırlanıyor, lütfen tekrar deneyin.");
+
+    setSubmitting(true);
+    try {
+      tokenClient.requestAccessToken({ prompt: "select_account" });
+    } catch (err) {
+      console.error("Google OAuth2 penceresi açılamadı:", err);
+      if (isMountedRef.current) setSubmitting(false);
+      toast.error("Google giriş penceresi açılamadı.");
+    }
   };
 
   const dividerElement = showDivider && dividerPosition !== "none" && (
@@ -210,45 +217,28 @@ export default function GoogleSignInButton({
     <div className={dividerPosition === "bottom" ? "mb-1" : "mt-1"}>
       {dividerPosition === "top" && dividerElement}
 
-      <div
-        ref={wrapperRef}
-        className="group relative w-full h-11 rounded-xl overflow-hidden"
+      <button
+        type="button"
+        onClick={handleGoogleClick}
+        disabled={submitting}
+        aria-busy={submitting}
+        className="group flex h-11 w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-elevated/90 px-4 text-sm font-medium text-ink-primary shadow-sm transition-all duration-200 hover:border-purple-400/50 hover:bg-elevated hover:shadow-[0_0_22px_rgba(168,85,247,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
       >
-        {/* Instant 0ms First-Paint Obsidian Button Surface */}
-        <button
-          type="button"
-          onClick={handleFallbackClick}
-          disabled={submitting}
-          aria-busy={submitting}
-          className="relative z-0 flex h-full w-full items-center justify-center gap-3 rounded-xl border border-white/15 bg-elevated/90 px-4 text-sm font-medium text-ink-primary shadow-sm transition-all duration-200 group-hover:border-purple-400/50 group-hover:bg-elevated group-hover:shadow-[0_0_22px_rgba(168,85,247,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 disabled:opacity-60"
-        >
-          {submitting ? (
-            <>
-              <Loader2
-                className="h-4 w-4 animate-spin text-brand shrink-0"
-                aria-hidden="true"
-              />
-              <span>Google ile giriş yapılıyor...</span>
-            </>
-          ) : (
-            <>
-              <GoogleGIcon />
-              <span>{label}</span>
-            </>
-          )}
-        </button>
-
-        {/* Native GIS Click Surface Overlay (100% transparent, full button coverage) */}
-        <div
-          ref={overlayRef}
-          aria-hidden={submitting || !gisReady}
-          className={`absolute inset-0 z-10 flex items-center justify-center overflow-hidden opacity-[0.001] scale-110 transition-none [&_iframe]:!w-full [&_iframe]:!h-full [&_iframe]:!min-w-full ${
-            submitting || !gisReady
-              ? "pointer-events-none"
-              : "pointer-events-auto cursor-pointer"
-          }`}
-        />
-      </div>
+        {submitting ? (
+          <>
+            <Loader2
+              className="h-4 w-4 animate-spin text-brand shrink-0"
+              aria-hidden="true"
+            />
+            <span>Google ile giriş yapılıyor...</span>
+          </>
+        ) : (
+          <>
+            <GoogleGIcon />
+            <span>{label}</span>
+          </>
+        )}
+      </button>
 
       {dividerPosition === "bottom" && dividerElement}
     </div>

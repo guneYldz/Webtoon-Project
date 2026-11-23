@@ -329,23 +329,88 @@ def google_giris(
             detail="Google ile giriş şu anda yapılandırılmamış.",
         )
 
-    from google.oauth2 import id_token as google_id_token
+    if payload.credential:
+        from google.oauth2 import id_token as google_id_token
 
-    try:
-        id_info = google_id_token.verify_oauth2_token(
-            payload.credential,
-            _get_google_request(),
-            google_client_id,
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Geçersiz veya süresi dolmuş Google kimlik doğrulaması.",
-        )
+        try:
+            id_info = google_id_token.verify_oauth2_token(
+                payload.credential,
+                _get_google_request(),
+                google_client_id,
+            )
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Geçersiz veya süresi dolmuş Google kimlik doğrulaması.",
+            )
+    else:
+        import requests
+
+        try:
+            tokeninfo_res = requests.get(
+                "https://www.googleapis.com/oauth2/v3/tokeninfo",
+                params={"access_token": payload.access_token},
+                timeout=8,
+            )
+        except requests.RequestException:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google kimlik doğrulama servisine şu anda ulaşılamıyor.",
+            )
+
+        if tokeninfo_res.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Geçersiz veya süresi dolmuş Google erişim belirteci.",
+            )
+
+        try:
+            token_info = tokeninfo_res.json()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Geçersiz Google tokeninfo yanıtı.",
+            )
+
+        if str(token_info.get("aud") or "").strip() != google_client_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google erişim belirteci bu uygulama için verilmemiş.",
+            )
+
+        try:
+            userinfo_res = requests.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {payload.access_token}"},
+                timeout=8,
+            )
+        except requests.RequestException:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google kullanıcı bilgisi servisine şu anda ulaşılamıyor.",
+            )
+
+        if userinfo_res.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Google kullanıcı bilgileri alınamadı.",
+            )
+
+        try:
+            id_info = userinfo_res.json()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Geçersiz Google userinfo yanıtı.",
+            )
 
     google_sub = str(id_info.get("sub") or "").strip()
     email = str(id_info.get("email") or "").strip()
-    if not google_sub or not email or not id_info.get("email_verified"):
+    email_verified = id_info.get("email_verified")
+    is_email_verified = email_verified is True or (
+        isinstance(email_verified, str) and email_verified.strip().lower() == "true"
+    )
+    if not google_sub or not email or not is_email_verified:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Doğrulanmış Google e-posta hesabı gereklidir.",

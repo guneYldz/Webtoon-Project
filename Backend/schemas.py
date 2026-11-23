@@ -290,7 +290,18 @@ class Token(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
-    credential: str = Field(..., min_length=10)
+    credential: Optional[str] = Field(default=None, min_length=10)
+    access_token: Optional[str] = Field(default=None, min_length=10)
+
+    @model_validator(mode="after")
+    def validate_token_present(self):
+        cred = self.credential.strip() if self.credential else None
+        tok = self.access_token.strip() if self.access_token else None
+        if not cred and not tok:
+            raise ValueError("credential veya access_token gereklidir.")
+        self.credential = cred or None
+        self.access_token = tok or None
+        return self
 
 
 class ForgotPasswordRequest(BaseModel):
