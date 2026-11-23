@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Calendar,
-  Eye,
   RefreshCw,
   ImageOff,
   ChevronLeft,
@@ -17,6 +15,7 @@ import { formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
 import { useReadingHistory } from "@/lib/readingHistory";
 import { Button, Skeleton } from "@/components/ui";
 import ReaderShell from "@/components/ReaderShell";
+import ReadingHero from "@/components/ReadingHero";
 import ReadingSettingsSheet, {
   DEFAULT_WEBTOON_SETTINGS,
   loadWebtoonSettings,
@@ -107,6 +106,9 @@ export default function WebtoonReadingClient({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_WEBTOON_SETTINGS);
   const [scrollPct, setScrollPct] = useState(0);
+  const [commentCount, setCommentCount] = useState(
+    initialEpisode?.comment_count ?? 0
+  );
 
   const prefetchedNextRef = useRef(null);
   const lastSavedPctRef = useRef(-1);
@@ -344,38 +346,22 @@ export default function WebtoonReadingClient({
       settingsOpen={settingsOpen}
       scrollPct={scrollPct}
     >
-      {/* Compact ~120px Chapter Intro Header (no 500px ReadingHero!) */}
-      <div className="max-w-4xl mx-auto px-4 pt-4 pb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.06] mb-3">
-        <div className="min-w-0">
-          <Link
-            href={seriesHref}
-            className="text-xs font-semibold uppercase tracking-wider text-accent hover:underline"
-          >
-            {episode.webtoon_title}
-          </Link>
-          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight truncate mt-0.5">
-            Bölüm {epNumStr}
-            {customTitle ? ` — ${customTitle}` : ""}
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-3 text-xs text-ink-muted shrink-0">
-          {episode.created_at && (
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
-              {new Date(episode.created_at).toLocaleDateString("tr-TR")}
-            </span>
-          )}
-          <span className="inline-flex items-center gap-1">
-            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-            {(episode.view_count || 0).toLocaleString("tr-TR")}
-          </span>
-        </div>
-      </div>
+      {/* Restored Modern ReadingHero */}
+      <ReadingHero
+        type="webtoon"
+        title={`Bölüm ${epNumStr}`}
+        subtitle={customTitle}
+        seriesTitle={episode.webtoon_title}
+        coverImage={episode.webtoon_cover}
+        viewCount={episode.view_count}
+        commentCount={commentCount}
+        date={episode.created_at}
+        slug={seriesSlugOrId}
+      />
 
       {/* Panel Strip */}
       <div
-        className={`mx-auto w-full transition-[max-width] duration-200 ${
+        className={`mx-auto w-full mt-4 transition-[max-width] duration-200 ${
           WIDTH_CLASSES[settings.widthPreset] || WIDTH_CLASSES.standard
         }`}
       >
@@ -452,6 +438,7 @@ export default function WebtoonReadingClient({
               type="webtoon"
               itemId={episode.webtoon_id}
               episodeId={episode.id}
+              onCountChange={setCommentCount}
             />
           </div>
 

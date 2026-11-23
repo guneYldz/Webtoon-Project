@@ -183,7 +183,7 @@ export default function ReaderShell({
               <img
                 src="/logo.png"
                 alt="Kaos Manga"
-                className="w-full h-full object-cover scale-125"
+                className="w-full h-full object-cover"
               />
             </Link>
 

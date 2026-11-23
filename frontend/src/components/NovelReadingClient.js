@@ -4,19 +4,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import DOMPurify from "isomorphic-dompurify";
 import {
-  Calendar,
-  Eye,
-  Clock,
   ChevronLeft,
   ChevronRight,
   Layers,
-  SlidersHorizontal,
 } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
 import { formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
 import { useReadingHistory } from "@/lib/readingHistory";
-import { Button, Skeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 import ReaderShell from "@/components/ReaderShell";
+import ReadingHero from "@/components/ReadingHero";
 import ReadingSettingsSheet, {
   DEFAULT_NOVEL_SETTINGS,
   loadNovelSettings,
@@ -61,6 +58,9 @@ export default function NovelReadingClient({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(DEFAULT_NOVEL_SETTINGS);
   const [scrollPct, setScrollPct] = useState(0);
+  const [commentCount, setCommentCount] = useState(
+    initialChapter?.comment_count ?? 0
+  );
 
   const lastSavedPctRef = useRef(-1);
 
@@ -291,59 +291,20 @@ export default function NovelReadingClient({
       settingsOpen={settingsOpen}
       scrollPct={scrollPct}
     >
-      {/* Compact Chapter Intro Header */}
-      <div
-        className={`mx-auto ${widthClass} pt-6 pb-6 border-b border-[var(--reader-border)]`}
-        style={{
-          paddingLeft: `${settings.paddingPx}px`,
-          paddingRight: `${settings.paddingPx}px`,
-        }}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              href={seriesHref}
-              className="text-xs font-semibold uppercase tracking-wider text-accent hover:underline"
-            >
-              {chapter.novel_title || "Novel"}
-            </Link>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-[var(--reader-text)] mt-1 leading-snug">
-              {customTitle || `Bölüm ${chNumStr}`}
-            </h1>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-[var(--reader-border)] bg-[var(--reader-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--reader-text)] hover:border-accent-border transition"
-            title="Yazı tipi, boyut ve tema ayarları"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-accent" />
-            <span>Görünüm</span>
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--reader-muted)] mt-3">
-          <span>Bölüm #{chNumStr}</span>
-          {chapter.created_at && (
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
-              {new Date(chapter.created_at).toLocaleDateString("tr-TR", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </span>
-          )}
-          <span className="inline-flex items-center gap-1">
-            <Clock className="h-3.5 w-3.5" aria-hidden="true" />~{readingMinutes} dk okuma
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-            {(chapter.view_count || 0).toLocaleString("tr-TR")}
-          </span>
-        </div>
-      </div>
+      {/* Restored Modern ReadingHero */}
+      <ReadingHero
+        type="novel"
+        title={customTitle || `Bölüm ${chNumStr}`}
+        subtitle={customTitle ? `Bölüm #${chNumStr}` : null}
+        seriesTitle={chapter.novel_title || "Novel"}
+        coverImage={chapter.novel_cover}
+        viewCount={chapter.view_count}
+        commentCount={commentCount}
+        date={chapter.created_at}
+        readingMinutes={readingMinutes}
+        slug={slug}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       {/* Novel Reading Prose */}
       <main
@@ -434,6 +395,7 @@ export default function NovelReadingClient({
               type="novel"
               itemId={chapter.novel_id}
               chapterId={chapter.id}
+              onCountChange={setCommentCount}
             />
           </div>
 

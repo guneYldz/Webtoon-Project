@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   MessageSquare,
@@ -114,6 +114,7 @@ export default function CommentSection({
   itemId,
   episodeId = null,
   chapterId = null,
+  onCountChange = null,
 }) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
@@ -130,6 +131,11 @@ export default function CommentSection({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [highlightedId, setHighlightedId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const onCountChangeRef = useRef(onCountChange);
+
+  useEffect(() => {
+    onCountChangeRef.current = onCountChange;
+  }, [onCountChange]);
 
   const loadComments = useCallback(async () => {
     let path = "";
@@ -146,7 +152,11 @@ export default function CommentSection({
       const res = await apiFetch(path, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        setComments(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setComments(list);
+        if (typeof onCountChangeRef.current === "function") {
+          onCountChangeRef.current(list.length);
+        }
       }
     } catch (err) {
       console.error("Yorumlar yüklenirken hata:", err);
