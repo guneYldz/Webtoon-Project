@@ -6,9 +6,13 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
+import hashlib
+import hmac
+import re
+import secrets
 import models
 import schemas
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, File, UploadFile
 from typing import Optional
 import os
 from dotenv import load_dotenv
@@ -26,18 +30,121 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment değişkeni bulunamadı!")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 3000
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_COOKIE_NAME = "kaos_refresh_token"
+REFRESH_TOKEN_EXPIRE_DAYS = 30
+RESET_CODE_EXPIRE_MINUTES = 15
+RESET_CODE_MAX_ATTEMPTS = 5
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/giris-yap")
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="auth/giris-yap", auto_error=False)
+_google_transport_request = None
 
-# --- YARDIMCI FONKSIYONLAR ---
+
+def _get_google_request():
+    global _google_transport_request
+    if _google_transport_request is None:
+        from google.auth.transport import requests as google_requests
+        _google_transport_request = google_requests.Request()
+    return _google_transport_request
+
+
+# --- YARDIMCI FONKSİYONLAR ---
 def sifreyi_hashle(password: str):
     return pwd_context.hash(password)
 
+
 def sifreyi_dogrula(duz_sifre, hashlenmis_sifre):
     return pwd_context.verify(duz_sifre, hashlenmis_sifre)
+
+
+def _utcnow_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _hash_token(raw_value: str) -> str:
+    return hashlib.sha256(raw_value.encode("utf-8")).hexdigest()
+
+
+def _get_client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()[:64]
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()[:64]
+    xri = request.headers.get("x-real-ip")
+    if xri:
+        return xri.strip()[:64]
+    return (request.client.host if request.client else "unknown")[:64]
+
+
+def _is_secure_cookie(request: Request) -> bool:
+    env_val = os.getenv("COOKIE_SECURE", "").strip().lower()
+    if env_val in ("false", "0", "no"):
+        return False
+    if env_val in ("true", "1", "yes"):
+        return True
+    host = (request.headers.get("host") or request.url.hostname or "").split(":")[0].lower()
+    if host in ("localhost", "127.0.0.1", "0.0.0.0"):
+        return False
+    return True
+
+
+def _issue_refresh_token(db: Session, user: models.User, request: Request, response: Response) -> str:
+    raw_token = secrets.token_urlsafe(48)
+    now = _utcnow_naive()
+    db_rt = models.RefreshToken(
+        user_id=user.id,
+        token_hash=_hash_token(raw_token),
+        expires_at=now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        created_at=now,
+        user_agent=(request.headers.get("user-agent") or "")[:255] or None,
+        ip_address=_get_client_ip(request),
+    )
+    db.add(db_rt)
+    response.set_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        value=raw_token,
+        httponly=True,
+        secure=_is_secure_cookie(request),
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/",
+    )
+    return raw_token
+
+
+def _clear_refresh_cookie(request: Request, response: Response) -> None:
+    response.delete_cookie(
+        key=REFRESH_TOKEN_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=_is_secure_cookie(request),
+        samesite="lax",
+    )
+
+
+def _revoke_all_user_sessions(db: Session, user: models.User) -> None:
+    now = _utcnow_naive()
+    user.token_version = (user.token_version or 1) + 1
+    db.query(models.RefreshToken).filter(
+        models.RefreshToken.user_id == user.id,
+        models.RefreshToken.revoked_at.is_(None),
+    ).update({"revoked_at": now}, synchronize_session=False)
+
+
+def _generate_unique_username(db: Session, preferred: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_.-]", "", (preferred or "").strip())
+    if len(cleaned) < 2:
+        cleaned = "okur"
+    base = cleaned[:40]
+    candidate = base
+    while db.query(models.User).filter(func.lower(models.User.username) == candidate.lower()).first():
+        candidate = f"{base[:42]}_{secrets.token_hex(3)}"
+    return candidate
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -50,6 +157,36 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def _build_auth_payload(user: models.User) -> dict:
+    access_token = create_access_token(
+        data={
+            "sub": user.email,
+            "role": user.role,
+            "tv": user.token_version or 1,
+        }
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "role": user.role,
+        "username": user.username,
+        "user": schemas.UserOut.model_validate(user),
+    }
+
+
+def _check_token_version(payload: dict, user: models.User) -> bool:
+    user_tv = int(user.token_version or 1)
+    token_tv = payload.get("tv")
+    if token_tv is not None:
+        try:
+            return int(token_tv) == user_tv
+        except (ValueError, TypeError):
+            return False
+    # Eski (tv içermeyen) tokenlar yalnızca token_version artırılmadıysa geçerli kalır
+    return user_tv <= 1
+
 
 # --- GÜVENLİK GÖREVLİLERİ (DEPENDENCIES) ---
 
@@ -77,6 +214,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise credentials_exception
 
+    if not _check_token_version(payload, user):
+        raise credentials_exception
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -101,7 +241,7 @@ def get_optional_user(token: Optional[str] = Depends(oauth2_scheme_optional), db
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
         user = db.query(models.User).filter(models.User.username == email).first()
-    if not user or not user.is_active:
+    if not user or not user.is_active or not _check_token_version(payload, user):
         return None
     return user
 
@@ -151,7 +291,12 @@ def kullanici_olustur(payload: schemas.RegisterRequest, db: Session = Depends(ge
     return {"mesaj": "Kayit Basarili", "kullanici": yeni_kullanici.username}
 
 @router.post("/giris-yap")
-def giris_yap(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def giris_yap(
+    request: Request,
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     # Kullanıcı adı veya E-posta ile giriş
     kullanici = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not kullanici:
@@ -163,16 +308,169 @@ def giris_yap(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = De
     if not kullanici.is_active:
         raise HTTPException(status_code=403, detail="Hesabınız banlanmıştır! 🚫")
 
-    access_token = create_access_token(
-        data={"sub": kullanici.email, "role": kullanici.role}
-    )
-    
-    return {
-        "access_token": access_token, 
-        "token_type": "bearer", 
-        "role": kullanici.role,
-        "username": kullanici.username 
-    }
+    _issue_refresh_token(db, kullanici, request, response)
+    db.commit()
+    db.refresh(kullanici)
+
+    return _build_auth_payload(kullanici)
+
+
+@router.post("/google")
+def google_giris(
+    payload: schemas.GoogleAuthRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    google_client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    if not google_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google ile giriş şu anda yapılandırılmamış.",
+        )
+
+    from google.oauth2 import id_token as google_id_token
+
+    try:
+        id_info = google_id_token.verify_oauth2_token(
+            payload.credential,
+            _get_google_request(),
+            google_client_id,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Geçersiz veya süresi dolmuş Google kimlik doğrulaması.",
+        )
+
+    google_sub = str(id_info.get("sub") or "").strip()
+    email = str(id_info.get("email") or "").strip()
+    if not google_sub or not email or not id_info.get("email_verified"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Doğrulanmış Google e-posta hesabı gereklidir.",
+        )
+
+    user = db.query(models.User).filter(models.User.google_id == google_sub).first()
+    if not user:
+        user = db.query(models.User).filter(func.lower(models.User.email) == email.lower()).first()
+        if user:
+            user.google_id = google_sub
+
+    if not user:
+        preferred_name = str(id_info.get("name") or email.split("@")[0])
+        unique_username = _generate_unique_username(db, preferred_name)
+        random_secret = sifreyi_hashle(secrets.token_urlsafe(48))
+        user = models.User(
+            username=unique_username,
+            email=email,
+            password=random_secret,
+            google_id=google_sub,
+            role="user",
+            is_active=True,
+            token_version=1,
+        )
+        db.add(user)
+        db.flush()
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hesabınız devre dışı bırakılmıştır.",
+        )
+
+    _issue_refresh_token(db, user, request, response)
+    db.commit()
+    db.refresh(user)
+
+    return _build_auth_payload(user)
+
+
+@router.post("/refresh")
+def yenile_oturum(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    raw_cookie = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+    if not raw_cookie:
+        _clear_refresh_cookie(request, response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Oturum bulunamadı.")
+
+    token_hash = _hash_token(raw_cookie)
+    rt = db.query(models.RefreshToken).filter(models.RefreshToken.token_hash == token_hash).first()
+    if not rt:
+        _clear_refresh_cookie(request, response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz oturum.")
+
+    user = db.query(models.User).filter(models.User.id == rt.user_id).first()
+
+    # İptal edilmiş refresh token tekrar kullanılırsa güvenlik ihlali varsay: tüm oturumları kapat
+    if rt.revoked_at is not None:
+        if user:
+            _revoke_all_user_sessions(db, user)
+            db.commit()
+        _clear_refresh_cookie(request, response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Oturum güvenliği nedeniyle sonlandırıldı. Lütfen yeniden giriş yapın.",
+        )
+
+    now = _utcnow_naive()
+    if rt.expires_at <= now:
+        rt.revoked_at = now
+        db.commit()
+        _clear_refresh_cookie(request, response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Oturum süresi doldu.")
+
+    if not user or not user.is_active:
+        if user:
+            _revoke_all_user_sessions(db, user)
+            db.commit()
+        _clear_refresh_cookie(request, response)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Hesap devre dışı.")
+
+    # Eski tokenı iptal et, yenisini döndür (rotation)
+    rt.revoked_at = now
+    _issue_refresh_token(db, user, request, response)
+    db.commit()
+    db.refresh(user)
+
+    return _build_auth_payload(user)
+
+
+@router.post("/logout")
+def cikis_yap(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    raw_cookie = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+    if raw_cookie:
+        rt = db.query(models.RefreshToken).filter(
+            models.RefreshToken.token_hash == _hash_token(raw_cookie),
+            models.RefreshToken.revoked_at.is_(None),
+        ).first()
+        if rt:
+            rt.revoked_at = _utcnow_naive()
+            db.commit()
+
+    _clear_refresh_cookie(request, response)
+    return {"ok": True}
+
+
+@router.post("/logout-all")
+def tum_oturumlari_kapat(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    _revoke_all_user_sessions(db, current_user)
+    db.commit()
+    _clear_refresh_cookie(request, response)
+    return {"ok": True}
+
 
 @router.get("/me", response_model=schemas.UserOut)
 def beni_getir(current_user: models.User = Depends(get_current_user)):
@@ -235,13 +533,6 @@ class PasswordChange(BaseModel):
     old_password: str
     new_password: str
 
-class PasswordResetRequest(BaseModel):
-    email: str
-
-class PasswordResetConfirm(BaseModel):
-    token: str
-    new_password: str
-
 # 1. PROFİL GÜNCELLEME
 @router.put("/update-profile")
 def profil_guncelle(
@@ -280,6 +571,7 @@ def profil_guncelle(
 
 # 2. ŞİFRE DEĞİŞTİRME
 @router.post("/change-password")
+@router.put("/change-password", include_in_schema=False)
 def sifre_degistir(
     pass_data: PasswordChange,
     db: Session = Depends(get_db),
@@ -291,53 +583,95 @@ def sifre_degistir(
         raise HTTPException(status_code=400, detail="Yeni şifre 6 ile 128 karakter arasında olmalıdır.")
     
     current_user.password = sifreyi_hashle(pass_data.new_password)
+    _revoke_all_user_sessions(db, current_user)
     db.commit()
     return {"message": "Şifreniz başarıyla değiştirildi"}
 
-# 3. ŞİFREMİ UNUTTUM (Tek tip güvenli yanıt - kullanıcı numaralandırmayı engeller)
-@router.post("/forgot-password")
+# 3. ŞİFREMİ UNUTTUM (6 Haneli E-posta Kodu + Tek Tip Güvenli Yanıt)
+@router.post("/sifremi-unuttum")
+@router.post("/forgot-password", include_in_schema=False)
 def sifremi_unuttum(
-    request: PasswordResetRequest,
+    payload: schemas.ForgotPasswordRequest,
     db: Session = Depends(get_db)
 ):
-    clean_email = request.email.strip()
+    clean_email = str(payload.email).strip()
     user = db.query(models.User).filter(func.lower(models.User.email) == clean_email.lower()).first()
     if user and user.is_active:
-        _reset_token = create_access_token(
-            data={"sub": user.email, "type": "reset"},
-            expires_delta=timedelta(minutes=15)
+        from utils.mailer import send_password_reset_email
+
+        code = f"{secrets.randbelow(1000000):06d}"
+        now = _utcnow_naive()
+
+        # Önceki kullanılmamış kodları iptal et
+        db.query(models.PasswordResetCode).filter(
+            models.PasswordResetCode.user_id == user.id,
+            models.PasswordResetCode.used_at.is_(None),
+        ).update({"used_at": now}, synchronize_session=False)
+
+        reset_row = models.PasswordResetCode(
+            user_id=user.id,
+            code_hash=_hash_token(code),
+            expires_at=now + timedelta(minutes=RESET_CODE_EXPIRE_MINUTES),
+            attempts=0,
+            created_at=now,
         )
-        # TODO (Faz 1): Gerçek e-posta gönderimi (Resend / SMTP) entegre edilecek; token loglanmaz.
+        db.add(reset_row)
+        db.commit()
+
+        send_password_reset_email(user.email, code, user.username)
 
     return {
-        "message": "Eğer bu e-posta adresi sistemimizde kayıtlıysa, şifre sıfırlama talimatları gönderilecektir."
+        "message": "Eğer bu e-posta adresi sistemimizde kayıtlıysa, 6 haneli şifre sıfırlama kodu gönderilmiştir."
     }
 
-# 4. ŞİFRE SIFIRLAMA ONAYI
-@router.post("/reset-password")
+# 4. ŞİFRE SIFIRLAMA ONAYI (6 Haneli Kod Doğrulama + Tüm Oturumları İptal Etme)
+@router.post("/sifre-yenile")
 def sifre_sifirla(
-    confirm: PasswordResetConfirm,
+    payload: schemas.ResetPasswordRequest,
     db: Session = Depends(get_db)
 ):
-    if len(confirm.new_password) < 6 or len(confirm.new_password) > 128:
-        raise HTTPException(status_code=400, detail="Yeni şifre 6 ile 128 karakter arasında olmalıdır.")
-
-    try:
-        payload = jwt.decode(confirm.token, SECRET_KEY, algorithms=[ALGORITHM])
-        email = payload.get("sub")
-        token_type = payload.get("type")
-        
-        if email is None or token_type != "reset":
-            raise HTTPException(status_code=400, detail="Geçersiz kod")
-            
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Kod geçersiz veya süresi dolmuş")
-    
-    user = db.query(models.User).filter(models.User.email == email).first()
+    clean_email = str(payload.email).strip()
+    user = db.query(models.User).filter(func.lower(models.User.email) == clean_email.lower()).first()
     if not user or not user.is_active:
-        raise HTTPException(status_code=400, detail="Kod geçersiz veya süresi dolmuş")
-        
-    user.password = sifreyi_hashle(confirm.new_password)
+        raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş sıfırlama kodu.")
+
+    now = _utcnow_naive()
+    reset_row = (
+        db.query(models.PasswordResetCode)
+        .filter(
+            models.PasswordResetCode.user_id == user.id,
+            models.PasswordResetCode.used_at.is_(None),
+        )
+        .order_by(models.PasswordResetCode.created_at.desc(), models.PasswordResetCode.id.desc())
+        .first()
+    )
+
+    if not reset_row:
+        raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş sıfırlama kodu.")
+
+    if reset_row.expires_at <= now:
+        reset_row.used_at = now
+        db.commit()
+        raise HTTPException(status_code=400, detail="Sıfırlama kodunun süresi dolmuş. Lütfen yeni kod isteyin.")
+
+    if (reset_row.attempts or 0) >= RESET_CODE_MAX_ATTEMPTS:
+        reset_row.used_at = now
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Çok fazla hatalı deneme yapıldı. Lütfen yeni bir sıfırlama kodu isteyin.",
+        )
+
+    if not hmac.compare_digest(reset_row.code_hash, _hash_token(payload.code)):
+        reset_row.attempts = (reset_row.attempts or 0) + 1
+        if reset_row.attempts >= RESET_CODE_MAX_ATTEMPTS:
+            reset_row.used_at = now
+        db.commit()
+        raise HTTPException(status_code=400, detail="Sıfırlama kodu hatalı.")
+
+    user.password = sifreyi_hashle(payload.new_password)
+    reset_row.used_at = now
+    _revoke_all_user_sessions(db, user)
     db.commit()
-    
-    return {"message": "Şifreniz başarıyla sıfırlandı."}
+
+    return {"message": "Şifreniz başarıyla sıfırlandı. Yeni şifrenizle giriş yapabilirsiniz."}

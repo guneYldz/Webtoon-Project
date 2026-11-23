@@ -7,6 +7,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { Mail, Lock, Eye, EyeOff, LogIn, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 import { Button } from "@/components/ui";
 
 export default function LoginPage() {
@@ -35,6 +36,7 @@ export default function LoginPage() {
     try {
       const response = await apiFetch("/auth/giris-yap", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
@@ -166,6 +168,8 @@ export default function LoginPage() {
             </Button>
           </div>
         </form>
+
+        <GoogleSignInButton />
 
         <div className="mt-8 pt-6 border-t border-subtle text-center">
           <p className="text-ink-secondary text-sm">

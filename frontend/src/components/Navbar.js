@@ -24,7 +24,7 @@ import {
   BookOpen,
   X,
 } from "lucide-react";
-import { apiFetch, resolveMediaUrl } from "@/lib/apiClient";
+import { apiFetch, resolveMediaUrl, logoutUser } from "@/lib/apiClient";
 import NotificationBell from "@/components/NotificationBell";
 import {
   Button,
@@ -119,11 +119,8 @@ export default function Navbar() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("username");
-    window.dispatchEvent(new Event("auth-change"));
+  const handleLogout = async () => {
+    await logoutUser();
     setUser(null);
     setIsMobileMenuOpen(false);
     toast.success("Oturum kapatıldı.");

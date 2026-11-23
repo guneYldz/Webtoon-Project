@@ -1,7 +1,8 @@
 /**
  * Unified API & Media Client for Kaos Manga Frontend.
  * Handles SSR (Docker internal backend with public fallback) and client requests,
- * media URL normalization, user/admin bearer credentials, and unified sessionStorage admin tokens.
+ * media URL normalization, user/admin bearer credentials, automatic single-flight
+ * refresh-token rotation on 401, and unified sessionStorage admin tokens.
  */
 
 const DEFAULT_PUBLIC_API_URL = "https://kaosmanga.net/api";
@@ -11,9 +12,6 @@ const DEFAULT_SITE_URL = "https://kaosmanga.net";
 export const PUBLIC_API_URL = (
   process.env.NEXT_PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL
 ).replace(/\/+$/, "");
-
-/** Root origin for backend-served `/static/*` media files (nginx serves `/static/` at root, not `/api/static/`). */
-export const MEDIA_BASE_URL = PUBLIC_API_URL.replace(/\/api\/?$/, "");
 
 export const INTERNAL_API_URL = (
   process.env.INTERNAL_API_URL || DEFAULT_INTERNAL_API_URL
@@ -59,10 +57,7 @@ const LOCAL_PUBLIC_PREFIXES = [
 
 /**
  * Normalizes backend media paths (cover_image, banner_image, avatar, episode panel URLs)
- * into browser-safe absolute URLs.
- * - Rewrites internal Docker `http://backend:8000/static/...` -> `${MEDIA_BASE_URL}/static/...`
- * - Rewrites legacy `https://kaosmanga.net/api/static/...` (or `${PUBLIC_API_URL}/static/...`) -> `${MEDIA_BASE_URL}/static/...`
- * - Resolves relative `static/...` or `/static/...` against `${MEDIA_BASE_URL}` (nginx root `/static/`).
+ * into browser-safe absolute URLs. Rewrites internal Docker `http://backend:8000` URLs.
  */
 export function resolveMediaUrl(
   path?: string | null,
@@ -79,25 +74,7 @@ export function resolveMediaUrl(
   // Rewrite Docker-internal backend origin leaked into SSR payloads
   if (trimmed.startsWith("http://backend:8000")) {
     const rest = trimmed.slice("http://backend:8000".length).replace(/^\/+/, "");
-    if (rest.startsWith("static/")) {
-      return `${MEDIA_BASE_URL}/${rest}`;
-    }
-    if (rest.startsWith("api/static/")) {
-      return `${MEDIA_BASE_URL}/${rest.slice(4)}`;
-    }
     return `${PUBLIC_API_URL}/${rest}`;
-  }
-
-  // Rewrite legacy `/api/static/...` URLs to root `/static/...`
-  const publicApiStaticPrefix = `${PUBLIC_API_URL}/static/`;
-  if (PUBLIC_API_URL !== MEDIA_BASE_URL && trimmed.startsWith(publicApiStaticPrefix)) {
-    const rest = trimmed.slice(publicApiStaticPrefix.length);
-    return `${MEDIA_BASE_URL}/static/${rest}`;
-  }
-  const prodApiStaticPrefix = "https://kaosmanga.net/api/static/";
-  if (trimmed.startsWith(prodApiStaticPrefix)) {
-    const rest = trimmed.slice(prodApiStaticPrefix.length);
-    return `${MEDIA_BASE_URL}/static/${rest}`;
   }
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
@@ -110,12 +87,6 @@ export function resolveMediaUrl(
   }
 
   let clean = trimmed.replace(/^\/+/, "");
-  if (clean.startsWith("api/static/")) {
-    clean = clean.slice(4);
-  }
-  if (clean.startsWith("static/")) {
-    return `${MEDIA_BASE_URL}/${clean}`;
-  }
   if (PUBLIC_API_URL.endsWith("/api") && clean.startsWith("api/")) {
     clean = clean.slice(4);
   }
@@ -211,6 +182,96 @@ export function getUserToken(): string | null {
 }
 
 /* ============================================================================
+   User Refresh Token Rotation & Logout
+   ============================================================================ */
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+/**
+ * Single-flight user access-token refresh using the HttpOnly `kaos_refresh_token` cookie.
+ * Updates `localStorage` and dispatches `"auth-change"` on success, or clears stale token on failure.
+ */
+export async function refreshUserAccessToken(): Promise<string | null> {
+  if (isServer()) return null;
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${PUBLIC_API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+
+      if (!res.ok) {
+        window.localStorage.removeItem(USER_TOKEN_KEY);
+        window.localStorage.removeItem("role");
+        window.localStorage.removeItem("username");
+        return null;
+      }
+
+      const data = await res.json().catch(() => null);
+      const newToken =
+        data && typeof data === "object" && "access_token" in data
+          ? String((data as { access_token?: unknown }).access_token || "")
+          : "";
+
+      if (!newToken) {
+        window.localStorage.removeItem(USER_TOKEN_KEY);
+        return null;
+      }
+
+      window.localStorage.setItem(USER_TOKEN_KEY, newToken);
+      if (data && typeof data === "object") {
+        const meta = data as {
+          role?: string;
+          username?: string;
+          user?: { role?: string; username?: string };
+        };
+        const role = meta.role || meta.user?.role;
+        const username = meta.username || meta.user?.username;
+        if (role) window.localStorage.setItem("role", role);
+        if (username) window.localStorage.setItem("username", username);
+      }
+      window.dispatchEvent(new Event("auth-change"));
+      return newToken;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
+/**
+ * Revokes the server-side refresh cookie via `POST /auth/logout`, clears local user credentials,
+ * and notifies all mounted components via `"auth-change"`.
+ */
+export async function logoutUser(): Promise<void> {
+  if (isServer()) return;
+  const token = getUserToken();
+  try {
+    await fetch(`${PUBLIC_API_URL}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    // Ignore network errors on logout
+  }
+  try {
+    window.localStorage.removeItem(USER_TOKEN_KEY);
+    window.localStorage.removeItem("role");
+    window.localStorage.removeItem("username");
+    window.dispatchEvent(new Event("auth-change"));
+  } catch {
+    // Ignore storage access errors
+  }
+}
+
+/* ============================================================================
    Unified Fetch Wrapper
    ============================================================================ */
 
@@ -260,9 +321,19 @@ function buildApiUrl(baseUrl: string, path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
+function isAuthRefreshExcludedPath(path: string): boolean {
+  return (
+    path.includes("/auth/refresh") ||
+    path.includes("/auth/giris-yap") ||
+    path.includes("/auth/logout") ||
+    path.includes("/auth/google")
+  );
+}
+
 /**
  * Low-level unified `fetch` returning the raw `Response`.
- * Automatically handles SSR Docker -> Public fallback, JSON serialization, and auth headers.
+ * Automatically handles SSR Docker -> Public fallback, JSON serialization, auth headers,
+ * and single-flight user access-token refresh on 401.
  */
 export async function apiFetch(
   path: string,
@@ -316,8 +387,9 @@ export async function apiFetch(
   const primaryBase = baseUrl ?? getApiBaseUrl();
   const primaryUrl = buildApiUrl(primaryBase, path);
 
+  let response: Response;
   try {
-    return await fetch(primaryUrl, fetchInit);
+    response = await fetch(primaryUrl, fetchInit);
   } catch (err) {
     const isAbsolute =
       path.startsWith("http://") || path.startsWith("https://");
@@ -333,8 +405,28 @@ export async function apiFetch(
     }
 
     const fallbackUrl = buildApiUrl(PUBLIC_API_URL, path);
-    return fetch(fallbackUrl, fetchInit);
+    response = await fetch(fallbackUrl, fetchInit);
   }
+
+  // Client-side transparent 401 refresh & single retry for authenticated user calls
+  if (
+    !isServer() &&
+    auth === "user" &&
+    response.status === 401 &&
+    !isAuthRefreshExcludedPath(path)
+  ) {
+    const refreshedToken = await refreshUserAccessToken();
+    if (refreshedToken) {
+      const retryHeaders = new Headers(headers);
+      retryHeaders.set("Authorization", `Bearer ${refreshedToken}`);
+      return fetch(primaryUrl, {
+        ...fetchInit,
+        headers: retryHeaders,
+      });
+    }
+  }
+
+  return response;
 }
 
 /**
@@ -351,7 +443,9 @@ export async function apiJson<T = unknown>(
 
   let parsed: unknown = null;
   if (res.status !== 204) {
-    parsed = isJson ? await res.json().catch(() => null) : await res.text().catch(() => null);
+    parsed = isJson
+      ? await res.json().catch(() => null)
+      : await res.text().catch(() => null);
   }
 
   if (!res.ok) {

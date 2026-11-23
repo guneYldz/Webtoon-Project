@@ -721,6 +721,14 @@ async def update_user(
                 detail="Kendi hesabınızı devre dışı bırakamazsınız.",
             )
         user.is_active = is_active
+        if is_active is False:
+            from datetime import datetime, timezone
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            user.token_version = (user.token_version or 1) + 1
+            db.query(models.RefreshToken).filter(
+                models.RefreshToken.user_id == user.id,
+                models.RefreshToken.revoked_at.is_(None),
+            ).update({"revoked_at": now_utc}, synchronize_session=False)
     
     try:
         db.commit()

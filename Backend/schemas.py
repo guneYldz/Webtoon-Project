@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
@@ -287,3 +287,43 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str = Field(..., min_length=10)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_eposta_alias(cls, data):
+        if isinstance(data, dict) and "email" not in data and "eposta" in data:
+            return {**data, "email": data["eposta"]}
+        return data
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=6, max_length=128)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_inputs(cls, data):
+        if isinstance(data, dict):
+            updated = dict(data)
+            if "email" not in updated and "eposta" in updated:
+                updated["email"] = updated["eposta"]
+            if "code" in updated and isinstance(updated["code"], str):
+                updated["code"] = updated["code"].strip()
+            return updated
+        return data
+
+    @field_validator("code")
+    @classmethod
+    def validate_six_digit_code(cls, v: str) -> str:
+        if not v.isdigit() or len(v) != 6:
+            raise ValueError("Sıfırlama kodu 6 haneli sayı olmalıdır.")
+        return v

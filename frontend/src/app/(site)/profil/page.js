@@ -20,7 +20,7 @@ import {
   Save,
   KeyRound,
 } from "lucide-react";
-import { apiFetch, resolveMediaUrl } from "@/lib/apiClient";
+import { apiFetch, resolveMediaUrl, logoutUser } from "@/lib/apiClient";
 import SeriesCard, { SeriesCardSkeleton } from "@/components/SeriesCard";
 import {
   Button,
@@ -192,11 +192,8 @@ function ProfileContent() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("username");
-    window.dispatchEvent(new Event("auth-change"));
+  const handleLogout = async () => {
+    await logoutUser();
     toast.success("Oturum kapatıldı.");
     router.push("/login");
   };

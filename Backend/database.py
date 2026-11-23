@@ -22,7 +22,7 @@ if not DATABASE_URL:
 # ==========================================
 # try-except KULLANMIYORUZ. Hata varsa direkt patlasın ki sebebini görelim.
 try:
-    engine = create_engine(DATABASE_URL)
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
 except Exception as e:
     # Eğer bağlantı dizesi hatalıysa (örn: mssql+pyodbc yerine yanlış bir şey yazıldıysa)
     raise ValueError(f"❌ Veritabanı Motoru Başlatılamadı: {e}")

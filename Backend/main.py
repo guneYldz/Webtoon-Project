@@ -27,60 +27,8 @@ import uuid
 # --- ROUTERLARI ÇAĞIR ---
 from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications, reactions
 
-# 1. Tabloları oluştur
+# 1. Yeni dev ortamları için eksik tabloları oluştur (şema göçleri Alembic ile yönetilir)
 models.Base.metadata.create_all(bind=engine)
-
-# 2. Eksik kolonları güvenli biçimde ekle (ALTER TABLE IF NOT EXISTS)
-from sqlalchemy import text as sql_text
-with engine.connect() as _conn:
-    for _stmt in [
-        "ALTER TABLE novels ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0",
-        "ALTER TABLE comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES comments(id)",
-        "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image VARCHAR(500)",
-    ]:
-        try:
-            _conn.execute(sql_text(_stmt))
-            _conn.commit()
-        except Exception:
-            pass  # Kolon zaten varsa sessizce geç
-
-    # WEBTOON türünü enum'a ekle; mevcut MANGA kayıtlarını WEBTOON yap
-    # (sitede şimdiye kadar hepsi WEBTOON görünüyordu). Admin sonradan Manga seçebilir.
-    try:
-        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as _ac:
-            for _enum_name in ("contenttype", "content_type"):
-                try:
-                    _ac.execute(sql_text(f"ALTER TYPE {_enum_name} ADD VALUE IF NOT EXISTS 'WEBTOON'"))
-                except Exception:
-                    pass
-            try:
-                _enum_rows = _ac.execute(sql_text(
-                    "SELECT DISTINCT t.typname FROM pg_type t "
-                    "JOIN pg_enum e ON t.oid = e.enumtypid "
-                    "WHERE e.enumlabel IN ('MANGA', 'NOVEL', 'WEBTOON')"
-                )).fetchall()
-                for _row in _enum_rows:
-                    _enum_ident = str(_row[0] or "")
-                    if not _enum_ident.replace("_", "").isalnum():
-                        continue
-                    try:
-                        _ac.execute(sql_text(
-                            f"ALTER TYPE {_enum_ident} ADD VALUE IF NOT EXISTS 'WEBTOON'"
-                        ))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-    except Exception:
-        pass
-    try:
-        _conn.execute(sql_text(
-            "UPDATE webtoons SET type = 'WEBTOON' WHERE type = 'MANGA' "
-            "AND NOT EXISTS (SELECT 1 FROM webtoons w2 WHERE w2.type = 'WEBTOON')"
-        ))
-        _conn.commit()
-    except Exception:
-        pass
 
 # ⚠️ root_path="/api" KALDIRILDI (Starlette 0.50 uyumu):
 # Nginx zaten /api önekini kırpıp backend'e öneksiz iletiyor.

@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 import { Button } from "@/components/ui";
 
 export default function RegisterPage() {
@@ -41,6 +42,7 @@ export default function RegisterPage() {
     try {
       const response = await apiFetch("/auth/kayit-ol", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -181,6 +183,8 @@ export default function RegisterPage() {
             </Button>
           </div>
         </form>
+
+        <GoogleSignInButton />
 
         <div className="mt-8 pt-6 border-t border-subtle text-center">
           <p className="text-ink-secondary text-sm">

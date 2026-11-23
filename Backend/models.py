@@ -22,11 +22,15 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     is_active = Column(Boolean, default=True)
     profile_image = Column(String, nullable=True)
+    google_id = Column(String(255), nullable=True, index=True)
+    token_version = Column(Integer, nullable=False, default=1, server_default="1")
 
     comments = relationship("Comment", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
     likes = relationship("Like", back_populates="user")
     reactions = relationship("ChapterReaction", back_populates="user", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    password_reset_codes = relationship("PasswordResetCode", back_populates="user", cascade="all, delete-orphan")
 
     def __str__(self):
         return self.username
@@ -353,3 +357,34 @@ class ChapterReaction(Base):
 
     def __str__(self):
         return f"Reaction {self.reaction} by {self.user_id} on {self.content_type}:{self.target_id}"
+
+
+# 12. YENİLEME TOKENLARI (HttpOnly Rotating Refresh Tokens)
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    user_agent = Column(String(255), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+
+    user = relationship("User", back_populates="refresh_tokens")
+
+
+# 13. ŞİFRE SIFIRLAMA KODLARI (6 Haneli Tek Kullanımlık Kodlar)
+class PasswordResetCode(Base):
+    __tablename__ = "password_reset_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code_hash = Column(String(64), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="password_reset_codes")
