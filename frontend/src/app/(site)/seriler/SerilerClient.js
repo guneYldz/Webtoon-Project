@@ -241,11 +241,10 @@ export default function SerilerClient({
           </div>
         ) : filteredSeries.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-8 sm:gap-x-5 sm:gap-y-9">
-            {filteredSeries.map((item, idx) => (
+            {filteredSeries.map((item) => (
               <SeriesCard
                 key={`${item.typeLabel}-${item.id}`}
                 series={item}
-                priority={idx < 4}
               />
             ))}
           </div>

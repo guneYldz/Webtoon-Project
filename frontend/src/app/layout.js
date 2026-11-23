@@ -1,7 +1,10 @@
 import "./globals.css";
 import { Inter, Cinzel, Lora } from "next/font/google";
+import Script from "next/script";
 import { Toaster } from "sonner";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+
+const HAS_GOOGLE_AUTH = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
 export const viewport = {
   width: "device-width",
@@ -142,6 +145,12 @@ export default function RootLayout({ children }) {
       className={`${inter.variable} ${cinzel.variable} ${lora.variable} dark`}
     >
       <head>
+        {HAS_GOOGLE_AUTH && (
+          <>
+            <link rel="preconnect" href="https://accounts.google.com" />
+            <link rel="dns-prefetch" href="https://accounts.google.com" />
+          </>
+        )}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
@@ -149,6 +158,13 @@ export default function RootLayout({ children }) {
       </head>
       <body className="font-sans bg-canvas text-ink-primary antialiased selection:bg-brand/30 selection:text-white">
         <GoogleAnalytics gaId="G-JQ0YHH7PL5" />
+        {HAS_GOOGLE_AUTH && (
+          <Script
+            id="google-identity-services-sdk"
+            src="https://accounts.google.com/gsi/client"
+            strategy="afterInteractive"
+          />
+        )}
         {children}
         <Toaster
           richColors

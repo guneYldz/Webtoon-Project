@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import DOMPurify from "isomorphic-dompurify";
+import DOMPurify from "dompurify";
 import {
   ChevronLeft,
   ChevronRight,
   Layers,
 } from "lucide-react";
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, encodeRouteParam } from "@/lib/apiClient";
 import { formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
 import { useReadingHistory } from "@/lib/readingHistory";
 import { Skeleton } from "@/components/ui";
@@ -29,11 +29,24 @@ const COLUMN_WIDTHS = {
   wide: "max-w-5xl",
 };
 
-function sanitizeNovelHtml(rawHtml) {
-  return DOMPurify.sanitize(String(rawHtml || ""), {
-    FORBID_TAGS: ["script", "style", "iframe", "object", "embed"],
-    FORBID_ATTR: ["style", "color", "bgcolor", "face", "class"],
-  });
+function sanitizeNovelHtmlSsr(rawHtml) {
+  return String(rawHtml || "")
+    .replace(/<(script|style|iframe|object|embed|noscript|svg|math)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(script|style|iframe|object|embed|noscript|svg|math)\b[^>]*\/?>/gi, "")
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s+(?:style|color|bgcolor|face|class)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, '$1="#"');
+}
+
+function sanitizeNovelHtml(rawHtml, useDomPurify = false) {
+  const input = String(rawHtml || "");
+  if (useDomPurify && typeof window !== "undefined" && DOMPurify?.isSupported) {
+    return DOMPurify.sanitize(input, {
+      FORBID_TAGS: ["script", "style", "iframe", "object", "embed"],
+      FORBID_ATTR: ["style", "color", "bgcolor", "face", "class"],
+    });
+  }
+  return sanitizeNovelHtmlSsr(input);
 }
 
 function estimateReadingMinutes(rawContent) {
@@ -84,7 +97,7 @@ export default function NovelReadingClient({
 
       try {
         const res = await apiFetch(
-          `/novels/${slug}/chapters/${chapterNumber}`,
+          `/novels/${encodeRouteParam(slug)}/chapters/${encodeRouteParam(chapterNumber)}`,
           {
             cache: "no-store",
             credentials: "include",
@@ -121,7 +134,7 @@ export default function NovelReadingClient({
     if (!slug || initialChapters.length > 0) return;
     let cancelled = false;
 
-    apiFetch(`/novels/${slug}`, { cache: "force-cache" })
+    apiFetch(`/novels/${encodeRouteParam(slug)}`, { cache: "force-cache" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled && data?.chapters) {
@@ -219,8 +232,8 @@ export default function NovelReadingClient({
     if (!chapter?.content) return null;
     const hasHtml = /<[a-z][\s\S]*>/i.test(chapter.content);
     if (!hasHtml) return null;
-    return sanitizeNovelHtml(chapter.content);
-  }, [chapter?.content]);
+    return sanitizeNovelHtml(chapter.content, hydrated);
+  }, [chapter?.content, hydrated]);
 
   const handleSettingsChange = (next) => {
     setSettings(next);

@@ -1,31 +1,35 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { apiFetch, resolveMediaUrl, SITE_URL } from "@/lib/apiClient";
+import {
+  encodeRouteParam,
+  fetchSsrJson,
+  resolveMediaUrl,
+  SITE_URL,
+} from "@/lib/apiClient";
 import { seriesKindTr } from "@/lib/seriesType";
 import SeriesDetailView from "@/components/SeriesDetailView";
 
 const getWebtoon = cache(async (id) => {
-  try {
-    const res = await apiFetch(`/webtoons/${encodeURIComponent(id)}`, {
-      next: { revalidate: 60 },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || data.detail) return null;
-    return data;
-  } catch {
-    return null;
-  }
+  return fetchSsrJson(`/webtoons/${encodeRouteParam(id)}`, { revalidate: 60 });
 });
 
 export async function generateMetadata({ params }) {
   const { id } = params;
-  const series = await getWebtoon(id);
+  let result;
+  try {
+    result = await getWebtoon(id);
+  } catch {
+    return {
+      title: "Kaos Manga - Türkçe Webtoon ve Manga",
+      robots: { index: false, follow: false },
+    };
+  }
 
-  if (!series) {
+  if (result.status !== "ok") {
     return { title: "Seri Bulunamadı" };
   }
 
+  const series = result.data;
   const kind = seriesKindTr(series.type, series.typeLabel);
   const title = `${series.title} Oku - Türkçe ${kind}`;
   const description = series.summary
@@ -60,11 +64,13 @@ export async function generateMetadata({ params }) {
 
 export default async function WebtoonDetailPage({ params }) {
   const { id } = params;
-  const series = await getWebtoon(id);
+  const result = await getWebtoon(id);
 
-  if (!series) {
+  if (result.status === "not_found") {
     notFound();
   }
+
+  const series = result.data;
 
   const kind = seriesKindTr(series.type, series.typeLabel);
   const jsonLd = {

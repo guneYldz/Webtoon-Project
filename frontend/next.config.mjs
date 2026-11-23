@@ -61,20 +61,20 @@ const nextConfig = {
       { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
       { key: "Pragma", value: "no-cache" },
     ];
+    const publicHtmlCache = [
+      {
+        key: "Cache-Control",
+        value: "public, max-age=0, s-maxage=60, stale-while-revalidate=120, must-revalidate",
+      },
+    ];
     return [
       {
         source: "/:path*",
         headers: securityHeaders,
       },
-      {
-        source: "/",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, s-maxage=60, stale-while-revalidate=120, must-revalidate",
-          },
-        ],
-      },
+      { source: "/", headers: publicHtmlCache },
+      { source: "/novel/:path*", headers: publicHtmlCache },
+      { source: "/webtoon/:path*", headers: publicHtmlCache },
       { source: "/admin", headers: privateNoStore },
       { source: "/admin/:path*", headers: privateNoStore },
       { source: "/login-admin", headers: privateNoStore },

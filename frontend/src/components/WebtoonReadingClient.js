@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Layers,
 } from "lucide-react";
-import { apiFetch, resolveMediaUrl } from "@/lib/apiClient";
+import { apiFetch, encodeRouteParam, resolveMediaUrl } from "@/lib/apiClient";
 import { seriesTypeLabel } from "@/lib/seriesType";
 import { formatChapterNumber, isAutoChapterTitle } from "@/lib/chapterTitle";
 import { useReadingHistory } from "@/lib/readingHistory";
@@ -132,7 +132,7 @@ export default function WebtoonReadingClient({
       }
 
       try {
-        const res = await apiFetch(`/episodes/${episodeId}`, {
+        const res = await apiFetch(`/episodes/${encodeRouteParam(episodeId)}`, {
           cache: "no-store",
           credentials: "include",
         });
@@ -167,7 +167,7 @@ export default function WebtoonReadingClient({
     if (!seriesId || initialEpisodes.length > 0) return;
     let cancelled = false;
 
-    apiFetch(`/webtoons/${seriesId}`, { cache: "force-cache" })
+    apiFetch(`/webtoons/${encodeRouteParam(seriesId)}`, { cache: "force-cache" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled && data?.episodes) {

@@ -49,9 +49,9 @@ const FeaturedSlider = ({ webtoon, isFirst = false }) => {
             sizes="(max-width: 768px) 100vw, 1280px"
             quality={85}
             className="object-cover object-center"
-            priority={isFirst}
-            loading={isFirst ? undefined : "lazy"}
-            fetchPriority={isFirst ? "high" : "auto"}
+            priority={Boolean(isFirst && validBanner)}
+            loading={isFirst && validBanner ? undefined : isFirst ? "eager" : "lazy"}
+            fetchPriority={isFirst && validBanner ? "high" : "auto"}
           />
         </div>
         <div className="absolute inset-0 bg-canvas/45" />

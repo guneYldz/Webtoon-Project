@@ -76,7 +76,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md bg-surface/95 p-8 sm:p-10 rounded-3xl shadow-2xl border border-subtle relative overflow-hidden">
         <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-brand to-transparent opacity-80" />
 
-        <div className="text-center mb-8">
+        <div className="text-center mb-7">
           <div className="flex justify-center mb-5">
             <div className="relative h-20 w-20 overflow-hidden rounded-full bg-black ring-2 ring-brand/45 shadow-[0_0_24px_rgba(168,85,247,0.3)]">
               <Image
@@ -102,6 +102,11 @@ export default function RegisterPage() {
             <span>{error}</span>
           </div>
         )}
+
+        <GoogleSignInButton
+          dividerPosition="bottom"
+          dividerText="veya e-posta ile kayıt ol"
+        />
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -184,9 +189,7 @@ export default function RegisterPage() {
           </div>
         </form>
 
-        <GoogleSignInButton />
-
-        <div className="mt-8 pt-6 border-t border-subtle text-center">
+        <div className="mt-7 pt-6 border-t border-subtle text-center">
           <p className="text-ink-secondary text-sm">
             Zaten hesabın var mı?{" "}
             <Link

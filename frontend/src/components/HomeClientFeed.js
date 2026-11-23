@@ -101,13 +101,12 @@ export default function HomeClientFeed({ allSeries = [], popularList = [] }) {
 
           {filteredUpdates.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-8 sm:gap-x-5 sm:gap-y-9">
-              {filteredUpdates.map((item, idx) => (
+              {filteredUpdates.map((item) => (
                 <SeriesCard
                   key={`${item.typeLabel}-${item.id}`}
                   series={item}
                   variant="updates"
                   showLatestChapters={true}
-                  priority={idx < 4}
                 />
               ))}
             </div>

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Query, status, Request, Response
 from sqlalchemy.orm import Session, selectinload, defer
-from sqlalchemy import desc, asc
+from sqlalchemy import desc, asc, func
 from typing import List, Optional
 
 # Proje dosyaları
@@ -115,10 +115,16 @@ def novelleri_getir_no_slash(
 # 2. TEK ROMAN GETİR
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
 def novel_detay(slug_or_id: str, response: Response, request: Request, db: Session = Depends(get_db)):
-    if slug_or_id.isdigit():
-        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == int(slug_or_id), models.Novel.is_published == True).first()
+    clean_key = (slug_or_id or "").strip()
+    if clean_key.isdigit():
+        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == int(clean_key), models.Novel.is_published == True).first()
     else:
-        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.slug == slug_or_id, models.Novel.is_published == True).first()
+        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.slug == clean_key, models.Novel.is_published == True).first()
+        if not novel and clean_key:
+            novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(
+                func.trim(func.lower(models.Novel.slug)) == clean_key.lower(),
+                models.Novel.is_published == True,
+            ).first()
 
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
@@ -290,10 +296,16 @@ def novel_bolum_oku(
     )
 
     # Romanı bul
-    novel_query = db.query(models.Novel).filter(models.Novel.slug == slug)
+    clean_slug = (slug or "").strip()
+    novel_query = db.query(models.Novel).filter(models.Novel.slug == clean_slug)
     if not is_privileged:
         novel_query = novel_query.filter(models.Novel.is_published == True)
     novel = novel_query.first()
+    if not novel and clean_slug:
+        fallback_q = db.query(models.Novel).filter(func.trim(func.lower(models.Novel.slug)) == clean_slug.lower())
+        if not is_privileged:
+            fallback_q = fallback_q.filter(models.Novel.is_published == True)
+        novel = fallback_q.first()
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
 

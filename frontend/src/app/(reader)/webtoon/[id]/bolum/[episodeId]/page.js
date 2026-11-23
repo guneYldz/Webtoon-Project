@@ -1,31 +1,27 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { apiFetch, resolveMediaUrl, SITE_URL } from "@/lib/apiClient";
+import {
+  encodeRouteParam,
+  fetchSsrJson,
+  resolveMediaUrl,
+  SITE_URL,
+} from "@/lib/apiClient";
 import { seriesKindTr } from "@/lib/seriesType";
 import WebtoonReadingClient from "@/components/WebtoonReadingClient";
 
 const getEpisode = cache(async (episodeId) => {
-  try {
-    const res = await apiFetch(`/episodes/${encodeURIComponent(episodeId)}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || data.detail) return null;
-    return data;
-  } catch {
-    return null;
-  }
+  return fetchSsrJson(`/episodes/${encodeRouteParam(episodeId)}`, {
+    cache: "no-store",
+  });
 });
 
 const getSeriesEpisodes = cache(async (seriesId) => {
   try {
-    const res = await apiFetch(`/webtoons/${encodeURIComponent(seriesId)}`, {
-      next: { revalidate: 60 },
+    const res = await fetchSsrJson(`/webtoons/${encodeRouteParam(seriesId)}`, {
+      revalidate: 60,
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const list = Array.isArray(data?.episodes) ? data.episodes : [];
+    if (res.status !== "ok") return [];
+    const list = Array.isArray(res.data?.episodes) ? res.data.episodes : [];
     return [...list].sort(
       (a, b) => Number(b.episode_number) - Number(a.episode_number)
     );
@@ -36,12 +32,21 @@ const getSeriesEpisodes = cache(async (seriesId) => {
 
 export async function generateMetadata({ params }) {
   const { id, episodeId } = params;
-  const episode = await getEpisode(episodeId);
+  let result;
+  try {
+    result = await getEpisode(episodeId);
+  } catch {
+    return {
+      title: "Kaos Manga - Bölüm Yükleniyor",
+      robots: { index: false, follow: false },
+    };
+  }
 
-  if (!episode) {
+  if (result.status !== "ok") {
     return { title: "Bölüm Bulunamadı" };
   }
 
+  const episode = result.data;
   const kind = seriesKindTr(episode.series_type);
   const title = `Bölüm ${episode.episode_number} - ${episode.webtoon_title} ${kind} Oku`;
   const description = `${episode.webtoon_title} serisinin ${episode.episode_number}. bölümünü Kaos Manga'da Türkçe ${kind.toLowerCase()} olarak oku.`;
@@ -68,14 +73,16 @@ export async function generateMetadata({ params }) {
 
 export default async function WebtoonReadingPage({ params }) {
   const { id, episodeId } = params;
-  const [episode, episodes] = await Promise.all([
+  const [episodeRes, episodes] = await Promise.all([
     getEpisode(episodeId),
     getSeriesEpisodes(id),
   ]);
 
-  if (!episode) {
+  if (episodeRes.status === "not_found") {
     notFound();
   }
+
+  const episode = episodeRes.data;
 
   const normalizedEpisode = {
     ...episode,

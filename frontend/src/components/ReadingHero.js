@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Calendar, Eye, MessageSquare, Clock, SlidersHorizontal } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/apiClient";
 import { formatTrNumber, formatTrShortDate } from "@/lib/formatTr";
@@ -86,13 +87,16 @@ export default function ReadingHero({
           <Link
             href={seriesHref}
             title={`${seriesTitle || "Seri"} sayfasına git`}
-            className="group block w-28 sm:w-36 md:w-40 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/15 bg-surface transition-transform duration-300 hover:scale-[1.02]"
+            className="relative group block w-28 sm:w-36 md:w-40 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/15 bg-surface transition-transform duration-300 hover:scale-[1.02]"
           >
-            <img
+            <Image
               src={finalImage}
               alt={`${seriesTitle || title} kapağı`}
-              loading="eager"
-              className="w-full h-full object-cover"
+              fill
+              priority
+              sizes="(max-width: 640px) 112px, (max-width: 768px) 144px, 160px"
+              quality={85}
+              className="object-cover"
             />
           </Link>
         )}

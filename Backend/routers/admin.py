@@ -7,6 +7,7 @@ import logging
 import models 
 import schemas
 import os
+import re
 import uuid
 from typing import Optional, List
 from routers.auth import get_current_admin  # ADMIN AUTH
@@ -50,6 +51,14 @@ def _remove_file_quietly(path: Optional[str]):
             os.remove(path)
         except OSError:
             pass
+
+
+def _slugify_title(title: str) -> str:
+    text = (title or "").strip().lower()
+    text = text.replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
+    text = re.sub(r"[^a-z0-9\s-]", "", text)
+    text = re.sub(r"[\s-]+", "-", text).strip("-")
+    return text or "seri"
 
 
 def parse_category_ids(raw: Optional[str]) -> Optional[List[int]]:
@@ -127,7 +136,7 @@ async def create_webtoon(
                 validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
             )
 
-        base_slug = title.lower().replace(" ", "-").replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
+        base_slug = _slugify_title(title)
         random_suffix = str(uuid.uuid4())[:8]
         slug = f"{base_slug}-{random_suffix}"
 
@@ -431,7 +440,7 @@ async def create_novel(
                 validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
             )
 
-        base_slug = title.lower().replace(" ", "-").replace("ı", "i").replace("ğ", "g").replace("ü", "u").replace("ş", "s").replace("ö", "o").replace("ç", "c")
+        base_slug = _slugify_title(title)
         random_suffix = str(uuid.uuid4())[:8]
         slug = f"{base_slug}-{random_suffix}"
 

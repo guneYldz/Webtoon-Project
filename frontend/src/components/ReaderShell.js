@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -178,12 +179,14 @@ export default function ReaderShell({
             <Link
               href="/"
               title="Ana Sayfa"
-              className="w-8 h-8 rounded-lg overflow-hidden border border-white/15 shrink-0 hover:border-accent-border transition flex items-center justify-center bg-surface"
+              className="relative w-8 h-8 rounded-lg overflow-hidden border border-white/15 shrink-0 hover:border-accent-border transition flex items-center justify-center bg-surface"
             >
-              <img
+              <Image
                 src="/logo.png"
                 alt="Kaos Manga"
-                className="w-full h-full object-cover"
+                fill
+                sizes="32px"
+                className="object-cover"
               />
             </Link>
 

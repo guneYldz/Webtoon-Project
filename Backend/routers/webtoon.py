@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Query, status, Response, Request
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from typing import List
 import os
 import uuid # Resim isimleri çakışmasın diye rastgele isim üretici
@@ -69,14 +69,20 @@ def webtoonlari_getir(
 # 2. DETAY GÖSTERME (Hem ID hem Slug destekler) - HERKESE AÇIK
 @router.get("/{id_or_slug}", response_model=schemas.WebtoonDetail)
 def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Session = Depends(get_db)):
+    clean_key = (id_or_slug or "").strip()
     load_opts = (
         selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)),
         selectinload(models.Webtoon.categories),
     )
-    if id_or_slug.isdigit():
-        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.id == int(id_or_slug), models.Webtoon.is_published == True).first()
+    if clean_key.isdigit():
+        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.id == int(clean_key), models.Webtoon.is_published == True).first()
     else:
-        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.slug == id_or_slug, models.Webtoon.is_published == True).first()
+        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.slug == clean_key, models.Webtoon.is_published == True).first()
+        if not webtoon and clean_key:
+            webtoon = db.query(models.Webtoon).options(*load_opts).filter(
+                func.trim(func.lower(models.Webtoon.slug)) == clean_key.lower(),
+                models.Webtoon.is_published == True,
+            ).first()
     
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import {
   BookOpen,
   Play,
@@ -108,11 +109,15 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
 
           <div className="flex flex-col md:flex-row gap-8 lg:gap-10 items-center md:items-start mt-2">
             {/* Poster */}
-            <div className="w-44 sm:w-52 md:w-64 shrink-0 rounded-xl overflow-hidden ring-1 ring-inset ring-white/10 shadow-2xl bg-surface aspect-[2/3]">
-              <img
+            <div className="relative w-44 sm:w-52 md:w-64 shrink-0 rounded-xl overflow-hidden ring-1 ring-inset ring-white/10 shadow-2xl bg-surface aspect-[2/3]">
+              <Image
                 src={coverUrl}
                 alt={`${series.title} ${kindLabel.toLowerCase()} kapağı`}
-                className="w-full h-full object-cover"
+                fill
+                priority
+                sizes="(max-width: 640px) 176px, (max-width: 768px) 208px, 256px"
+                quality={85}
+                className="object-cover"
               />
             </div>
 

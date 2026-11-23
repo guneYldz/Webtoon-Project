@@ -13,9 +13,24 @@ export const PUBLIC_API_URL = (
   process.env.NEXT_PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL
 ).replace(/\/+$/, "");
 
+/** Root origin for backend-served `/static/*` media files (nginx serves `/static/` at root, not `/api/static/`). */
+export const MEDIA_BASE_URL = PUBLIC_API_URL.replace(/\/api\/?$/, "");
+
 export const INTERNAL_API_URL = (
   process.env.INTERNAL_API_URL || DEFAULT_INTERNAL_API_URL
 ).replace(/\/+$/, "");
+
+/** Encodes a Next.js dynamic route parameter cleanly without double-encoding existing `%XX` sequences. */
+export function encodeRouteParam(value: string): string {
+  const raw = String(value ?? "").trim();
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // Keep raw if malformed percent encoding
+  }
+  return encodeURIComponent(decoded);
+}
 
 /** Backward-compatible public API base URL alias */
 export const API = PUBLIC_API_URL;
@@ -57,7 +72,10 @@ const LOCAL_PUBLIC_PREFIXES = [
 
 /**
  * Normalizes backend media paths (cover_image, banner_image, avatar, episode panel URLs)
- * into browser-safe absolute URLs. Rewrites internal Docker `http://backend:8000` URLs.
+ * into browser-safe absolute URLs.
+ * - Rewrites internal Docker `http://backend:8000/static/...` -> `${MEDIA_BASE_URL}/static/...`
+ * - Rewrites legacy `https://kaosmanga.net/api/static/...` (or `${PUBLIC_API_URL}/static/...`) -> `${MEDIA_BASE_URL}/static/...`
+ * - Resolves relative `static/...` or `/static/...` against `${MEDIA_BASE_URL}` (nginx root `/static/`).
  */
 export function resolveMediaUrl(
   path?: string | null,
@@ -74,7 +92,25 @@ export function resolveMediaUrl(
   // Rewrite Docker-internal backend origin leaked into SSR payloads
   if (trimmed.startsWith("http://backend:8000")) {
     const rest = trimmed.slice("http://backend:8000".length).replace(/^\/+/, "");
+    if (rest.startsWith("static/")) {
+      return `${MEDIA_BASE_URL}/${rest}`;
+    }
+    if (rest.startsWith("api/static/")) {
+      return `${MEDIA_BASE_URL}/${rest.slice(4)}`;
+    }
     return `${PUBLIC_API_URL}/${rest}`;
+  }
+
+  // Rewrite legacy `/api/static/...` URLs to root `/static/...`
+  const publicApiStaticPrefix = `${PUBLIC_API_URL}/static/`;
+  if (PUBLIC_API_URL !== MEDIA_BASE_URL && trimmed.startsWith(publicApiStaticPrefix)) {
+    const rest = trimmed.slice(publicApiStaticPrefix.length);
+    return `${MEDIA_BASE_URL}/static/${rest}`;
+  }
+  const prodApiStaticPrefix = "https://kaosmanga.net/api/static/";
+  if (trimmed.startsWith(prodApiStaticPrefix)) {
+    const rest = trimmed.slice(prodApiStaticPrefix.length);
+    return `${MEDIA_BASE_URL}/static/${rest}`;
   }
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
@@ -87,6 +123,12 @@ export function resolveMediaUrl(
   }
 
   let clean = trimmed.replace(/^\/+/, "");
+  if (clean.startsWith("api/static/")) {
+    clean = clean.slice(4);
+  }
+  if (clean.startsWith("static/")) {
+    return `${MEDIA_BASE_URL}/${clean}`;
+  }
   if (PUBLIC_API_URL.endsWith("/api") && clean.startsWith("api/")) {
     clean = clean.slice(4);
   }
@@ -427,6 +469,62 @@ export async function apiFetch(
   }
 
   return response;
+}
+
+/**
+ * SSR data-fetching helper that distinguishes a genuine `404 Not Found` from transient
+ * `5xx` / connection failures (retrying `PUBLIC_API_URL` once before throwing so Next.js
+ * and Cloudflare never cache a transient failure as a 404 page).
+ */
+export async function fetchSsrJson<T = unknown>(
+  path: string,
+  options: { revalidate?: number | false; cache?: RequestCache } = {}
+): Promise<{ status: "ok"; data: T } | { status: "not_found" }> {
+  const fetchOpts: ApiFetchOptions =
+    options.cache !== undefined
+      ? { cache: options.cache }
+      : { next: { revalidate: options.revalidate ?? 60 } };
+
+  let res: Response | null = null;
+  let lastErr: unknown = null;
+
+  try {
+    res = await apiFetch(path, fetchOpts);
+  } catch (err) {
+    lastErr = err;
+  }
+
+  if (!res || res.status >= 500) {
+    try {
+      const fallbackRes = await apiFetch(path, {
+        baseUrl: PUBLIC_API_URL,
+        cache: "no-store",
+      });
+      res = fallbackRes;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (!res) {
+    throw lastErr instanceof Error
+      ? lastErr
+      : new Error(`Backend bağlantı hatası: ${path}`);
+  }
+
+  if (res.status === 404) {
+    return { status: "not_found" };
+  }
+
+  if (!res.ok) {
+    throw new Error(`Backend geçici hata (${res.status}): ${path}`);
+  }
+
+  const data = (await res.json()) as T & { detail?: unknown };
+  if (!data || (typeof data === "object" && "detail" in data && data.detail)) {
+    return { status: "not_found" };
+  }
+  return { status: "ok", data };
 }
 
 /**

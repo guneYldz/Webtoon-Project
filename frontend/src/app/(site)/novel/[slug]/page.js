@@ -1,30 +1,34 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { apiFetch, resolveMediaUrl, SITE_URL } from "@/lib/apiClient";
+import {
+  encodeRouteParam,
+  fetchSsrJson,
+  resolveMediaUrl,
+  SITE_URL,
+} from "@/lib/apiClient";
 import SeriesDetailView from "@/components/SeriesDetailView";
 
 const getNovel = cache(async (slug) => {
-  try {
-    const res = await apiFetch(`/novels/${encodeURIComponent(slug)}`, {
-      next: { revalidate: 60 },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || data.detail) return null;
-    return data;
-  } catch {
-    return null;
-  }
+  return fetchSsrJson(`/novels/${encodeRouteParam(slug)}`, { revalidate: 60 });
 });
 
 export async function generateMetadata({ params }) {
   const { slug } = params;
-  const novel = await getNovel(slug);
+  let result;
+  try {
+    result = await getNovel(slug);
+  } catch {
+    return {
+      title: "Kaos Manga - Türkçe Novel",
+      robots: { index: false, follow: false },
+    };
+  }
 
-  if (!novel) {
+  if (result.status !== "ok") {
     return { title: "Roman Bulunamadı" };
   }
 
+  const novel = result.data;
   const title = `${novel.title} Oku - Türkçe Novel`;
   const description = novel.summary
     ? String(novel.summary).slice(0, 155)
@@ -58,11 +62,13 @@ export async function generateMetadata({ params }) {
 
 export default async function NovelDetailPage({ params }) {
   const { slug } = params;
-  const novel = await getNovel(slug);
+  const result = await getNovel(slug);
 
-  if (!novel) {
+  if (result.status === "not_found") {
     notFound();
   }
+
+  const novel = result.data;
 
   const jsonLd = {
     "@context": "https://schema.org",
