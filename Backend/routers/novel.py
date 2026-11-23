@@ -39,8 +39,22 @@ def check_editor_permission(user: models.User):
             detail="Bu işlem için yetkiniz yok."
         )
 
+def _to_chapter_summary(ch: models.NovelChapter) -> schemas.NovelChapterListSchema:
+    return schemas.NovelChapterListSchema(
+        id=ch.id,
+        chapter_number=float(ch.chapter_number) if ch.chapter_number is not None else 0.0,
+        title=ch.title or "",
+        is_published=bool(ch.is_published),
+        created_at=ch.created_at,
+    )
+
+
+def _to_category_out(cat: models.Category) -> schemas.CategoryOut:
+    return schemas.CategoryOut(id=cat.id, name=cat.name)
+
+
 # --- YARDIMCI FONSİYONLAR ---
-def get_novels_logic(db: Session, limit: int, skip: int):
+def get_novels_logic(db: Session, limit: int, skip: int) -> List[schemas.NovelCard]:
     # RAM optimizasyonu: NovelChapter.content sütununu defer ile hariç tut ve yalnızca yayındaki bölümleri yükle
     query = db.query(models.Novel).filter(models.Novel.is_published == True).options(
         selectinload(models.Novel.chapters.and_(models.NovelChapter.is_published == True)).defer(
@@ -49,21 +63,36 @@ def get_novels_logic(db: Session, limit: int, skip: int):
         selectinload(models.Novel.categories),
     )
     novels = query.order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
-    
+
+    cards: List[schemas.NovelCard] = []
     for n in novels:
         try:
             sorted_chapters = sorted(
-                list(n.chapters),
+                n.chapters,
                 key=lambda x: (float(x.chapter_number) if x.chapter_number is not None else -1.0),
                 reverse=True,
             )[:3]
         except Exception:
             sorted_chapters = list(n.chapters)[:3]
-        _ = list(n.categories)
-        db.expunge(n)
-        n.chapters = sorted_chapters
-        
-    return novels
+
+        cards.append(
+            schemas.NovelCard(
+                id=n.id,
+                title=n.title or "",
+                slug=n.slug,
+                cover_image=n.cover_image,
+                status=n.status or "ongoing",
+                view_count=n.view_count or 0,
+                source_url=n.source_url,
+                is_published=bool(n.is_published),
+                created_at=n.created_at,
+                updated_at=getattr(n, "updated_at", None),
+                chapters=[_to_chapter_summary(ch) for ch in sorted_chapters],
+                categories=[_to_category_out(c) for c in (n.categories or [])],
+            )
+        )
+
+    return cards
 
 # 1. LİSTELEME
 @router.get("/", response_model=List[schemas.NovelCard])
@@ -93,33 +122,61 @@ def novel_detay(slug_or_id: str, response: Response, request: Request, db: Sessi
 
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
-    
+
+    # Commit öncesi alanları al (expire_on_commit sonrası DetachedInstanceError/ekstra sorgu önlenir)
+    novel_id = novel.id
+    title = novel.title or ""
+    slug = novel.slug or ""
+    status_val = novel.status or "ongoing"
+    summary = novel.summary
+    cover_image = novel.cover_image
+    banner_image = novel.banner_image
+    author = novel.author
+    current_views = novel.view_count or 0
+    is_featured = bool(novel.is_featured)
+    is_published = bool(novel.is_published)
+    source_url = novel.source_url
+    created_at = novel.created_at
+    categories_out = [_to_category_out(c) for c in (novel.categories or [])]
+
     # 🔥 IP Tabanlı View Count Rate Limiting
     from utils.view_tracker import view_tracker
-    
+
     client_ip = _get_client_ip(request)
-    
-    if view_tracker.should_count_view(client_ip, "novel", novel.id):
-        if getattr(novel, 'view_count', None) is None:
-            novel.view_count = 0
-        novel.view_count += 1
+
+    if view_tracker.should_count_view(client_ip, "novel", novel_id):
+        current_views += 1
+        novel.view_count = current_views
         db.commit()
-    
+
     chapters = (
         db.query(models.NovelChapter)
         .options(defer(models.NovelChapter.content))
         .filter(
-            models.NovelChapter.novel_id == novel.id,
+            models.NovelChapter.novel_id == novel_id,
             models.NovelChapter.is_published == True,
         )
         .order_by(asc(models.NovelChapter.chapter_number))
         .all()
     )
-    
-    _ = list(novel.categories)
-    db.expunge(novel)
-    novel.chapters = chapters
-    return novel
+
+    return schemas.NovelDetail(
+        id=novel_id,
+        title=title,
+        slug=slug,
+        status=status_val,
+        summary=summary,
+        cover_image=cover_image,
+        banner_image=banner_image,
+        author=author,
+        view_count=current_views,
+        is_featured=is_featured,
+        is_published=is_published,
+        source_url=source_url,
+        created_at=created_at,
+        chapters=[_to_chapter_summary(ch) for ch in chapters],
+        categories=categories_out,
+    )
 
 # 3. YENİ ROMAN EKLE
 @router.post("/ekle", status_code=status.HTTP_201_CREATED)

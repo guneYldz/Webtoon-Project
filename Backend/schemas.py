@@ -153,9 +153,13 @@ class NovelDetail(BaseModel):
     status: str = "ongoing"
     summary: Optional[str] = None 
     cover_image: Optional[str] = None
+    banner_image: Optional[str] = None
     author: Optional[str] = None
+    view_count: int = 0
+    is_featured: bool = False
     is_published: bool = False
     source_url: Optional[str] = None 
+    created_at: Optional[datetime] = None
     
     # 🔥 DÜZELTİLDİ: NovelChapterBase yerine NovelChapterListSchema
     chapters: List[NovelChapterListSchema] = []

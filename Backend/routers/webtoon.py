@@ -80,19 +80,21 @@ def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Ses
     
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
-    
+
+    detail = schemas.WebtoonDetail.model_validate(webtoon)
+
     # 🔥 IP Tabanlı View Count Rate Limiting
     from utils.view_tracker import view_tracker
-    
+
     client_ip = _get_client_ip(request)
-    
+
     if view_tracker.should_count_view(client_ip, "webtoon", webtoon.id):
-        if webtoon.view_count is None:
-            webtoon.view_count = 0
-        webtoon.view_count += 1
+        new_views = (webtoon.view_count or 0) + 1
+        webtoon.view_count = new_views
+        detail.view_count = new_views
         db.commit()
-    
-    return webtoon
+
+    return detail
 
 # 3. WEBTOON EKLE (Resim Yüklemeli & Admin Korumalı) - KİLİTLİ 🔒
 @router.post("/ekle", status_code=status.HTTP_201_CREATED)
