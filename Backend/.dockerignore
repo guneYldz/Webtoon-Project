@@ -1,0 +1,28 @@
+# Runtime bind-mounted media (./Backend/static:/app/static) — NEVER bake into image!
+static/
+
+# Local virtualenvs & Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local secrets, logs, backups, archives & bot workspace
+.env
+.env.*
+*.log
+*.dump
+*.sql
+*.sqlite
+*.db
+backups/
+bot/
+_archive/
+tests/
+.git/
+.gitignore

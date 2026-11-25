@@ -1,0 +1,15 @@
+# Build artifacts & local dependencies — installed/built inside Docker stages
+node_modules/
+.next/
+out/
+
+# Local secrets, logs & VCS
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+.git/
+.gitignore
+coverage/
+.DS_Store
