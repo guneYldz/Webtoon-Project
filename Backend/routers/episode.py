@@ -162,13 +162,13 @@ def bolum_oku(
         models.WebtoonEpisode.webtoon_id == bolum.webtoon_id,
         models.WebtoonEpisode.episode_number > bolum.episode_number,
         models.WebtoonEpisode.is_published == True
-    ).order_by(models.WebtoonEpisode.episode_number.asc()).scalar()
+    ).order_by(models.WebtoonEpisode.episode_number.asc()).limit(1).scalar()
 
     onceki_bolum_id = db.query(models.WebtoonEpisode.id).filter(
         models.WebtoonEpisode.webtoon_id == bolum.webtoon_id,
         models.WebtoonEpisode.episode_number < bolum.episode_number,
         models.WebtoonEpisode.is_published == True
-    ).order_by(models.WebtoonEpisode.episode_number.desc()).scalar()
+    ).order_by(models.WebtoonEpisode.episode_number.desc()).limit(1).scalar()
 
     # 4. Resim Listesi Oluşturma (Göreli static/... URL'leri)
     image_urls = []

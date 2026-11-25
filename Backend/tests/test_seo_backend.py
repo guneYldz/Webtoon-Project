@@ -402,6 +402,64 @@ class TestDatabaseBackedEndpoints(unittest.TestCase):
         res_w = client.get("/webtoons", follow_redirects=False)
         self.assertEqual(res_w.status_code, 200)
 
+    def test_multi_chapter_prev_next_navigation_does_not_raise_multiple_results(self):
+        t = datetime(2026, 11, 22, 10, 0, 0)
+        n_multi = models.Novel(id=3, title="Multi Chapter Novel", slug="multi-chapter-novel", summary="s", is_published=True, created_at=t)
+        w_multi = models.Webtoon(id=3, title="Multi Chapter Webtoon", slug="multi-chapter-webtoon", summary="s", is_published=True, created_at=t)
+        self.db.add_all([n_multi, w_multi])
+        self.db.flush()
+
+        n_chapters = [
+            models.NovelChapter(id=20 + i, novel_id=3, chapter_number=float(i), title=f"Bölüm {i}", content=f"<p>{i}</p>", is_published=True, created_at=t)
+            for i in range(1, 5)
+        ]
+        w_episodes = [
+            models.WebtoonEpisode(id=200 + i, webtoon_id=3, episode_number=float(i), title=f"Bölüm {i}", is_published=True, created_at=t)
+            for i in range(1, 5)
+        ]
+        self.db.add_all(n_chapters + w_episodes)
+        self.db.commit()
+
+        try:
+            req = _make_request(headers={"X-Internal-SSR": "1"})
+            resp = Response()
+
+            expected_novels = [
+                ("1", None, 2),
+                ("2", 1, 3),
+                ("3", 2, 4),
+                ("4", 3, None),
+            ]
+            for ch_num, exp_prev, exp_next in expected_novels:
+                data = novel.novel_bolum_oku(
+                    slug="multi-chapter-novel",
+                    chapter_identifier=ch_num,
+                    request=req,
+                    response=resp,
+                    background_tasks=BackgroundTasks(),
+                    db=self.db,
+                    current_user=None,
+                )
+                self.assertEqual(data["prev_chapter"], exp_prev)
+                self.assertEqual(data["next_chapter"], exp_next)
+
+            expected_episodes = [
+                (201, None, 202),
+                (202, 201, 203),
+                (203, 202, 204),
+                (204, 203, None),
+            ]
+            for ep_id, exp_prev_id, exp_next_id in expected_episodes:
+                ep_data = episode.bolum_oku(ep_id, req, resp, BackgroundTasks(), self.db)
+                self.assertEqual(ep_data["prev_episode_id"], exp_prev_id)
+                self.assertEqual(ep_data["next_episode_id"], exp_next_id)
+        finally:
+            self.db.query(models.NovelChapter).filter(models.NovelChapter.novel_id == 3).delete()
+            self.db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.webtoon_id == 3).delete()
+            self.db.query(models.Novel).filter(models.Novel.id == 3).delete()
+            self.db.query(models.Webtoon).filter(models.Webtoon.id == 3).delete()
+            self.db.commit()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -359,8 +359,8 @@ def novel_bolum_oku(
         prev_q = prev_q.filter(models.NovelChapter.is_published == True)
         next_q = next_q.filter(models.NovelChapter.is_published == True)
 
-    prev_num = prev_q.order_by(desc(models.NovelChapter.chapter_number)).scalar()
-    next_num = next_q.order_by(asc(models.NovelChapter.chapter_number)).scalar()
+    prev_num = prev_q.order_by(desc(models.NovelChapter.chapter_number)).limit(1).scalar()
+    next_num = next_q.order_by(asc(models.NovelChapter.chapter_number)).limit(1).scalar()
 
     return {
         "id": chapter.id,
