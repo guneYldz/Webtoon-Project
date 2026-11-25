@@ -16,6 +16,7 @@ export default function robots() {
         "/profil",
         "/favoriler",
         "/ayarlar",
+        "/*?_rsc=*",
       ],
     },
     sitemap: `${baseUrl}/sitemap.xml`,

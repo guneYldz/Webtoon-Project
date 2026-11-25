@@ -20,16 +20,19 @@ export const INTERNAL_API_URL = (
   process.env.INTERNAL_API_URL || DEFAULT_INTERNAL_API_URL
 ).replace(/\/+$/, "");
 
+/** Decodes a Next.js dynamic route parameter safely without throwing on malformed `%XX` sequences. */
+export function decodeRouteParam(value: string): string {
+  const raw = String(value ?? "").trim();
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 /** Encodes a Next.js dynamic route parameter cleanly without double-encoding existing `%XX` sequences. */
 export function encodeRouteParam(value: string): string {
-  const raw = String(value ?? "").trim();
-  let decoded = raw;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {
-    // Keep raw if malformed percent encoding
-  }
-  return encodeURIComponent(decoded);
+  return encodeURIComponent(decodeRouteParam(value));
 }
 
 /** Backward-compatible public API base URL alias */
@@ -393,6 +396,10 @@ export async function apiFetch(
   } = options;
 
   const headers = new Headers(rawHeaders);
+
+  if (isServer() && !headers.has("X-Internal-SSR")) {
+    headers.set("X-Internal-SSR", "1");
+  }
 
   if (auth === "admin") {
     const token = getAdminToken();

@@ -6,7 +6,7 @@ from typing import List, Optional
 from database import get_db
 from routers.auth import get_current_user
 import models
-from utils.chapter_title import chapter_display_label
+from utils.chapter_title import chapter_display_label, format_chapter_number
 
 router = APIRouter(
     prefix="/comments",
@@ -54,7 +54,7 @@ def _seri_bilgisi(c):
             "seri_type": "novel",
             "seri_title": novel.title if novel else "Silinmiş Seri",
             "bolum_title": chapter_display_label(c.novel_chapter.title, c.novel_chapter.chapter_number),
-            "link": f"/novel/{novel.slug}/bolum/{c.novel_chapter.chapter_number}" if novel else None,
+            "link": f"/novel/{novel.slug}/bolum/{format_chapter_number(c.novel_chapter.chapter_number)}" if novel else None,
         }
     if c.webtoon_episode:
         w = c.webtoon_episode.webtoon

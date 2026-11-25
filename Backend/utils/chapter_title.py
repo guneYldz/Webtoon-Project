@@ -1,4 +1,18 @@
 import re
+from typing import Union
+
+
+def clean_chapter_number(number) -> Union[int, float]:
+    """1.0 -> 1 (int), 12.5 -> 12.5 (float) for clean JSON serialization."""
+    if number is None:
+        return 0
+    try:
+        n = float(number)
+    except (TypeError, ValueError):
+        return 0
+    if n.is_integer():
+        return int(n)
+    return n
 
 
 def format_chapter_number(number) -> str:

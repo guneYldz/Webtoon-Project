@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Query, status, Request, Response
+import math
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, File, UploadFile, Form, Query, status, Request, Response
 from sqlalchemy.orm import Session, selectinload, defer
 from sqlalchemy import desc, asc, func
 from typing import List, Optional
@@ -8,27 +9,21 @@ from database import get_db
 import models 
 import schemas
 from routers.auth import get_current_user, get_optional_user
-from utils.chapter_title import default_chapter_title, chapter_display_label
+from utils.chapter_title import (
+    clean_chapter_number,
+    default_chapter_title,
+    chapter_display_label,
+    format_chapter_number,
+)
 from utils.media import validate_and_save_image
+from utils.query_helpers import parse_pg_int
 from utils.sanitize import sanitize_novel_html
+from utils.view_tracker import schedule_view_increment
 
 router = APIRouter(
     prefix="/novels",
     tags=["Novels (Romanlar)"]
 )
-
-
-def _get_client_ip(request: Request) -> str:
-    cf_ip = request.headers.get("cf-connecting-ip")
-    if cf_ip:
-        return cf_ip.strip()
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    xri = request.headers.get("x-real-ip")
-    if xri:
-        return xri.strip()
-    return request.client.host if request.client else "unknown"
 
 
 # --- YETKİ KONTROL ---
@@ -39,10 +34,10 @@ def check_editor_permission(user: models.User):
             detail="Bu işlem için yetkiniz yok."
         )
 
-def _to_chapter_summary(ch: models.NovelChapter) -> schemas.NovelChapterListSchema:
+def _to_chapter_summary(ch) -> schemas.NovelChapterListSchema:
     return schemas.NovelChapterListSchema(
         id=ch.id,
-        chapter_number=float(ch.chapter_number) if ch.chapter_number is not None else 0.0,
+        chapter_number=clean_chapter_number(ch.chapter_number),
         title=ch.title or "",
         is_published=bool(ch.is_published),
         created_at=ch.created_at,
@@ -114,10 +109,19 @@ def novelleri_getir_no_slash(
 
 # 2. TEK ROMAN GETİR
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
-def novel_detay(slug_or_id: str, response: Response, request: Request, db: Session = Depends(get_db)):
+def novel_detay(
+    slug_or_id: str,
+    response: Response,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     clean_key = (slug_or_id or "").strip()
     if clean_key.isdigit():
-        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == int(clean_key), models.Novel.is_published == True).first()
+        parsed_id = parse_pg_int(clean_key)
+        if parsed_id is None:
+            raise HTTPException(status_code=404, detail="Roman bulunamadı")
+        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == parsed_id, models.Novel.is_published == True).first()
     else:
         novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.slug == clean_key, models.Novel.is_published == True).first()
         if not novel and clean_key:
@@ -129,7 +133,6 @@ def novel_detay(slug_or_id: str, response: Response, request: Request, db: Sessi
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
 
-    # Commit öncesi alanları al (expire_on_commit sonrası DetachedInstanceError/ekstra sorgu önlenir)
     novel_id = novel.id
     title = novel.title or ""
     slug = novel.slug or ""
@@ -145,19 +148,17 @@ def novel_detay(slug_or_id: str, response: Response, request: Request, db: Sessi
     created_at = novel.created_at
     categories_out = [_to_category_out(c) for c in (novel.categories or [])]
 
-    # 🔥 IP Tabanlı View Count Rate Limiting
-    from utils.view_tracker import view_tracker
-
-    client_ip = _get_client_ip(request)
-
-    if view_tracker.should_count_view(client_ip, "novel", novel_id):
+    if schedule_view_increment(background_tasks, request, "novel", novel_id):
         current_views += 1
-        novel.view_count = current_views
-        db.commit()
 
     chapters = (
-        db.query(models.NovelChapter)
-        .options(defer(models.NovelChapter.content))
+        db.query(
+            models.NovelChapter.id,
+            models.NovelChapter.chapter_number,
+            models.NovelChapter.title,
+            models.NovelChapter.is_published,
+            models.NovelChapter.created_at,
+        )
         .filter(
             models.NovelChapter.novel_id == novel_id,
             models.NovelChapter.is_published == True,
@@ -273,7 +274,7 @@ def novel_bolum_ekle(
             novel_id=novel.id,
             series_title=novel.title,
             chapter_label=ch_label,
-            link=f"/novel/{novel.slug}/bolum/{chapter_number}",
+            link=f"/novel/{novel.slug}/bolum/{format_chapter_number(chapter_number)}",
         )
         db.commit()
     except Exception:
@@ -288,6 +289,7 @@ def novel_bolum_oku(
     chapter_identifier: str,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: Optional[models.User] = Depends(get_optional_user),
 ):
@@ -311,50 +313,45 @@ def novel_bolum_oku(
 
     chapter = None
 
-    # 1. Deneme: Identifier bir Float ise (Bölüm Numarası)
+    # 1. Deneme: Identifier bir sonlu Float ise (Bölüm Numarası)
     try:
         c_num = float(chapter_identifier)
-        ch_q = db.query(models.NovelChapter).filter(
-            models.NovelChapter.novel_id == novel.id,
-            models.NovelChapter.chapter_number == c_num
-        )
-        if not is_privileged:
-            ch_q = ch_q.filter(models.NovelChapter.is_published == True)
-        chapter = ch_q.first()
+        if math.isfinite(c_num):
+            ch_q = db.query(models.NovelChapter).filter(
+                models.NovelChapter.novel_id == novel.id,
+                models.NovelChapter.chapter_number == c_num
+            )
+            if not is_privileged:
+                ch_q = ch_q.filter(models.NovelChapter.is_published == True)
+            chapter = ch_q.first()
     except ValueError:
         pass
 
-    # 2. Deneme: Eğer bulunamadıysa ve Identifier bir Integer ise (ID olabilir)
-    if not chapter and chapter_identifier.isdigit():
-        c_id = int(chapter_identifier)
-        ch_q = db.query(models.NovelChapter).filter(
-            models.NovelChapter.novel_id == novel.id,
-            models.NovelChapter.id == c_id
-        )
-        if not is_privileged:
-            ch_q = ch_q.filter(models.NovelChapter.is_published == True)
-        chapter = ch_q.first()
+    # 2. Deneme: Eğer bulunamadıysa ve Identifier geçerli 32-bit pozitif Integer ise (ID olabilir)
+    if not chapter:
+        c_id = parse_pg_int(chapter_identifier)
+        if c_id is not None:
+            ch_q = db.query(models.NovelChapter).filter(
+                models.NovelChapter.novel_id == novel.id,
+                models.NovelChapter.id == c_id
+            )
+            if not is_privileged:
+                ch_q = ch_q.filter(models.NovelChapter.is_published == True)
+            chapter = ch_q.first()
 
     if not chapter:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı (ID veya Numara ile eşleşmedi)")
 
-    # 🔥 IP Tabanlı View Count Rate Limiting
-    from utils.view_tracker import view_tracker
-    
-    client_ip = _get_client_ip(request)
-    
-    if view_tracker.should_count_view(client_ip, "novel_chapter", chapter.id):
-        if chapter.view_count is None:
-            chapter.view_count = 0
-        chapter.view_count += 1
-        db.commit()
+    current_views = chapter.view_count or 0
+    if schedule_view_increment(background_tasks, request, "novel_chapter", chapter.id):
+        current_views += 1
 
-    # Navigasyon (yayınlanmamış taslak bölümleri normal okura sızdırma)
-    prev_q = db.query(models.NovelChapter).filter(
+    # Navigasyon (sadece chapter_number kolonu okunur — content hidrate edilmez)
+    prev_q = db.query(models.NovelChapter.chapter_number).filter(
         models.NovelChapter.novel_id == novel.id,
         models.NovelChapter.chapter_number < chapter.chapter_number
     )
-    next_q = db.query(models.NovelChapter).filter(
+    next_q = db.query(models.NovelChapter.chapter_number).filter(
         models.NovelChapter.novel_id == novel.id,
         models.NovelChapter.chapter_number > chapter.chapter_number
     )
@@ -362,21 +359,22 @@ def novel_bolum_oku(
         prev_q = prev_q.filter(models.NovelChapter.is_published == True)
         next_q = next_q.filter(models.NovelChapter.is_published == True)
 
-    prev_ch = prev_q.order_by(desc(models.NovelChapter.chapter_number)).first()
-    next_ch = next_q.order_by(asc(models.NovelChapter.chapter_number)).first()
+    prev_num = prev_q.order_by(desc(models.NovelChapter.chapter_number)).scalar()
+    next_num = next_q.order_by(asc(models.NovelChapter.chapter_number)).scalar()
 
     return {
         "id": chapter.id,
         "title": chapter.title,
         "content": chapter.content,
-        "chapter_number": chapter.chapter_number,
+        "chapter_number": clean_chapter_number(chapter.chapter_number),
         "novel_title": novel.title,
+        "novel_slug": novel.slug,
         "novel_cover": novel.cover_image,
-        "view_count": chapter.view_count, 
-        "created_at": chapter.created_at, 
-        "novel_id": novel.id, 
-        "prev_chapter": prev_ch.chapter_number if prev_ch else None,
-        "next_chapter": next_ch.chapter_number if next_ch else None
+        "view_count": current_views,
+        "created_at": chapter.created_at,
+        "novel_id": novel.id,
+        "prev_chapter": clean_chapter_number(prev_num) if prev_num is not None else None,
+        "next_chapter": clean_chapter_number(next_num) if next_num is not None else None,
     }
 
 

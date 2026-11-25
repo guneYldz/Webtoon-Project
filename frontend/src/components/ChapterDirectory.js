@@ -9,6 +9,8 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Layers,
   X,
 } from "lucide-react";
 import {
@@ -20,6 +22,7 @@ import { useReadingHistory, isChapterRead } from "@/lib/readingHistory";
 import { Badge, Button } from "@/components/ui";
 
 const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
+const RANGE_CHUNK_SIZE = 100;
 
 function isRecentlyPublished(dateStr, nowMs) {
   if (!dateStr || !nowMs) return false;
@@ -29,7 +32,8 @@ function isRecentlyPublished(dateStr, nowMs) {
 }
 
 /**
- * Filterable, sortable, paginated chapter directory with reading history status.
+ * Filterable, sortable, paginated chapter directory with reading history status
+ * and an SSR-crawlable native <details> range directory for large series.
  */
 export default function ChapterDirectory({
   items = [],
@@ -67,7 +71,9 @@ export default function ChapterDirectory({
   };
 
   const getHref = (item) => {
-    if (type === "novel") return `${basePath}/bolum/${item.chapter_number}`;
+    if (type === "novel") {
+      return `${basePath}/bolum/${formatChapterNumber(item.chapter_number)}`;
+    }
     return `${basePath}/bolum/${item.id}`;
   };
 
@@ -91,6 +97,33 @@ export default function ChapterDirectory({
 
     return list;
   }, [items, search, sortOrder, type]);
+
+  // Group all chapters in ascending 100-chapter chunks for quick jump & full crawlability
+  const rangeGroups = useMemo(() => {
+    if (items.length <= perPage) return [];
+    const asc = [...items].sort((a, b) => {
+      const na = Number(getRawNumber(a)) || 0;
+      const nb = Number(getRawNumber(b)) || 0;
+      return na - nb;
+    });
+    const groups = [];
+    for (let i = 0; i < asc.length; i += RANGE_CHUNK_SIZE) {
+      const slice = asc.slice(i, i + RANGE_CHUNK_SIZE);
+      if (slice.length > 0) {
+        const startNum = formatChapterNumber(getRawNumber(slice[0]));
+        const endNum = formatChapterNumber(
+          getRawNumber(slice[slice.length - 1])
+        );
+        groups.push({
+          key: `${startNum}-${endNum}-${i}`,
+          label: `Bölüm ${startNum} – ${endNum}`,
+          count: slice.length,
+          items: slice,
+        });
+      }
+    }
+    return groups;
+  }, [items, perPage, type]);
 
   const totalPages = Math.max(1, Math.ceil(sortedAndFiltered.length / perPage));
 
@@ -201,7 +234,8 @@ export default function ChapterDirectory({
               Boolean(progress) &&
               (type === "webtoon"
                 ? String(progress.lastChapterId) === String(item.id)
-                : String(progress.lastChapterNumber) === String(rawNum));
+                : String(formatChapterNumber(progress.lastChapterNumber)) ===
+                  String(num));
 
             const read =
               Boolean(progress) &&
@@ -333,6 +367,65 @@ export default function ChapterDirectory({
             Sayfa {page} / {totalPages}
           </span>
         </div>
+      )}
+
+      {/* Full Chapter Range Directory (Native <details> for 2-click UX jump & complete SSR crawlability) */}
+      {rangeGroups.length > 0 && (
+        <section
+          aria-label="Bölüm Dizini (Hızlı Geçiş)"
+          className="mt-10 pt-8 border-t border-subtle"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h3 className="text-sm sm:text-base font-bold text-ink-primary flex items-center gap-2">
+              <Layers className="h-4 w-4 text-accent" aria-hidden="true" />
+              <span>Bölüm Dizini (Hızlı Geçiş)</span>
+            </h3>
+            <span className="text-xs text-ink-muted">
+              Tüm {items.length} bölüme aralık seçerek doğrudan ulaşın
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {rangeGroups.map((group) => (
+              <details
+                key={group.key}
+                className="group rounded-2xl border border-subtle bg-surface/80 overflow-hidden"
+              >
+                <summary className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none text-xs sm:text-sm font-semibold text-ink-primary hover:bg-elevated/60 transition list-none">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-accent/80" />
+                    <span>{group.label}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-2 text-xs text-ink-muted font-medium">
+                    <span>{group.count} Bölüm</span>
+                    <ChevronDown
+                      className="h-4 w-4 text-ink-muted transition-transform duration-200 group-open:rotate-180"
+                      aria-hidden="true"
+                    />
+                  </span>
+                </summary>
+
+                <div className="px-4 pb-4 pt-2 border-t border-subtle bg-canvas/40 grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
+                  {group.items.map((item) => {
+                    const num = getNumber(item);
+                    const displayTitle = getDisplayTitle(item);
+                    return (
+                      <Link
+                        key={item.id ?? num}
+                        href={getHref(item)}
+                        prefetch={false}
+                        title={`${displayTitle} Oku`}
+                        className="px-2 py-1.5 rounded-lg border border-subtle bg-surface hover:bg-elevated hover:border-accent-border text-center text-xs font-medium text-ink-secondary hover:text-ink-primary truncate tabular-nums transition"
+                      >
+                        Bölüm {num}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

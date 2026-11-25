@@ -151,23 +151,26 @@ export default function NovelReadingClient({
     };
   }, [slug, initialChapters.length]);
 
+  const canonicalSlug = chapter?.novel_slug || slug;
+
   // Record chapter read in history
   useEffect(() => {
     if (!chapter || !chapter.novel_id) return;
+    const cleanNum = formatChapterNumber(chapter.chapter_number);
     recordChapterRead({
       type: "novel",
       seriesType: "NOVEL",
       seriesId: chapter.novel_id,
-      slug: String(slug),
+      slug: String(canonicalSlug),
       title: chapter.novel_title || "",
       coverImage: chapter.novel_cover || "",
       lastChapterId: chapter.id,
-      lastChapterNumber: chapter.chapter_number,
+      lastChapterNumber: cleanNum,
       lastChapterTitle: chapter.title,
-      lastChapterUrl: `/novel/${slug}/bolum/${chapter.chapter_number}`,
-      chapterKey: chapter.chapter_number,
+      lastChapterUrl: `/novel/${canonicalSlug}/bolum/${cleanNum}`,
+      chapterKey: cleanNum,
     });
-  }, [chapter?.id, chapter?.novel_id, slug, recordChapterRead]);
+  }, [chapter?.id, chapter?.novel_id, canonicalSlug, recordChapterRead]);
 
   // Track scroll progress
   useEffect(() => {
@@ -189,7 +192,7 @@ export default function NovelReadingClient({
         lastSavedPctRef.current = pct;
         updateScrollProgress("novel", chapter.novel_id, pct, {
           lastChapterId: chapter.id,
-          lastChapterNumber: chapter.chapter_number,
+          lastChapterNumber: formatChapterNumber(chapter.chapter_number),
         });
       }
     };
@@ -199,24 +202,70 @@ export default function NovelReadingClient({
     return () => window.removeEventListener("scroll", onScroll);
   }, [chapter, updateScrollProgress]);
 
-  const seriesHref = `/novel/${slug}`;
-  const prevHref = chapter?.prev_chapter
-    ? `${seriesHref}/bolum/${chapter.prev_chapter}`
-    : null;
-  const nextHref = chapter?.next_chapter
-    ? `${seriesHref}/bolum/${chapter.next_chapter}`
-    : null;
+  const seriesHref = `/novel/${canonicalSlug}`;
+  const prevHref =
+    chapter?.prev_chapter !== null && chapter?.prev_chapter !== undefined
+      ? `${seriesHref}/bolum/${formatChapterNumber(chapter.prev_chapter)}`
+      : null;
+  const nextHref =
+    chapter?.next_chapter !== null && chapter?.next_chapter !== undefined
+      ? `${seriesHref}/bolum/${formatChapterNumber(chapter.next_chapter)}`
+      : null;
 
   const chapterOptions = useMemo(
     () =>
-      allChapters.map((ch) => ({
-        value: ch.chapter_number,
-        number: ch.chapter_number,
-        title: ch.title,
-        href: `${seriesHref}/bolum/${ch.chapter_number}`,
-      })),
+      allChapters.map((ch) => {
+        const cleanNum = formatChapterNumber(ch.chapter_number);
+        return {
+          value: cleanNum,
+          number: cleanNum,
+          title: ch.title,
+          href: `${seriesHref}/bolum/${cleanNum}`,
+        };
+      }),
     [allChapters, seriesHref]
   );
+
+  // Build nearby chapters link strip (first, ±5 around current, latest) for SSR internal linking
+  const nearbyChapterLinks = useMemo(() => {
+    if (!allChapters || allChapters.length <= 1 || !chapter) return [];
+    const asc = [...allChapters].sort(
+      (a, b) => Number(a.chapter_number) - Number(b.chapter_number)
+    );
+    const currentClean = formatChapterNumber(chapter.chapter_number);
+    const currentIdx = asc.findIndex(
+      (c) => formatChapterNumber(c.chapter_number) === currentClean
+    );
+
+    const indices = new Set();
+    indices.add(0);
+    if (currentIdx >= 0) {
+      for (
+        let i = Math.max(0, currentIdx - 5);
+        i <= Math.min(asc.length - 1, currentIdx + 5);
+        i++
+      ) {
+        indices.add(i);
+      }
+    } else {
+      for (let i = 0; i < Math.min(10, asc.length); i++) {
+        indices.add(i);
+      }
+    }
+    indices.add(asc.length - 1);
+
+    return Array.from(indices)
+      .sort((a, b) => a - b)
+      .map((idx) => {
+        const item = asc[idx];
+        const num = formatChapterNumber(item.chapter_number);
+        return {
+          num,
+          href: `${seriesHref}/bolum/${num}`,
+          active: num === currentClean,
+        };
+      });
+  }, [allChapters, chapter, seriesHref]);
 
   const progressEntry =
     hydrated && chapter?.novel_id
@@ -296,7 +345,7 @@ export default function NovelReadingClient({
       chapterLabel={`Bölüm ${chNumStr}`}
       chapterSubLabel={`~${readingMinutes} dk`}
       chapters={chapterOptions}
-      currentChapterValue={chapter.chapter_number}
+      currentChapterValue={chNumStr}
       readChapterIds={progressEntry?.readChapterIds || []}
       prevHref={prevHref}
       nextHref={nextHref}
@@ -315,7 +364,7 @@ export default function NovelReadingClient({
         commentCount={commentCount}
         date={chapter.created_at}
         readingMinutes={readingMinutes}
-        slug={slug}
+        slug={canonicalSlug}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -398,6 +447,44 @@ export default function NovelReadingClient({
               </span>
             )}
           </div>
+
+          {/* Nearby Chapters Strip for Quick Navigation & Deep Crawlability */}
+          {nearbyChapterLinks.length > 1 && (
+            <nav
+              aria-label="Diğer Bölümler"
+              className="mt-5 rounded-2xl border border-subtle bg-surface/70 p-3.5"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
+                  Diğer Bölümler
+                </span>
+                <Link
+                  href={`${seriesHref}#bolumler`}
+                  className="text-xs font-semibold text-accent hover:underline"
+                >
+                  Tüm Bölümler ({allChapters.length})
+                </Link>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {nearbyChapterLinks.map((item) => (
+                  <Link
+                    key={item.num}
+                    href={item.href}
+                    prefetch={false}
+                    title={`${chapter.novel_title || "Novel"} Bölüm ${item.num} Oku`}
+                    aria-current={item.active ? "page" : undefined}
+                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold tabular-nums transition ${
+                      item.active
+                        ? "bg-accent text-[#0B0B0F] border-transparent shadow-sm"
+                        : "bg-canvas border-subtle text-ink-secondary hover:text-ink-primary hover:border-accent-border"
+                    }`}
+                  >
+                    Bölüm {item.num}
+                  </Link>
+                ))}
+              </div>
+            </nav>
+          )}
 
           <div className="mt-6">
             <ChapterReactions type="novel" targetId={chapter.id} />

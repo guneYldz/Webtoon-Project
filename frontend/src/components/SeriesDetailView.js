@@ -34,7 +34,7 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
     ? "NOVEL"
     : seriesTypeLabel(series.type, series.typeLabel);
   const kindLabel = seriesKindTr(series.type, isNovel ? "NOVEL" : series.typeLabel);
-  const slugOrId = routeKey || series.slug || series.id;
+  const slugOrId = series.slug || routeKey || series.id;
   const basePath = isNovel ? `/novel/${slugOrId}` : `/webtoon/${slugOrId}`;
 
   const rawChapters = isNovel ? series.chapters || [] : series.episodes || [];
@@ -47,7 +47,7 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
   const firstItem = sortedAsc[0] || null;
   const firstHref = firstItem
     ? isNovel
-      ? `${basePath}/bolum/${firstItem.chapter_number}`
+      ? `${basePath}/bolum/${formatChapterNumber(firstItem.chapter_number)}`
       : `${basePath}/bolum/${firstItem.id}`
     : null;
   const firstNum = firstItem
@@ -159,7 +159,7 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
                   {series.categories.map((cat) => (
                     <Link
                       key={cat.id || cat.name}
-                      href={`/kesfet?category=${encodeURIComponent(cat.name)}`}
+                      href={`/kesfet?kategori=${encodeURIComponent(cat.name)}`}
                       className="px-3 py-1 rounded-full bg-elevated/90 border border-subtle text-xs font-medium text-ink-secondary hover:text-ink-primary hover:border-accent-border hover:bg-accent-soft transition"
                     >
                       {cat.name}

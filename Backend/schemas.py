@@ -1,7 +1,8 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 from enum import Enum
+from utils.chapter_title import clean_chapter_number
 
 # ==========================================
 # 1. TEMEL PARÇALAR VE ENUM
@@ -29,10 +30,15 @@ class EpisodeImageSchema(BaseModel):
 class EpisodeListSchema(BaseModel):
     id: int
     title: str
-    episode_number: float 
+    episode_number: Union[int, float]
     is_published: bool = False
     created_at: Optional[datetime] = None
-    
+
+    @field_validator("episode_number", mode="before")
+    @classmethod
+    def normalize_episode_number(cls, v):
+        return clean_chapter_number(v)
+
     class Config:
         from_attributes = True
 
@@ -40,10 +46,15 @@ class EpisodeListSchema(BaseModel):
 # Novel Bölüm Listesi (Özet - Anasayfa için)
 class NovelChapterListSchema(BaseModel):
     id: int
-    chapter_number: float
+    chapter_number: Union[int, float]
     title: str
     is_published: bool = False
     created_at: Optional[datetime] = None
+
+    @field_validator("chapter_number", mode="before")
+    @classmethod
+    def normalize_chapter_number(cls, v):
+        return clean_chapter_number(v)
 
     class Config:
         from_attributes = True
@@ -129,18 +140,31 @@ class NovelCard(BaseModel):
 class NovelChapterBase(BaseModel):
     id: int
     novel_id: int
-    chapter_number: float
+    chapter_number: Union[int, float]
     title: str
     content: str 
     created_at: Optional[datetime] = None
     
     # Yorum sistemi ve Header için gerekli
     novel_title: Optional[str] = None
+    novel_slug: Optional[str] = None
     novel_cover: Optional[str] = None
 
     # Navigasyon
-    prev_chapter: Optional[float] = None
-    next_chapter: Optional[float] = None
+    prev_chapter: Optional[Union[int, float]] = None
+    next_chapter: Optional[Union[int, float]] = None
+
+    @field_validator("chapter_number", mode="before")
+    @classmethod
+    def normalize_chapter_number(cls, v):
+        return clean_chapter_number(v)
+
+    @field_validator("prev_chapter", "next_chapter", mode="before")
+    @classmethod
+    def normalize_nav_number(cls, v):
+        if v is None:
+            return None
+        return clean_chapter_number(v)
 
     class Config:
         from_attributes = True
@@ -185,7 +209,7 @@ class EpisodeDetailSchema(BaseModel):
     webtoon_id: int             
     webtoon_title: str          
     title: str                  
-    episode_number: float
+    episode_number: Union[int, float]
     is_published: bool = False
     created_at: Optional[datetime] = None
     webtoon_cover: Optional[str] = None
@@ -196,6 +220,11 @@ class EpisodeDetailSchema(BaseModel):
     # Navigasyon
     next_episode_id: Optional[int] = None
     prev_episode_id: Optional[int] = None
+
+    @field_validator("episode_number", mode="before")
+    @classmethod
+    def normalize_episode_number(cls, v):
+        return clean_chapter_number(v)
 
     class Config:
         from_attributes = True

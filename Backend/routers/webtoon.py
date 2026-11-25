@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Query, status, Response, Request
-from sqlalchemy.orm import Session, selectinload
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, File, UploadFile, Form, Query, status, Response, Request
+from sqlalchemy.orm import Session, selectinload, defer
 from sqlalchemy import desc, func
 from typing import List
 import os
@@ -13,25 +13,14 @@ import schemas
 # Admin kontrolünü içeri aktarıyoruz
 from routers.auth import get_current_admin
 from utils.media import validate_and_save_image
+from utils.query_helpers import parse_pg_int
+from utils.view_tracker import schedule_view_increment
 
 # Router kurulumu
 router = APIRouter(
     prefix="/webtoons",    # Tüm adresler /webtoons ile başlar
     tags=["Webtoons"]      # Dokümantasyonda başlık
 )
-
-
-def _get_client_ip(request: Request) -> str:
-    cf_ip = request.headers.get("cf-connecting-ip")
-    if cf_ip:
-        return cf_ip.strip()
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    xri = request.headers.get("x-real-ip")
-    if xri:
-        return xri.strip()
-    return request.client.host if request.client else "unknown"
 
 
 # --- YARDIMCI FONKSİYON: SLUG OLUŞTURUCU ---
@@ -43,16 +32,11 @@ def slug_olustur(text: str):
     text = re.sub(r'[\s-]+', '-', text)      # Boşlukları tire yap
     return text.strip('-')
 
-# 1. ANASAYFA LİSTELEME (Sadece Kart Bilgileri) - HERKESE AÇIK
-@router.get("/", response_model=List[schemas.WebtoonCard]) 
-def webtoonlari_getir(
-    db: Session = Depends(get_db),
-    limit: int = Query(default=20, ge=1, le=1000),
-    skip: int = Query(default=0, ge=0),
-    sort_by: str = "newest" 
-):
+def _get_webtoons_logic(db: Session, limit: int, skip: int, sort_by: str):
     query = db.query(models.Webtoon).filter(models.Webtoon.is_published == True).options(
-        selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)),
+        selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)).defer(
+            models.WebtoonEpisode.content_text
+        ),
         selectinload(models.Webtoon.categories)
     )
 
@@ -63,19 +47,50 @@ def webtoonlari_getir(
     elif sort_by == "popular":
         query = query.order_by(desc(models.Webtoon.view_count))
 
-    webtoons = query.offset(skip).limit(limit).all()
-    return webtoons
+    return query.offset(skip).limit(limit).all()
+
+
+# 1. ANASAYFA LİSTELEME (Sadece Kart Bilgileri) - HERKESE AÇIK
+@router.get("/", response_model=List[schemas.WebtoonCard]) 
+def webtoonlari_getir(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=1000),
+    skip: int = Query(default=0, ge=0),
+    sort_by: str = "newest" 
+):
+    return _get_webtoons_logic(db, limit, skip, sort_by)
+
+
+@router.get("", include_in_schema=False, response_model=List[schemas.WebtoonCard])
+def webtoonlari_getir_no_slash(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=1000),
+    skip: int = Query(default=0, ge=0),
+    sort_by: str = "newest",
+):
+    return _get_webtoons_logic(db, limit, skip, sort_by)
 
 # 2. DETAY GÖSTERME (Hem ID hem Slug destekler) - HERKESE AÇIK
 @router.get("/{id_or_slug}", response_model=schemas.WebtoonDetail)
-def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Session = Depends(get_db)):
+def webtoon_detay(
+    id_or_slug: str,
+    response: Response,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     clean_key = (id_or_slug or "").strip()
     load_opts = (
-        selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)),
+        selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)).defer(
+            models.WebtoonEpisode.content_text
+        ),
         selectinload(models.Webtoon.categories),
     )
     if clean_key.isdigit():
-        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.id == int(clean_key), models.Webtoon.is_published == True).first()
+        parsed_id = parse_pg_int(clean_key)
+        if parsed_id is None:
+            raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
+        webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.id == parsed_id, models.Webtoon.is_published == True).first()
     else:
         webtoon = db.query(models.Webtoon).options(*load_opts).filter(models.Webtoon.slug == clean_key, models.Webtoon.is_published == True).first()
         if not webtoon and clean_key:
@@ -89,16 +104,8 @@ def webtoon_detay(id_or_slug: str, response: Response, request: Request, db: Ses
 
     detail = schemas.WebtoonDetail.model_validate(webtoon)
 
-    # 🔥 IP Tabanlı View Count Rate Limiting
-    from utils.view_tracker import view_tracker
-
-    client_ip = _get_client_ip(request)
-
-    if view_tracker.should_count_view(client_ip, "webtoon", webtoon.id):
-        new_views = (webtoon.view_count or 0) + 1
-        webtoon.view_count = new_views
-        detail.view_count = new_views
-        db.commit()
+    if schedule_view_increment(background_tasks, request, "webtoon", webtoon.id):
+        detail.view_count = (detail.view_count or 0) + 1
 
     return detail
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from typing import List
 import shutil
@@ -9,21 +9,9 @@ import models
 import schemas
 from database import get_db
 from routers.auth import get_current_admin
-from utils.chapter_title import default_chapter_title, chapter_display_label
+from utils.chapter_title import clean_chapter_number, default_chapter_title, chapter_display_label
 from utils.media import validate_and_save_image
-
-
-def _get_client_ip(request: Request) -> str:
-    cf_ip = request.headers.get("cf-connecting-ip")
-    if cf_ip:
-        return cf_ip.strip()
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    xri = request.headers.get("x-real-ip")
-    if xri:
-        return xri.strip()
-    return request.client.host if request.client else "unknown"
+from utils.view_tracker import schedule_view_increment
 
 
 # --- YARDIMCI: DOĞAL SIRALAMA (1, 2, 10 SORUNU İÇİN) ---
@@ -146,43 +134,41 @@ def create_episode(
 # 📖 2. BÖLÜM OKUMA (HİBRİT SİSTEM: BOT + DB)
 # ==========================================
 @router.get("/{episode_id}")
-def bolum_oku(episode_id: int, request: Request, response: Response, db: Session = Depends(get_db)):
-    
+def bolum_oku(
+    episode_id: int,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     # 1. Bölümü Bul
     bolum = db.query(models.WebtoonEpisode).filter(models.WebtoonEpisode.id == episode_id, models.WebtoonEpisode.is_published == True).first()
     
     if not bolum:
         raise HTTPException(status_code=404, detail="Bölüm bulunamadı")
-    
-    # 🔥 IP Tabanlı View Count Rate Limiting
-    from utils.view_tracker import view_tracker
-    
-    client_ip = _get_client_ip(request)
-    
-    if view_tracker.should_count_view(client_ip, "episode", episode_id):
-        if bolum.view_count is None:
-            bolum.view_count = 0
-        bolum.view_count += 1
-        
-        if bolum.webtoon:
-            if bolum.webtoon.view_count is None:
-                bolum.webtoon.view_count = 0
-            bolum.webtoon.view_count += 1
-        
-        db.commit()
 
-    # 3. Navigasyon (Önceki/Sonraki Bölüm)
-    sonraki_bolum = db.query(models.WebtoonEpisode).filter(
+    current_views = bolum.view_count or 0
+    if schedule_view_increment(
+        background_tasks,
+        request,
+        "episode",
+        episode_id,
+        webtoon_id=bolum.webtoon_id,
+    ):
+        current_views += 1
+
+    # 3. Navigasyon (Önceki/Sonraki Bölüm — sadece id okunur)
+    sonraki_bolum_id = db.query(models.WebtoonEpisode.id).filter(
         models.WebtoonEpisode.webtoon_id == bolum.webtoon_id,
         models.WebtoonEpisode.episode_number > bolum.episode_number,
         models.WebtoonEpisode.is_published == True
-    ).order_by(models.WebtoonEpisode.episode_number.asc()).first()
+    ).order_by(models.WebtoonEpisode.episode_number.asc()).scalar()
 
-    onceki_bolum = db.query(models.WebtoonEpisode).filter(
+    onceki_bolum_id = db.query(models.WebtoonEpisode.id).filter(
         models.WebtoonEpisode.webtoon_id == bolum.webtoon_id,
         models.WebtoonEpisode.episode_number < bolum.episode_number,
         models.WebtoonEpisode.is_published == True
-    ).order_by(models.WebtoonEpisode.episode_number.desc()).first()
+    ).order_by(models.WebtoonEpisode.episode_number.desc()).scalar()
 
     # 4. Resim Listesi Oluşturma (Göreli static/... URL'leri)
     image_urls = []
@@ -241,13 +227,13 @@ def bolum_oku(episode_id: int, request: Request, response: Response, db: Session
             else "WEBTOON"
         ),
         "title": bolum.title,
-        "episode_number": bolum.episode_number,
+        "episode_number": clean_chapter_number(bolum.episode_number),
         "created_at": bolum.created_at,
-        "view_count": bolum.view_count,
+        "view_count": current_views,
         "content_text": bolum.content_text,
         "images": image_urls,
-        "next_episode_id": sonraki_bolum.id if sonraki_bolum else None,
-        "prev_episode_id": onceki_bolum.id if onceki_bolum else None
+        "next_episode_id": sonraki_bolum_id,
+        "prev_episode_id": onceki_bolum_id
     }
 
 

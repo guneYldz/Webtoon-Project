@@ -15,7 +15,6 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from database import engine, get_db
-import random
 import models
 import os
 import signals
@@ -25,7 +24,7 @@ from wtforms.widgets import FileInput
 import uuid
 
 # --- ROUTERLARI ÇAĞIR ---
-from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications, reactions
+from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications, reactions, sitemap
 
 # 1. Yeni dev ortamları için eksik tabloları oluştur (şema göçleri Alembic ile yönetilir)
 models.Base.metadata.create_all(bind=engine)
@@ -277,6 +276,7 @@ app.include_router(novel.router)
 app.include_router(admin_router.router)
 app.include_router(notifications.router)
 app.include_router(reactions.router)
+app.include_router(sitemap.router)
 
 @app.get("/")
 def ana_sayfa():
@@ -294,11 +294,13 @@ def get_vitrin(db: Session = Depends(get_db)):
         featured_webtoons = (
             db.query(models.Webtoon)
             .filter(models.Webtoon.is_featured == True, models.Webtoon.is_published == True)
+            .order_by(models.Webtoon.id.desc())
             .all()
         )
         featured_novels = (
             db.query(models.Novel)
             .filter(models.Novel.is_featured == True, models.Novel.is_published == True)
+            .order_by(models.Novel.id.desc())
             .all()
         )
     except Exception:
@@ -322,5 +324,5 @@ def get_vitrin(db: Session = Depends(get_db)):
             "summary": n.summary, "view_count": getattr(n, 'view_count', 0) or 0,
             "status": n.status or "ongoing", "type": "novel", "typeLabel": "NOVEL", "bg_color": "purple"
         })
-    random.shuffle(vitrin_listesi)
+    vitrin_listesi.sort(key=lambda item: (-int(item["id"]), item["type"]))
     return vitrin_listesi

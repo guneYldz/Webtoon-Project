@@ -1,6 +1,7 @@
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import {
+  decodeRouteParam,
   encodeRouteParam,
   fetchSsrJson,
   resolveMediaUrl,
@@ -15,6 +16,7 @@ const getWebtoon = cache(async (id) => {
 
 export async function generateMetadata({ params }) {
   const { id } = params;
+  const decodedId = decodeRouteParam(id);
   let result;
   try {
     result = await getWebtoon(id);
@@ -26,16 +28,21 @@ export async function generateMetadata({ params }) {
   }
 
   if (result.status !== "ok") {
-    return { title: "Seri Bulunamadı" };
+    return {
+      title: "Seri Bulunamadı",
+      robots: { index: false, follow: false },
+    };
   }
 
   const series = result.data;
+  const canonicalSlug = String(series.slug || decodedId);
+  const encodedSlug = encodeRouteParam(canonicalSlug);
   const kind = seriesKindTr(series.type, series.typeLabel);
   const title = `${series.title} Oku - Türkçe ${kind}`;
   const description = series.summary
     ? String(series.summary).slice(0, 155)
     : `${series.title} Türkçe ${kind.toLowerCase()} oku. Kaos Manga'da ücretsiz webtoon, manga ve novel.`;
-  const canonicalUrl = `${SITE_URL}/webtoon/${series.slug || id}`;
+  const canonicalUrl = `${SITE_URL}/webtoon/${encodedSlug}`;
   const coverUrl = series.cover_image
     ? resolveMediaUrl(series.cover_image)
     : "/og-image.png";
@@ -64,6 +71,7 @@ export async function generateMetadata({ params }) {
 
 export default async function WebtoonDetailPage({ params }) {
   const { id } = params;
+  const decodedId = decodeRouteParam(id);
   const result = await getWebtoon(id);
 
   if (result.status === "not_found") {
@@ -71,7 +79,14 @@ export default async function WebtoonDetailPage({ params }) {
   }
 
   const series = result.data;
+  const canonicalSlug = String(series.slug || decodedId);
+  const encodedSlug = encodeRouteParam(canonicalSlug);
 
+  if (series.slug && decodedId !== String(series.slug)) {
+    permanentRedirect(`/webtoon/${encodedSlug}`);
+  }
+
+  const canonicalUrl = `${SITE_URL}/webtoon/${encodedSlug}`;
   const kind = seriesKindTr(series.type, series.typeLabel);
   const jsonLd = {
     "@context": "https://schema.org",
@@ -80,7 +95,7 @@ export default async function WebtoonDetailPage({ params }) {
     description: series.summary || `${series.title} Türkçe ${kind} oku`,
     genre: kind,
     inLanguage: "tr-TR",
-    url: `${SITE_URL}/webtoon/${series.slug || id}`,
+    url: canonicalUrl,
     image: series.cover_image ? resolveMediaUrl(series.cover_image) : undefined,
     publisher: {
       "@type": "Organization",
@@ -95,7 +110,11 @@ export default async function WebtoonDetailPage({ params }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <SeriesDetailView series={series} type="webtoon" routeKey={id} />
+      <SeriesDetailView
+        series={series}
+        type="webtoon"
+        routeKey={canonicalSlug}
+      />
     </>
   );
 }

@@ -33,6 +33,7 @@ const WIDTH_CLASSES = {
 };
 
 function WebtoonPanel({ src, alt, eager, brightness }) {
+  const imgRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -41,6 +42,14 @@ function WebtoonPanel({ src, alt, eager, brightness }) {
     retryCount > 0
       ? `${src}${src.includes("?") ? "&" : "?"}retry=${retryCount}`
       : src;
+
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete) {
+      if (imgRef.current.naturalWidth > 0) {
+        setLoaded(true);
+      }
+    }
+  }, [imgSrc]);
 
   const handleRetry = (e) => {
     e.stopPropagation();
@@ -68,14 +77,13 @@ function WebtoonPanel({ src, alt, eager, brightness }) {
   }
 
   return (
-    <div className="relative w-full">
-      {!loaded && (
-        <div
-          aria-hidden="true"
-          className="w-full aspect-[9/14] max-h-[640px] skeleton-shimmer bg-white/[0.04]"
-        />
-      )}
+    <div
+      className={`relative w-full ${
+        !loaded ? "min-h-[240px] skeleton-shimmer bg-white/[0.04]" : ""
+      }`}
+    >
       <img
+        ref={imgRef}
         src={imgSrc}
         alt={alt}
         loading={eager ? "eager" : "lazy"}
@@ -85,9 +93,7 @@ function WebtoonPanel({ src, alt, eager, brightness }) {
         style={{
           filter: brightness < 100 ? `brightness(${brightness / 100})` : undefined,
         }}
-        className={`w-full h-auto block select-none transition-opacity duration-300 ${
-          loaded ? "opacity-100" : "opacity-0 absolute inset-0"
-        }`}
+        className="w-full h-auto block select-none"
       />
     </div>
   );
@@ -184,24 +190,25 @@ export default function WebtoonReadingClient({
     };
   }, [seriesId, initialEpisodes.length]);
 
+  const seriesSlugOrId = episode?.webtoon_slug || seriesId;
+
   // Record chapter visit in readingHistory
   useEffect(() => {
     if (!episode || !episode.webtoon_id) return;
-    const slugOrId = episode.webtoon_slug || seriesId;
     recordChapterRead({
       type: "webtoon",
       seriesType: episode.series_type || "WEBTOON",
       seriesId: episode.webtoon_id,
-      slug: episode.webtoon_slug || String(seriesId),
+      slug: String(seriesSlugOrId),
       title: episode.webtoon_title || "",
       coverImage: episode.webtoon_cover || "",
       lastChapterId: episode.id,
-      lastChapterNumber: episode.episode_number,
+      lastChapterNumber: formatChapterNumber(episode.episode_number),
       lastChapterTitle: episode.title,
-      lastChapterUrl: `/webtoon/${slugOrId}/bolum/${episode.id}`,
+      lastChapterUrl: `/webtoon/${seriesSlugOrId}/bolum/${episode.id}`,
       chapterKey: episode.id,
     });
-  }, [episode?.id, episode?.webtoon_id, seriesId, recordChapterRead]);
+  }, [episode?.id, episode?.webtoon_id, seriesSlugOrId, recordChapterRead]);
 
   // Track scroll progress + prefetch next chapter images at >= 80%
   useEffect(() => {
@@ -223,7 +230,7 @@ export default function WebtoonReadingClient({
         lastSavedPctRef.current = pct;
         updateScrollProgress("webtoon", episode.webtoon_id, pct, {
           lastChapterId: episode.id,
-          lastChapterNumber: episode.episode_number,
+          lastChapterNumber: formatChapterNumber(episode.episode_number),
         });
       }
 
@@ -254,7 +261,6 @@ export default function WebtoonReadingClient({
     return () => window.removeEventListener("scroll", onScroll);
   }, [episode, updateScrollProgress]);
 
-  const seriesSlugOrId = episode?.webtoon_slug || seriesId;
   const seriesHref = `/webtoon/${seriesSlugOrId}`;
   const prevHref = episode?.prev_episode_id
     ? `${seriesHref}/bolum/${episode.prev_episode_id}`
@@ -269,12 +275,53 @@ export default function WebtoonReadingClient({
     () =>
       allEpisodes.map((ep) => ({
         value: ep.id,
-        number: ep.episode_number,
+        number: formatChapterNumber(ep.episode_number),
         title: ep.title,
         href: `${seriesHref}/bolum/${ep.id}`,
       })),
     [allEpisodes, seriesHref]
   );
+
+  // Build nearby episodes link strip (first, ±5 around current, latest) for SSR internal linking
+  const nearbyEpisodeLinks = useMemo(() => {
+    if (!allEpisodes || allEpisodes.length <= 1 || !episode) return [];
+    const asc = [...allEpisodes].sort(
+      (a, b) => Number(a.episode_number) - Number(b.episode_number)
+    );
+    const currentIdx = asc.findIndex(
+      (e) => String(e.id) === String(episode.id)
+    );
+
+    const indices = new Set();
+    indices.add(0);
+    if (currentIdx >= 0) {
+      for (
+        let i = Math.max(0, currentIdx - 5);
+        i <= Math.min(asc.length - 1, currentIdx + 5);
+        i++
+      ) {
+        indices.add(i);
+      }
+    } else {
+      for (let i = 0; i < Math.min(10, asc.length); i++) {
+        indices.add(i);
+      }
+    }
+    indices.add(asc.length - 1);
+
+    return Array.from(indices)
+      .sort((a, b) => a - b)
+      .map((idx) => {
+        const item = asc[idx];
+        const num = formatChapterNumber(item.episode_number);
+        return {
+          id: item.id,
+          num,
+          href: `${seriesHref}/bolum/${item.id}`,
+          active: String(item.id) === String(episode.id),
+        };
+      });
+  }, [allEpisodes, episode, seriesHref]);
 
   const progressEntry =
     hydrated && episode?.webtoon_id
@@ -389,6 +436,18 @@ export default function WebtoonReadingClient({
       {/* Post-Chapter Footer (Navigation + Engagement + Recommendations) */}
       <div className="bg-canvas text-ink-primary border-t border-subtle mt-10">
         <div className="max-w-4xl mx-auto px-4 py-8">
+          <p className="text-xs text-ink-muted text-center mb-4">
+            <strong className="text-ink-secondary font-semibold">
+              {episode.webtoon_title}
+            </strong>{" "}
+            serisinin{" "}
+            <strong className="text-ink-secondary font-semibold">
+              {epNumStr}. bölümünü
+            </strong>
+            {customTitle ? ` (${customTitle})` : ""} (
+            {episode.images?.length || 0} sayfa) Türkçe olarak okuyorsunuz.
+          </p>
+
           <div className="grid grid-cols-3 gap-2.5">
             {prevHref ? (
               <Link
@@ -428,6 +487,44 @@ export default function WebtoonReadingClient({
               </span>
             )}
           </div>
+
+          {/* Nearby Episodes Strip for Quick Navigation & Deep Crawlability */}
+          {nearbyEpisodeLinks.length > 1 && (
+            <nav
+              aria-label="Diğer Bölümler"
+              className="mt-5 rounded-2xl border border-subtle bg-surface/70 p-3.5"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
+                  Diğer Bölümler
+                </span>
+                <Link
+                  href={`${seriesHref}#bolumler`}
+                  className="text-xs font-semibold text-accent hover:underline"
+                >
+                  Tüm Bölümler ({allEpisodes.length})
+                </Link>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {nearbyEpisodeLinks.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    prefetch={false}
+                    title={`${episode.webtoon_title || "Seri"} Bölüm ${item.num} Oku`}
+                    aria-current={item.active ? "page" : undefined}
+                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold tabular-nums transition ${
+                      item.active
+                        ? "bg-accent text-[#0B0B0F] border-transparent shadow-sm"
+                        : "bg-canvas border-subtle text-ink-secondary hover:text-ink-primary hover:border-accent-border"
+                    }`}
+                  >
+                    Bölüm {item.num}
+                  </Link>
+                ))}
+              </div>
+            </nav>
+          )}
 
           <div className="mt-6">
             <ChapterReactions type="webtoon" targetId={episode.id} />

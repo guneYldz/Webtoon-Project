@@ -1,6 +1,7 @@
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import {
+  decodeRouteParam,
   encodeRouteParam,
   fetchSsrJson,
   resolveMediaUrl,
@@ -14,6 +15,7 @@ const getNovel = cache(async (slug) => {
 
 export async function generateMetadata({ params }) {
   const { slug } = params;
+  const decodedSlug = decodeRouteParam(slug);
   let result;
   try {
     result = await getNovel(slug);
@@ -25,15 +27,20 @@ export async function generateMetadata({ params }) {
   }
 
   if (result.status !== "ok") {
-    return { title: "Roman Bulunamadı" };
+    return {
+      title: "Roman Bulunamadı",
+      robots: { index: false, follow: false },
+    };
   }
 
   const novel = result.data;
+  const canonicalSlug = String(novel.slug || decodedSlug);
+  const encodedSlug = encodeRouteParam(canonicalSlug);
   const title = `${novel.title} Oku - Türkçe Novel`;
   const description = novel.summary
     ? String(novel.summary).slice(0, 155)
     : `${novel.title} Türkçe web novel oku. Kaos Manga'da ücretsiz oku.`;
-  const canonicalUrl = `${SITE_URL}/novel/${novel.slug || slug}`;
+  const canonicalUrl = `${SITE_URL}/novel/${encodedSlug}`;
   const coverUrl = novel.cover_image
     ? resolveMediaUrl(novel.cover_image)
     : "/og-image.png";
@@ -62,6 +69,7 @@ export async function generateMetadata({ params }) {
 
 export default async function NovelDetailPage({ params }) {
   const { slug } = params;
+  const decodedSlug = decodeRouteParam(slug);
   const result = await getNovel(slug);
 
   if (result.status === "not_found") {
@@ -69,6 +77,14 @@ export default async function NovelDetailPage({ params }) {
   }
 
   const novel = result.data;
+  const canonicalSlug = String(novel.slug || decodedSlug);
+  const encodedSlug = encodeRouteParam(canonicalSlug);
+
+  if (novel.slug && decodedSlug !== String(novel.slug)) {
+    permanentRedirect(`/novel/${encodedSlug}`);
+  }
+
+  const canonicalUrl = `${SITE_URL}/novel/${encodedSlug}`;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -79,7 +95,10 @@ export default async function NovelDetailPage({ params }) {
       ? { "@type": "Person", name: novel.author }
       : undefined,
     inLanguage: "tr-TR",
-    url: `${SITE_URL}/novel/${novel.slug || slug}`,
+    url: canonicalUrl,
+    numberOfPages: Array.isArray(novel.chapters)
+      ? novel.chapters.length
+      : undefined,
     image: novel.cover_image ? resolveMediaUrl(novel.cover_image) : undefined,
     publisher: {
       "@type": "Organization",
@@ -94,7 +113,7 @@ export default async function NovelDetailPage({ params }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <SeriesDetailView series={novel} type="novel" routeKey={slug} />
+      <SeriesDetailView series={novel} type="novel" routeKey={canonicalSlug} />
     </>
   );
 }

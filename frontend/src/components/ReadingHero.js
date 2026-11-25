@@ -111,6 +111,15 @@ export default function ReadingHero({
           </Link>
 
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-[var(--reader-text,#F4F4F6)] leading-tight">
+            {seriesTitle &&
+              !String(title || "")
+                .toLowerCase()
+                .includes(String(seriesTitle).toLowerCase()) && (
+                <span className="sr-only">
+                  {seriesTitle}
+                  {subtitle ? ` ${subtitle}` : ""} —{" "}
+                </span>
+              )}
             {title}
           </h1>
 

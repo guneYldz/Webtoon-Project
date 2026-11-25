@@ -168,7 +168,9 @@ export function SeriesCard({
           <div className="flex flex-col gap-1.5 mt-0.5">
             {latestChapters.slice(0, 2).map((chap, idx) => {
               const chapNum = chap.chapter_number ?? chap.episode_number;
-              const chapTarget = isNovel ? chapNum || chap.id : chap.id;
+              const chapTarget = isNovel
+                ? formatChapterNumber(chapNum) || chap.id
+                : chap.id;
               const chapHref = `/${routePrefix}/${
                 rawSlug || item.id
               }/bolum/${chapTarget}`;

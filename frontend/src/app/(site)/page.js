@@ -10,8 +10,8 @@ async function getData() {
     const fetchOpts = { next: { revalidate: 60 } };
 
     const [webtoonRes, novelRes] = await Promise.all([
-      apiFetch("/webtoons/", fetchOpts),
-      apiFetch("/novels/", fetchOpts),
+      apiFetch("/webtoons/?limit=1000", fetchOpts),
+      apiFetch("/novels/?limit=1000", fetchOpts),
     ]);
 
     if (!webtoonRes.ok || !novelRes.ok) {
