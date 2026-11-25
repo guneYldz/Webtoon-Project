@@ -85,6 +85,7 @@ class ThreadSafeTTLCache:
 
 vitrin_cache = ThreadSafeTTLCache(maxsize=16, ttl=45.0)
 admin_stats_cache = ThreadSafeTTLCache(maxsize=16, ttl=45.0)
+recommendations_cache = ThreadSafeTTLCache(maxsize=256, ttl=120.0)
 
 
 def invalidate_vitrin_cache() -> None:
@@ -95,6 +96,11 @@ def invalidate_admin_stats_cache() -> None:
     admin_stats_cache.clear()
 
 
+def invalidate_recommendations_cache() -> None:
+    recommendations_cache.clear()
+
+
 def invalidate_content_caches() -> None:
     vitrin_cache.clear()
     admin_stats_cache.clear()
+    recommendations_cache.clear()

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import or_, func
+from sqlalchemy import desc, or_, func
 from database import get_db 
 import logging
 import models 
@@ -917,14 +917,30 @@ async def list_comments(
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None),
     seri_type: Optional[str] = Query(None),  # "novel" | "webtoon"
+    reported_only: bool = Query(False),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
     from routers.comments import _seri_bilgisi, _COMMENT_LOAD_OPTIONS
 
+    report_subq = (
+        db.query(
+            models.CommentReport.comment_id.label("comment_id"),
+            func.count(models.CommentReport.id).label("report_count"),
+        )
+        .filter(models.CommentReport.status == "open")
+        .group_by(models.CommentReport.comment_id)
+        .subquery()
+    )
+
     query = db.query(models.Comment)\
         .outerjoin(models.User, models.Comment.user_id == models.User.id)\
         .options(*_COMMENT_LOAD_OPTIONS)
+
+    if reported_only:
+        query = query.join(report_subq, report_subq.c.comment_id == models.Comment.id)
+    else:
+        query = query.outerjoin(report_subq, report_subq.c.comment_id == models.Comment.id)
 
     if search:
         query = query.filter(
@@ -935,24 +951,69 @@ async def list_comments(
         )
 
     if seri_type == "novel":
-        query = query.filter(models.Comment.novel_chapter_id.isnot(None))
+        query = query.filter(
+            or_(
+                models.Comment.novel_chapter_id.isnot(None),
+                models.Comment.novel_id.isnot(None),
+            )
+        )
     elif seri_type == "webtoon":
-        query = query.filter(models.Comment.webtoon_episode_id.isnot(None))
+        query = query.filter(
+            or_(
+                models.Comment.webtoon_episode_id.isnot(None),
+                models.Comment.webtoon_id.isnot(None),
+            )
+        )
 
     total = query.count()
     offset = (page - 1) * limit
-    comments = query.order_by(models.Comment.created_at.desc()).offset(offset).limit(limit).all()
+    if reported_only:
+        query = query.order_by(desc(report_subq.c.report_count), models.Comment.created_at.desc())
+    else:
+        query = query.order_by(models.Comment.created_at.desc())
+
+    comments = query.offset(offset).limit(limit).all()
+
+    comment_ids = [c.id for c in comments]
+    report_count_map = {}
+    latest_reason_map = {}
+    if comment_ids:
+        open_reports = (
+            db.query(models.CommentReport)
+            .filter(
+                models.CommentReport.comment_id.in_(comment_ids),
+                models.CommentReport.status == "open",
+            )
+            .order_by(models.CommentReport.created_at.desc(), models.CommentReport.id.desc())
+            .all()
+        )
+        for rep in open_reports:
+            cid = int(rep.comment_id)
+            report_count_map[cid] = report_count_map.get(cid, 0) + 1
+            if cid not in latest_reason_map:
+                latest_reason_map[cid] = rep.reason
 
     data = []
     for c in comments:
         seri = _seri_bilgisi(c)
+        seri_title = seri.get("seri_title")
+        bolum_title = seri.get("bolum_title")
+        target_label = (
+            f"{seri_title} — {bolum_title}"
+            if seri_title and bolum_title
+            else (seri_title or bolum_title)
+        )
         data.append({
             "id": c.id,
             "username": c.user.username if c.user else "Silinmiş Kullanıcı",
             "user_id": c.user_id,
             "content": c.content,
+            "is_spoiler": bool(getattr(c, "is_spoiler", False)),
             "created_at": str(c.created_at),
             "parent_id": c.parent_id,
+            "report_count": report_count_map.get(int(c.id), 0),
+            "latest_report_reason": latest_reason_map.get(int(c.id)),
+            "target_label": target_label,
             **seri,
         })
 
@@ -963,20 +1024,41 @@ async def list_comments(
     }
 
 
+@router.post("/comments/{comment_id}/dismiss-reports")
+async def dismiss_comment_reports(
+    comment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_editor),
+):
+    if not db.query(models.Comment.id).filter(models.Comment.id == comment_id).first():
+        raise HTTPException(status_code=404, detail="Yorum bulunamadı")
+
+    dismissed = (
+        db.query(models.CommentReport)
+        .filter(
+            models.CommentReport.comment_id == comment_id,
+            models.CommentReport.status == "open",
+        )
+        .update({"status": "dismissed"}, synchronize_session=False)
+    )
+    db.commit()
+    return {"status": "success", "dismissed": int(dismissed or 0)}
+
+
 @router.delete("/comments/{comment_id}")
 async def delete_comment_admin(
     comment_id: int,
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
+    from routers.comments import delete_comment_tree
+
     comment = db.query(models.Comment).filter(models.Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Yorum bulunamadı")
 
     try:
-        # Önce yanıtları sil (FK kısıtlaması)
-        db.query(models.Comment).filter(models.Comment.parent_id == comment_id).delete()
-        db.delete(comment)
+        delete_comment_tree(db, comment)
         db.commit()
         invalidate_admin_stats_cache()
         return {"status": "success", "message": "Yorum ve yanıtları silindi"}

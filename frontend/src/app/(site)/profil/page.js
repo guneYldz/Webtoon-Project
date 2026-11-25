@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -19,6 +19,8 @@ import {
   Calendar,
   Save,
   KeyRound,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { apiFetch, resolveMediaUrl, logoutUser } from "@/lib/apiClient";
 import SeriesCard, { SeriesCardSkeleton } from "@/components/SeriesCard";
@@ -31,6 +33,31 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui";
+
+const LIBRARY_STATUS_OPTIONS = [
+  { value: "reading", label: "Okuyorum" },
+  { value: "plan_to_read", label: "Okuyacağım" },
+  { value: "completed", label: "Tamamladım" },
+  { value: "dropped", label: "Bıraktım" },
+];
+
+const STATUS_FILTER_PILLS = [
+  { value: "ALL", label: "Tümü" },
+  ...LIBRARY_STATUS_OPTIONS,
+];
+
+function isNovelFavorite(fav) {
+  return String(fav?.type || fav?.tag || "")
+    .toUpperCase()
+    .includes("NOVEL");
+}
+
+function getFavoriteSeriesId(fav) {
+  if (isNovelFavorite(fav)) {
+    return Number(fav?.novel_id ?? fav?.id);
+  }
+  return Number(fav?.webtoon_id ?? fav?.id);
+}
 
 function ProfileContent() {
   const router = useRouter();
@@ -59,6 +86,8 @@ function ProfileContent() {
 
   const [comments, setComments] = useState([]);
   const [favorites, setFavorites] = useState([]);
+  const [favStatusFilter, setFavStatusFilter] = useState("ALL");
+  const [updatingFavKey, setUpdatingFavKey] = useState(null);
 
   useEffect(() => {
     const t = searchParams.get("tab");
@@ -109,6 +138,109 @@ function ProfileContent() {
       if (fRes.ok) setFavorites(await fRes.json());
     } catch (err) {
       console.error("Aktivite yüklenemedi:", err);
+    }
+  };
+
+  const favStatusCounts = useMemo(() => {
+    const counts = {
+      ALL: favorites.length,
+      reading: 0,
+      plan_to_read: 0,
+      completed: 0,
+      dropped: 0,
+    };
+    for (const fav of favorites) {
+      const st = fav.status || "reading";
+      if (counts[st] !== undefined) counts[st] += 1;
+      else counts.reading += 1;
+    }
+    return counts;
+  }, [favorites]);
+
+  const filteredFavorites = useMemo(() => {
+    if (favStatusFilter === "ALL") return favorites;
+    return favorites.filter(
+      (fav) => (fav.status || "reading") === favStatusFilter
+    );
+  }, [favorites, favStatusFilter]);
+
+  const handleUpdateFavoriteMeta = async (fav, patch) => {
+    const novel = isNovelFavorite(fav);
+    const seriesId = getFavoriteSeriesId(fav);
+    if (!seriesId) return;
+
+    const itemKey = `${novel ? "novel" : "webtoon"}:${seriesId}`;
+    setUpdatingFavKey(itemKey);
+
+    const prevFavorites = favorites;
+    setFavorites((curr) =>
+      curr.map((item) => {
+        if (
+          isNovelFavorite(item) === novel &&
+          getFavoriteSeriesId(item) === seriesId
+        ) {
+          return { ...item, ...patch };
+        }
+        return item;
+      })
+    );
+
+    const payload = {
+      ...(novel ? { novel_id: seriesId } : { webtoon_id: seriesId }),
+      ...patch,
+    };
+
+    try {
+      const res = await apiFetch("/favorites/guncelle", {
+        method: "PATCH",
+        auth: "user",
+        json: payload,
+      });
+
+      if (!res.ok) {
+        setFavorites(prevFavorites);
+        toast.error("Kütüphane tercihi güncellenemedi.");
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      setFavorites((curr) =>
+        curr.map((item) => {
+          if (
+            isNovelFavorite(item) === novel &&
+            getFavoriteSeriesId(item) === seriesId
+          ) {
+            return {
+              ...item,
+              status: data.status ?? patch.status ?? item.status ?? "reading",
+              notify_new_chapters:
+                data.notify_new_chapters ??
+                patch.notify_new_chapters ??
+                item.notify_new_chapters ??
+                true,
+            };
+          }
+          return item;
+        })
+      );
+
+      if (patch.status !== undefined) {
+        const label =
+          LIBRARY_STATUS_OPTIONS.find((o) => o.value === patch.status)?.label ||
+          patch.status;
+        toast.success(`Okuma durumu "${label}" olarak güncellendi.`);
+      } else if (patch.notify_new_chapters !== undefined) {
+        toast.success(
+          patch.notify_new_chapters
+            ? "Yeni bölüm bildirimleri açıldı."
+            : "Bu seri için bildirimler sessize alındı."
+        );
+      }
+    } catch {
+      setFavorites(prevFavorites);
+      toast.error("Sunucuyla bağlantı kurulamadı.");
+    } finally {
+      setUpdatingFavKey(null);
     }
   };
 
@@ -330,7 +462,10 @@ function ProfileContent() {
 
         {/* TABS: YORUMLARIM | FAVORİLERİM | HESAP AYARLARI */}
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList variant="underline" className="w-full justify-start mb-6 overflow-x-auto">
+          <TabsList
+            variant="underline"
+            className="w-full justify-start mb-6 overflow-x-auto"
+          >
             <TabsTrigger value="yorumlar" variant="underline">
               <MessageSquare className="h-4 w-4" />
               <span>Yorumlarım ({comments.length})</span>
@@ -354,7 +489,7 @@ function ProfileContent() {
                   Henüz yorum yapmadın
                 </p>
                 <p className="text-xs text-ink-secondary mt-1">
-                  Okuduğun bölümlere yaptığın yorumlar burada listelenir.
+                  Okuduğun bölümlere ve serilere yaptığın yorumlar burada listelenir.
                 </p>
               </div>
             ) : (
@@ -410,15 +545,121 @@ function ProfileContent() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
-                {favorites.map((f, idx) => (
-                  <SeriesCard key={`${f.type}-${f.id || idx}`} series={f} />
-                ))}
+              <div className="space-y-5">
+                {/* Status Filter Pills */}
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+                  {STATUS_FILTER_PILLS.map((pill) => {
+                    const active = favStatusFilter === pill.value;
+                    const count = favStatusCounts[pill.value] ?? 0;
+                    return (
+                      <button
+                        key={pill.value}
+                        type="button"
+                        onClick={() => setFavStatusFilter(pill.value)}
+                        className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition whitespace-nowrap ${
+                          active
+                            ? "bg-brand text-white border-brand shadow-sm shadow-brand/30"
+                            : "bg-surface text-ink-secondary border-subtle hover:text-ink-primary hover:border-hover"
+                        }`}
+                      >
+                        <span>{pill.label}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-[11px] tabular-nums ${
+                            active
+                              ? "bg-white/20 text-white"
+                              : "bg-canvas/70 text-ink-muted"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filteredFavorites.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-subtle bg-surface/50 py-12 text-center">
+                    <p className="text-sm text-ink-secondary">
+                      Bu okuma durumunda henüz seri bulunmuyor.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-5">
+                    {filteredFavorites.map((f, idx) => {
+                      const novel = isNovelFavorite(f);
+                      const seriesId = getFavoriteSeriesId(f);
+                      const itemKey = `${novel ? "novel" : "webtoon"}:${seriesId}`;
+                      const currentStatus = f.status || "reading";
+                      const notifyEnabled = f.notify_new_chapters !== false;
+                      const isBusy = updatingFavKey === itemKey;
+
+                      return (
+                        <div
+                          key={`${f.type}-${f.id || idx}`}
+                          className="flex flex-col gap-2"
+                        >
+                          <SeriesCard series={f} />
+
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={currentStatus}
+                              disabled={isBusy}
+                              onChange={(e) =>
+                                handleUpdateFavoriteMeta(f, {
+                                  status: e.target.value,
+                                })
+                              }
+                              aria-label={`${f.title} okuma durumu`}
+                              className="flex-1 min-w-0 h-8 rounded-lg border border-subtle bg-surface px-2.5 text-xs font-semibold text-ink-secondary hover:border-hover focus:border-brand focus:text-ink-primary focus:outline-none transition disabled:opacity-50"
+                            >
+                              {LIBRARY_STATUS_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() =>
+                                handleUpdateFavoriteMeta(f, {
+                                  notify_new_chapters: !notifyEnabled,
+                                })
+                              }
+                              title={
+                                notifyEnabled
+                                  ? "Yeni bölüm bildirimleri açık"
+                                  : "Yeni bölüm bildirimleri sessizde"
+                              }
+                              aria-label={
+                                notifyEnabled
+                                  ? "Yeni bölüm bildirimlerini kapat"
+                                  : "Yeni bölüm bildirimlerini aç"
+                              }
+                              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition disabled:opacity-50 ${
+                                notifyEnabled
+                                  ? "border-brand/40 bg-brand/15 text-brand hover:bg-brand/25"
+                                  : "border-subtle bg-surface text-ink-muted hover:text-ink-primary hover:border-hover"
+                              }`}
+                            >
+                              {notifyEnabled ? (
+                                <Bell className="h-3.5 w-3.5" />
+                              ) : (
+                                <BellOff className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
 
-          {/* TAB 3: HESAP AYARLARI (Consolidated Profile + Password Settings) */}
+          {/* TAB 3: HESAP AYARLARI */}
           <TabsContent value="ayarlar">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Profile Details Form */}

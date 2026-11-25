@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean, Float, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, ForeignKey, Enum, Boolean, Float, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
@@ -31,6 +31,7 @@ class User(Base):
     reactions = relationship("ChapterReaction", back_populates="user", cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     password_reset_codes = relationship("PasswordResetCode", back_populates="user", cascade="all, delete-orphan")
+    reading_progress = relationship("UserReadingProgress", back_populates="user", cascade="all, delete-orphan")
 
     def __str__(self):
         return self.username
@@ -177,20 +178,64 @@ class Comment(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     novel_chapter_id = Column(Integer, ForeignKey("novel_chapters.id"), nullable=True) 
-    webtoon_episode_id = Column(Integer, ForeignKey("webtoon_episodes.id"), nullable=True) 
+    webtoon_episode_id = Column(Integer, ForeignKey("webtoon_episodes.id"), nullable=True)
+    webtoon_id = Column(Integer, ForeignKey("webtoons.id", ondelete="CASCADE"), nullable=True, index=True)
+    novel_id = Column(Integer, ForeignKey("novels.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Yanıt sistemi: bu yorum başka bir yorumun cevabıysa onun id'si
     parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
     
-    content = Column(Text, nullable=False)                              
+    content = Column(Text, nullable=False)
+    is_spoiler = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="comments")
     novel_chapter = relationship("NovelChapter", back_populates="comments")
     webtoon_episode = relationship("WebtoonEpisode", back_populates="comments")
+    webtoon = relationship("Webtoon")
+    novel = relationship("Novel")
+    likes = relationship("CommentLike", back_populates="comment", cascade="all, delete-orphan")
+    reports = relationship("CommentReport", back_populates="comment", cascade="all, delete-orphan")
 
     def __str__(self):
         return f"Yorum ({self.id}) - {self.content[:20]}..."
+
+
+# 7.1 YORUM BEĞENİLERİ VE ŞİKAYETLERİ
+class CommentLike(Base):
+    __tablename__ = "comment_likes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    comment_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    comment = relationship("Comment", back_populates="likes")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("comment_id", "user_id", name="uq_comment_like_user"),
+    )
+
+
+class CommentReport(Base):
+    __tablename__ = "comment_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    comment_id = Column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    reason = Column(String(200), nullable=False, default="Diğer")
+    status = Column(String(20), nullable=False, default="open", server_default="open")  # open | dismissed
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    comment = relationship("Comment", back_populates="reports")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("comment_id", "user_id", name="uq_comment_report_user"),
+        Index("ix_comment_reports_status_comment", "status", "comment_id"),
+    )
 
 # 7.5 BİLDİRİMLER
 class Notification(Base):
@@ -237,6 +282,8 @@ class Favorite(Base):
     webtoon_id = Column(Integer, ForeignKey("webtoons.id"), nullable=True)
     novel_id = Column(Integer, ForeignKey("novels.id"), nullable=True)
     
+    status = Column(String(20), nullable=False, default="reading", server_default="reading")
+    notify_new_chapters = Column(Boolean, nullable=False, default=True, server_default="true")
     added_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="favorites")
@@ -245,6 +292,36 @@ class Favorite(Base):
 
     def __str__(self):
         return f"Favorite: User {self.user_id}"
+
+
+# 8.5 ÇAPRAZ CİHAZ OKUMA İLERLEMESİ (UserReadingProgress)
+class UserReadingProgress(Base):
+    __tablename__ = "user_reading_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    content_type = Column(String(16), nullable=False)  # webtoon | novel
+    series_type = Column(String(16), nullable=False, default="WEBTOON")  # WEBTOON | MANGA | NOVEL
+    series_id = Column(Integer, nullable=False)
+    slug = Column(String(255), nullable=False, default="")
+    title = Column(String(255), nullable=False, default="")
+    cover_image = Column(String(500), nullable=True, default="")
+    last_chapter_id = Column(Integer, nullable=True)
+    last_chapter_number = Column(Float, nullable=True)
+    last_chapter_title = Column(String(255), nullable=True)
+    last_chapter_url = Column(String(500), nullable=False, default="")
+    scroll_pct = Column(Integer, nullable=False, default=0)
+    read_chapter_ids = Column(JSON, nullable=False, default=list)
+    updated_at_ms = Column(BigInteger, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="reading_progress")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "content_type", "series_id", name="uq_user_reading_progress"),
+        Index("ix_user_reading_progress_user_updated", "user_id", "updated_at_ms"),
+    )
 
 # 9. BEĞENİLER
 class Like(Base):

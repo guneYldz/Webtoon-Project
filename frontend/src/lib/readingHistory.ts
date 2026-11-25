@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch, getUserToken } from "@/lib/apiClient";
 
 export const READING_HISTORY_STORAGE_KEY = "kaos_reading_history_v1";
 export const READING_HISTORY_EVENT = "reading-history-updated";
 export const MAX_READING_HISTORY_ENTRIES = 30;
+const MAX_READ_CHAPTER_IDS = 500;
+const SCROLL_SYNC_DEBOUNCE_MS = 12000;
 
 export type ReadingContentType = "webtoon" | "novel";
 export type ReadingSeriesType = "WEBTOON" | "MANGA" | "NOVEL";
@@ -43,8 +46,16 @@ export interface RecordChapterReadInput {
 
 type ReadingHistoryStore = Record<string, ReadingHistoryEntry>;
 
+let lastSyncedAuthToken: string | null = null;
+let initialSyncInFlight: Promise<void> | null = null;
+const pendingScrollEntries: Map<string, ReadingHistoryEntry> = new Map();
+let scrollSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
 function isBrowser(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return (
+    typeof window !== "undefined" &&
+    typeof window.localStorage !== "undefined"
+  );
 }
 
 export function makeReadingHistoryKey(
@@ -104,7 +115,83 @@ function mergeReadChapterIds(
     }
   }
 
+  if (result.length > MAX_READ_CHAPTER_IDS) {
+    return result.slice(result.length - MAX_READ_CHAPTER_IDS);
+  }
   return result;
+}
+
+function sanitizeEntry(raw: Partial<ReadingHistoryEntry>): ReadingHistoryEntry | null {
+  if (
+    !raw ||
+    (raw.type !== "webtoon" && raw.type !== "novel") ||
+    raw.seriesId === undefined ||
+    raw.seriesId === null
+  ) {
+    return null;
+  }
+
+  return {
+    type: raw.type,
+    seriesType: normalizeSeriesType(raw.type, raw.seriesType),
+    seriesId: raw.seriesId,
+    slug: String(raw.slug || ""),
+    title: String(raw.title || ""),
+    coverImage: String(raw.coverImage || ""),
+    lastChapterId:
+      raw.lastChapterId !== undefined && raw.lastChapterId !== null
+        ? raw.lastChapterId
+        : undefined,
+    lastChapterNumber: raw.lastChapterNumber ?? "",
+    lastChapterTitle:
+      raw.lastChapterTitle !== undefined && raw.lastChapterTitle !== null
+        ? String(raw.lastChapterTitle)
+        : undefined,
+    lastChapterUrl: String(raw.lastChapterUrl || ""),
+    scrollPct: clampScrollPct(raw.scrollPct),
+    readChapterIds: mergeReadChapterIds(
+      Array.isArray(raw.readChapterIds) ? raw.readChapterIds : [],
+      []
+    ),
+    updatedAt:
+      typeof raw.updatedAt === "number" && Number.isFinite(raw.updatedAt)
+        ? raw.updatedAt
+        : 0,
+  };
+}
+
+function mergeTwoEntries(
+  a: ReadingHistoryEntry,
+  b: ReadingHistoryEntry
+): ReadingHistoryEntry {
+  const newer = (b.updatedAt || 0) > (a.updatedAt || 0) ? b : a;
+  const older = newer === b ? a : b;
+  const mergedReadIds = mergeReadChapterIds(
+    older.readChapterIds,
+    newer.readChapterIds
+  );
+
+  return {
+    type: newer.type,
+    seriesType: normalizeSeriesType(
+      newer.type,
+      newer.seriesType || older.seriesType
+    ),
+    seriesId: newer.seriesId,
+    slug: newer.slug || older.slug || "",
+    title: newer.title || older.title || "",
+    coverImage: newer.coverImage || older.coverImage || "",
+    lastChapterId: newer.lastChapterId ?? older.lastChapterId,
+    lastChapterNumber:
+      newer.lastChapterNumber !== "" && newer.lastChapterNumber !== undefined
+        ? newer.lastChapterNumber
+        : older.lastChapterNumber,
+    lastChapterTitle: newer.lastChapterTitle ?? older.lastChapterTitle,
+    lastChapterUrl: newer.lastChapterUrl || older.lastChapterUrl || "",
+    scrollPct: clampScrollPct(newer.scrollPct),
+    readChapterIds: mergedReadIds,
+    updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
+  };
 }
 
 function readStore(): ReadingHistoryStore {
@@ -119,34 +206,9 @@ function readStore(): ReadingHistoryStore {
     const store: ReadingHistoryStore = {};
     for (const [key, val] of Object.entries(parsed as Record<string, unknown>)) {
       if (!val || typeof val !== "object") continue;
-      const entry = val as Partial<ReadingHistoryEntry>;
-      if (
-        (entry.type !== "webtoon" && entry.type !== "novel") ||
-        entry.seriesId === undefined ||
-        entry.seriesId === null
-      ) {
-        continue;
-      }
-      store[key] = {
-        type: entry.type,
-        seriesType: normalizeSeriesType(entry.type, entry.seriesType),
-        seriesId: entry.seriesId,
-        slug: String(entry.slug || ""),
-        title: String(entry.title || ""),
-        coverImage: String(entry.coverImage || ""),
-        lastChapterId: entry.lastChapterId,
-        lastChapterNumber: entry.lastChapterNumber ?? "",
-        lastChapterTitle: entry.lastChapterTitle,
-        lastChapterUrl: String(entry.lastChapterUrl || ""),
-        scrollPct: clampScrollPct(entry.scrollPct),
-        readChapterIds: Array.isArray(entry.readChapterIds)
-          ? entry.readChapterIds
-          : [],
-        updatedAt:
-          typeof entry.updatedAt === "number" && Number.isFinite(entry.updatedAt)
-            ? entry.updatedAt
-            : 0,
-      };
+      const clean = sanitizeEntry(val as Partial<ReadingHistoryEntry>);
+      if (!clean) continue;
+      store[key] = clean;
     }
     return store;
   } catch {
@@ -157,7 +219,6 @@ function readStore(): ReadingHistoryStore {
 function writeStore(store: ReadingHistoryStore): void {
   if (!isBrowser()) return;
   try {
-    // Keep at most MAX_READING_HISTORY_ENTRIES sorted by updatedAt descending
     const sortedEntries = Object.entries(store)
       .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
       .slice(0, MAX_READING_HISTORY_ENTRIES);
@@ -175,6 +236,166 @@ function writeStore(store: ReadingHistoryStore): void {
   } catch {
     // Ignore private mode / quota errors
   }
+}
+
+async function pushEntriesToServer(entries: ReadingHistoryEntry[]): Promise<void> {
+  if (!isBrowser() || entries.length === 0) return;
+  const token = getUserToken();
+  if (!token) return;
+
+  try {
+    const res = await apiFetch("/reading-progress/sync", {
+      method: "POST",
+      auth: "user",
+      json: { items: entries },
+    });
+    if (!res.ok) return;
+    const data = await res.json().catch(() => null);
+    if (data && Array.isArray(data.items) && data.items.length > 0) {
+      const store = readStore();
+      let changed = false;
+      for (const rawItem of data.items) {
+        const remote = sanitizeEntry(rawItem);
+        if (!remote) continue;
+        const key = makeReadingHistoryKey(remote.type, remote.seriesId);
+        const local = store[key];
+        if (!local) {
+          store[key] = remote;
+          changed = true;
+        } else {
+          const merged = mergeTwoEntries(local, remote);
+          if (
+            merged.updatedAt > local.updatedAt ||
+            merged.readChapterIds.length > local.readChapterIds.length
+          ) {
+            store[key] = merged;
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        writeStore(store);
+      }
+    }
+  } catch {
+    // Silent fire-and-forget on network error
+  }
+}
+
+function scheduleDebouncedScrollSync(entry: ReadingHistoryEntry): void {
+  if (!isBrowser() || !getUserToken()) return;
+  const key = makeReadingHistoryKey(entry.type, entry.seriesId);
+  pendingScrollEntries.set(key, entry);
+
+  if (scrollSyncTimer) return;
+  scrollSyncTimer = setTimeout(() => {
+    scrollSyncTimer = null;
+    const batch = Array.from(pendingScrollEntries.values());
+    pendingScrollEntries.clear();
+    if (batch.length > 0) {
+      void pushEntriesToServer(batch);
+    }
+  }, SCROLL_SYNC_DEBOUNCE_MS);
+}
+
+/**
+ * Fetches server reading progress when logged in, merges with local storage,
+ * and pushes any local-only or newer local entries once per session/login.
+ */
+export async function syncReadingHistoryWithServer(force = false): Promise<void> {
+  if (!isBrowser()) return;
+  const token = getUserToken();
+  if (!token) {
+    lastSyncedAuthToken = null;
+    return;
+  }
+
+  if (!force && lastSyncedAuthToken === token) {
+    return;
+  }
+  if (initialSyncInFlight) {
+    return initialSyncInFlight;
+  }
+
+  initialSyncInFlight = (async () => {
+    try {
+      const res = await apiFetch("/reading-progress", {
+        method: "GET",
+        auth: "user",
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+
+      const data = await res.json().catch(() => null);
+      const remoteList: unknown[] = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data)
+        ? data
+        : [];
+
+      const localStore = readStore();
+      const remoteMap: ReadingHistoryStore = {};
+
+      for (const rawItem of remoteList) {
+        const clean = sanitizeEntry(rawItem as Partial<ReadingHistoryEntry>);
+        if (!clean) continue;
+        const key = makeReadingHistoryKey(clean.type, clean.seriesId);
+        remoteMap[key] = clean;
+      }
+
+      const mergedStore: ReadingHistoryStore = { ...localStore };
+      let shouldUpdateLocal = false;
+      const entriesToPush: ReadingHistoryEntry[] = [];
+
+      // Merge remote into local
+      for (const [key, remoteEntry] of Object.entries(remoteMap)) {
+        const localEntry = mergedStore[key];
+        if (!localEntry) {
+          mergedStore[key] = remoteEntry;
+          shouldUpdateLocal = true;
+        } else {
+          const merged = mergeTwoEntries(localEntry, remoteEntry);
+          mergedStore[key] = merged;
+          if (
+            merged.updatedAt !== localEntry.updatedAt ||
+            merged.readChapterIds.length !== localEntry.readChapterIds.length ||
+            merged.scrollPct !== localEntry.scrollPct
+          ) {
+            shouldUpdateLocal = true;
+          }
+          if (
+            localEntry.updatedAt > remoteEntry.updatedAt ||
+            merged.readChapterIds.length > remoteEntry.readChapterIds.length
+          ) {
+            entriesToPush.push(merged);
+          }
+        }
+      }
+
+      // Find local-only entries to push to server
+      for (const [key, localEntry] of Object.entries(localStore)) {
+        if (!remoteMap[key]) {
+          entriesToPush.push(localEntry);
+        }
+      }
+
+      if (shouldUpdateLocal) {
+        writeStore(mergedStore);
+      }
+
+      lastSyncedAuthToken = token;
+
+      if (entriesToPush.length > 0) {
+        await pushEntriesToServer(entriesToPush);
+      }
+    } catch {
+      // Ignore offline/unauthenticated errors
+    } finally {
+      initialSyncInFlight = null;
+    }
+  })();
+
+  return initialSyncInFlight;
 }
 
 /**
@@ -216,10 +437,12 @@ export function recordChapterRead(
     slug: input.slug ?? prev?.slug ?? "",
     title: input.title || prev?.title || "",
     coverImage: input.coverImage ?? prev?.coverImage ?? "",
-    lastChapterId: input.lastChapterId ?? (isSameChapter ? prev?.lastChapterId : undefined),
+    lastChapterId:
+      input.lastChapterId ?? (isSameChapter ? prev?.lastChapterId : undefined),
     lastChapterNumber: input.lastChapterNumber,
     lastChapterTitle:
-      input.lastChapterTitle ?? (isSameChapter ? prev?.lastChapterTitle : undefined),
+      input.lastChapterTitle ??
+      (isSameChapter ? prev?.lastChapterTitle : undefined),
     lastChapterUrl: input.lastChapterUrl || buildDefaultChapterUrl(input),
     scrollPct:
       input.scrollPct !== undefined
@@ -235,6 +458,11 @@ export function recordChapterRead(
 
   store[key] = nextEntry;
   writeStore(store);
+
+  if (getUserToken()) {
+    void pushEntriesToServer([nextEntry]);
+  }
+
   return nextEntry;
 }
 
@@ -286,6 +514,7 @@ export function updateScrollProgress(
 
   store[key] = updated;
   writeStore(store);
+  scheduleDebouncedScrollSync(updated);
   return updated;
 }
 
@@ -332,22 +561,36 @@ export function removeSeriesProgress(
   if (!isBrowser()) return;
   const store = readStore();
   const key = makeReadingHistoryKey(type, seriesId);
+  let removedSeriesId: number | string = seriesId;
+
   if (key in store) {
+    removedSeriesId = store[key].seriesId;
     delete store[key];
     writeStore(store);
-    return;
+  } else {
+    const target = String(seriesId);
+    let removed = false;
+    for (const [k, entry] of Object.entries(store)) {
+      if (entry.type === type && entry.slug === target) {
+        removedSeriesId = entry.seriesId;
+        delete store[k];
+        removed = true;
+      }
+    }
+    if (removed) writeStore(store);
   }
 
-  // Fallback match by slug
-  const target = String(seriesId);
-  let removed = false;
-  for (const [k, entry] of Object.entries(store)) {
-    if (entry.type === type && entry.slug === target) {
-      delete store[k];
-      removed = true;
-    }
+  pendingScrollEntries.delete(makeReadingHistoryKey(type, removedSeriesId));
+
+  if (getUserToken()) {
+    void apiFetch(
+      `/reading-progress/${type}/${encodeURIComponent(String(removedSeriesId))}`,
+      {
+        method: "DELETE",
+        auth: "user",
+      }
+    ).catch(() => {});
   }
-  if (removed) writeStore(store);
 }
 
 /**
@@ -356,10 +599,18 @@ export function removeSeriesProgress(
 export function clearReadingHistory(): void {
   if (!isBrowser()) return;
   try {
+    pendingScrollEntries.clear();
     window.localStorage.removeItem(READING_HISTORY_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent(READING_HISTORY_EVENT));
   } catch {
     // Ignore storage access failures
+  }
+
+  if (getUserToken()) {
+    void apiFetch("/reading-progress", {
+      method: "DELETE",
+      auth: "user",
+    }).catch(() => {});
   }
 }
 
@@ -372,7 +623,8 @@ export function isChapterRead(
   chapterNumber?: number | string
 ): boolean {
   if (!entry || !Array.isArray(entry.readChapterIds)) return false;
-  const idStr = chapterId !== undefined && chapterId !== null ? String(chapterId) : null;
+  const idStr =
+    chapterId !== undefined && chapterId !== null ? String(chapterId) : null;
   const numStr =
     chapterNumber !== undefined && chapterNumber !== null
       ? String(chapterNumber)
@@ -380,7 +632,10 @@ export function isChapterRead(
 
   return entry.readChapterIds.some((readId) => {
     const readStr = String(readId);
-    return (idStr !== null && readStr === idStr) || (numStr !== null && readStr === numStr);
+    return (
+      (idStr !== null && readStr === idStr) ||
+      (numStr !== null && readStr === numStr)
+    );
   });
 }
 
@@ -400,7 +655,7 @@ export interface UseReadingHistoryReturn {
 /**
  * SSR-safe React hook for reading history.
  * Always initializes empty before mount to prevent hydration mismatches,
- * hydrates in `useEffect`, and stays synced across components & browser tabs.
+ * hydrates in `useEffect`, and stays synced across components, tabs & server.
  */
 export function useReadingHistory(): UseReadingHistoryReturn {
   const [items, setItems] = useState<ReadingHistoryEntry[]>([]);
@@ -413,6 +668,7 @@ export function useReadingHistory(): UseReadingHistoryReturn {
 
   useEffect(() => {
     sync();
+    void syncReadingHistoryWithServer(false);
 
     const handleCustomEvent = () => sync();
     const handleStorageEvent = (e: StorageEvent) => {
@@ -420,13 +676,18 @@ export function useReadingHistory(): UseReadingHistoryReturn {
         sync();
       }
     };
+    const handleAuthChange = () => {
+      void syncReadingHistoryWithServer(true);
+    };
 
     window.addEventListener(READING_HISTORY_EVENT, handleCustomEvent);
     window.addEventListener("storage", handleStorageEvent);
+    window.addEventListener("auth-change", handleAuthChange);
 
     return () => {
       window.removeEventListener(READING_HISTORY_EVENT, handleCustomEvent);
       window.removeEventListener("storage", handleStorageEvent);
+      window.removeEventListener("auth-change", handleAuthChange);
     };
   }, [sync]);
 

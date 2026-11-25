@@ -91,6 +91,7 @@ def notify_favorite_users_new_chapter(
         .where(
             models.Favorite.user_id.isnot(None),
             models.User.is_active == True,
+            func.coalesce(models.Favorite.notify_new_chapters, True) == True,
             target_filter,
         )
         .distinct()

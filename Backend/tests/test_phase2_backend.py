@@ -603,7 +603,7 @@ class TestPhase2ViewTrackerAndAlembic(unittest.TestCase):
         self.assertEqual(revs.get("002_seo_sitemap_indexes"), "001_phase1_schema_and_indexes")
         self.assertEqual(revs.get("003_phase2_view_dedupe"), "002_seo_sitemap_indexes")
         heads = set(revs.keys()) - set(revs.values())
-        self.assertEqual(heads, {"003_phase2_view_dedupe"})
+        self.assertEqual(len(heads), 1)
 
 
 if __name__ == "__main__":

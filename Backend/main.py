@@ -26,7 +26,21 @@ from wtforms.widgets import FileInput
 import uuid
 
 # --- ROUTERLARI ÇAĞIR ---
-from routers import auth, webtoon, episode, comments, favorites, likes, novel, admin as admin_router, notifications, reactions, sitemap
+from routers import (
+    auth,
+    webtoon,
+    episode,
+    comments,
+    favorites,
+    likes,
+    novel,
+    admin as admin_router,
+    notifications,
+    reactions,
+    sitemap,
+    reading_progress,
+    recommendations,
+)
 
 # 1. Yeni dev ortamları için eksik tabloları oluştur (şema göçleri Alembic ile yönetilir)
 models.Base.metadata.create_all(bind=engine)
@@ -298,6 +312,8 @@ app.include_router(admin_router.router)
 app.include_router(notifications.router)
 app.include_router(reactions.router)
 app.include_router(sitemap.router)
+app.include_router(reading_progress.router)
+app.include_router(recommendations.router)
 
 @app.get("/")
 def ana_sayfa():

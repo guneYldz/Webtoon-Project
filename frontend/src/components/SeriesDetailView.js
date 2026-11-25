@@ -9,22 +9,33 @@ import {
   Layers,
   PenTool,
   RotateCcw,
+  MessageSquare,
 } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/apiClient";
 import { seriesTypeLabel, seriesKindTr } from "@/lib/seriesType";
 import { formatChapterNumber } from "@/lib/chapterTitle";
 import { formatTrNumber } from "@/lib/formatTr";
 import { useReadingHistory } from "@/lib/readingHistory";
-import { Badge, badgeVariantFromSeriesType, buttonClasses } from "@/components/ui";
+import {
+  Badge,
+  badgeVariantFromSeriesType,
+  buttonClasses,
+} from "@/components/ui";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import FavoriteButton from "@/components/FavoriteButton";
 import SeriesSummary from "@/components/SeriesSummary";
 import ChapterDirectory from "@/components/ChapterDirectory";
+import CommentSection from "@/components/CommentSection";
+import RecommendedSeries from "@/components/RecommendedSeries";
 
 /**
  * Unified Series Detail view for Webtoon, Manga, and Novel.
  */
-export default function SeriesDetailView({ series, type = "webtoon", routeKey }) {
+export default function SeriesDetailView({
+  series,
+  type = "webtoon",
+  routeKey,
+}) {
   const { hydrated, getSeriesProgress } = useReadingHistory();
 
   if (!series) return null;
@@ -33,7 +44,10 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
   const normalizedType = isNovel
     ? "NOVEL"
     : seriesTypeLabel(series.type, series.typeLabel);
-  const kindLabel = seriesKindTr(series.type, isNovel ? "NOVEL" : series.typeLabel);
+  const kindLabel = seriesKindTr(
+    series.type,
+    isNovel ? "NOVEL" : series.typeLabel
+  );
   const slugOrId = series.slug || routeKey || series.id;
   const basePath = isNovel ? `/novel/${slugOrId}` : `/webtoon/${slugOrId}`;
 
@@ -134,16 +148,25 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
                   {isOngoing ? "Devam Ediyor" : "Tamamlandı"}
                 </Badge>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-elevated/80 border border-subtle text-xs font-medium text-ink-secondary">
-                  <Eye className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+                  <Eye
+                    className="h-3.5 w-3.5 text-ink-muted"
+                    aria-hidden="true"
+                  />
                   {formatTrNumber(series.view_count)}
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-elevated/80 border border-subtle text-xs font-medium text-ink-secondary">
-                  <Layers className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+                  <Layers
+                    className="h-3.5 w-3.5 text-ink-muted"
+                    aria-hidden="true"
+                  />
                   {rawChapters.length} Bölüm
                 </span>
                 {series.author && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-elevated/80 border border-subtle text-xs font-medium text-ink-secondary">
-                    <PenTool className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+                    <PenTool
+                      className="h-3.5 w-3.5 text-ink-muted"
+                      aria-hidden="true"
+                    />
                     {series.author}
                   </span>
                 )}
@@ -154,22 +177,25 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
               </h1>
 
               {/* Clickable Categories */}
-              {Array.isArray(series.categories) && series.categories.length > 0 && (
-                <div className="flex flex-wrap justify-center md:justify-start gap-2 mb-6">
-                  {series.categories.map((cat) => (
-                    <Link
-                      key={cat.id || cat.name}
-                      href={`/kesfet?kategori=${encodeURIComponent(cat.name)}`}
-                      className="px-3 py-1 rounded-full bg-elevated/90 border border-subtle text-xs font-medium text-ink-secondary hover:text-ink-primary hover:border-accent-border hover:bg-accent-soft transition"
-                    >
-                      {cat.name}
-                    </Link>
-                  ))}
-                </div>
-              )}
+              {Array.isArray(series.categories) &&
+                series.categories.length > 0 && (
+                  <div className="flex flex-wrap justify-center md:justify-start gap-2 mb-6">
+                    {series.categories.map((cat) => (
+                      <Link
+                        key={cat.id || cat.name}
+                        href={`/kesfet?kategori=${encodeURIComponent(
+                          cat.name
+                        )}`}
+                        className="px-3 py-1 rounded-full bg-elevated/90 border border-subtle text-xs font-medium text-ink-secondary hover:text-ink-primary hover:border-accent-border hover:bg-accent-soft transition"
+                      >
+                        {cat.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
 
               {/* Primary CTA Row */}
-              <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-7">
+              <div className="flex flex-wrap justify-center md:justify-start items-center gap-3 mb-7">
                 {continueHref ? (
                   <>
                     <Link
@@ -180,7 +206,10 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
                         className: "shadow-lg",
                       })}
                     >
-                      <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+                      <Play
+                        className="h-4 w-4 fill-current"
+                        aria-hidden="true"
+                      />
                       <span>Devam Et: Bölüm {continueNum}</span>
                     </Link>
                     {firstHref && (
@@ -212,6 +241,17 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
                 ) : null}
 
                 <FavoriteButton type={type} id={series.id} />
+
+                <a
+                  href="#seri-yorumlari"
+                  className={buttonClasses({
+                    variant: "secondary",
+                    size: "lg",
+                  })}
+                >
+                  <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                  <span>Yorumlar</span>
+                </a>
               </div>
 
               <SeriesSummary text={series.summary} boxed />
@@ -220,25 +260,44 @@ export default function SeriesDetailView({ series, type = "webtoon", routeKey })
         </div>
       </div>
 
-      {/* Chapters Section */}
-      <div className="container mx-auto max-w-7xl px-4 py-10">
-        <div className="flex items-center justify-between gap-4 border-b border-subtle pb-4 mb-6">
-          <h2 className="text-xl sm:text-2xl font-bold text-ink-primary flex items-center gap-2.5">
-            <span className="w-1.5 h-6 rounded-full bg-accent" aria-hidden="true" />
-            <span>Bölümler</span>
-          </h2>
-          <span className="text-xs font-semibold text-ink-secondary bg-surface px-3 py-1.5 rounded-lg border border-subtle tabular-nums">
-            {rawChapters.length} Bölüm
-          </span>
+      {/* Chapters, Series Comments & Smart Recommendations */}
+      <div className="container mx-auto max-w-7xl px-4 py-10 space-y-14">
+        <div>
+          <div className="flex items-center justify-between gap-4 border-b border-subtle pb-4 mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-ink-primary flex items-center gap-2.5">
+              <span
+                className="w-1.5 h-6 rounded-full bg-accent"
+                aria-hidden="true"
+              />
+              <span>Bölümler</span>
+            </h2>
+            <span className="text-xs font-semibold text-ink-secondary bg-surface px-3 py-1.5 rounded-lg border border-subtle tabular-nums">
+              {rawChapters.length} Bölüm
+            </span>
+          </div>
+
+          <ChapterDirectory
+            items={rawChapters}
+            type={type}
+            seriesId={series.id}
+            basePath={basePath}
+            perPage={30}
+          />
         </div>
 
-        <ChapterDirectory
-          items={rawChapters}
-          type={type}
-          seriesId={series.id}
-          basePath={basePath}
-          perPage={30}
-        />
+        {/* Dedicated Series Discussion & Reviews Section */}
+        <div
+          id="seri-yorumlari"
+          className="border-t border-subtle pt-8 scroll-mt-20"
+        >
+          <CommentSection
+            type={isNovel ? "series_novel" : "series_webtoon"}
+            targetId={series.id}
+          />
+        </div>
+
+        {/* Smart Tag & Co-Favorite Recommendations */}
+        <RecommendedSeries currentId={series.id} type={type} />
       </div>
     </div>
   );

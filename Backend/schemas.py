@@ -253,10 +253,19 @@ class CommentOut(BaseModel):
 class CommentResponse(CommentOut):
     pass
 
-# Favori Ekleme
+# Favori Ekleme / Güncelleme
 class FavoriteCreate(BaseModel):
     webtoon_id: Optional[int] = None
     novel_id: Optional[int] = None
+    status: Optional[str] = None
+    notify_new_chapters: Optional[bool] = None
+
+
+class FavoriteUpdate(BaseModel):
+    webtoon_id: Optional[int] = None
+    novel_id: Optional[int] = None
+    status: Optional[str] = None
+    notify_new_chapters: Optional[bool] = None
 
 # Beğeni Ekleme
 class LikeCreate(BaseModel):
