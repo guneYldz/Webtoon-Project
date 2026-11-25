@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from typing import Optional
 import os
 from dotenv import load_dotenv
-from utils.media import validate_and_save_image
+from utils.cache import invalidate_admin_stats_cache
+from utils.media import delete_static_file_safe, validate_and_save_image
 
 load_dotenv()
 
@@ -288,6 +289,7 @@ def kullanici_olustur(payload: schemas.RegisterRequest, db: Session = Depends(ge
     db.add(yeni_kullanici)
     db.commit()
     db.refresh(yeni_kullanici)
+    invalidate_admin_stats_cache()
     return {"mesaj": "Kayit Basarili", "kullanici": yeni_kullanici.username}
 
 @router.post("/giris-yap")
@@ -574,6 +576,7 @@ def profil_resmi_guncelle(
         "static/profile_images",
         max_bytes=5 * 1024 * 1024,
         prefix=f"user_{current_user.id}_",
+        max_width=512,
     )
 
     old_path = current_user.profile_image
@@ -581,11 +584,8 @@ def profil_resmi_guncelle(
     db.commit()
     db.refresh(current_user)
 
-    if old_path and old_path != file_path and os.path.exists(old_path):
-        try:
-            os.remove(old_path)
-        except OSError:
-            pass
+    if old_path and old_path != file_path:
+        delete_static_file_safe(old_path)
 
     return {"message": "Profil fotoğrafı güncellendi", "image_url": file_path}
 

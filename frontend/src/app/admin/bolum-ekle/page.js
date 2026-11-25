@@ -54,14 +54,27 @@ function BolumEkle() {
       let list = [];
       try {
         if (token) {
-          const res = await apiFetch("/admin/webtoon/list", { auth: "admin" });
-          if (res.ok) {
-            const data = await res.json();
+          const optRes = await apiFetch("/admin/options/webtoons", {
+            auth: "admin",
+            cache: "no-store",
+          });
+          if (optRes.ok) {
+            const data = await optRes.json();
             list = Array.isArray(data) ? data : data.data || [];
+          }
+          if (!list.length) {
+            const res = await apiFetch("/admin/webtoons/list", {
+              auth: "admin",
+              cache: "no-store",
+            });
+            if (res.ok) {
+              const data = await res.json();
+              list = Array.isArray(data) ? data : data.data || [];
+            }
           }
         }
         if (!list.length) {
-          const res = await apiFetch("/webtoons/?limit=1000");
+          const res = await apiFetch("/webtoons/?limit=100");
           if (res.ok) {
             const data = await res.json();
             list = Array.isArray(data) ? data : data.data || [];

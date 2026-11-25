@@ -1,15 +1,30 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import hashlib
 import logging
 import threading
+import time
 from typing import Optional
 
 from fastapi import BackgroundTasks, Request
-from sqlalchemy import func, update
+from sqlalchemy import func, text, update
+from sqlalchemy.exc import SQLAlchemyError
 
 import database
 import models
 
 logger = logging.getLogger(__name__)
+
+_PG_UPSERT_SQL = text(
+    """
+    INSERT INTO view_dedupe (dedupe_key, expires_at)
+    VALUES (:k, :exp)
+    ON CONFLICT (dedupe_key) DO UPDATE
+    SET expires_at = EXCLUDED.expires_at
+    WHERE view_dedupe.expires_at < NOW()
+    RETURNING dedupe_key
+    """
+)
+_PG_PRUNE_SQL = text("DELETE FROM view_dedupe WHERE expires_at < NOW()")
 
 BOT_USER_AGENT_TOKENS = (
     "googlebot",
@@ -132,7 +147,9 @@ def schedule_view_increment(
 class ViewTracker:
     """
     IP tabanlı view count rate limiting sistemi.
-    Aynı IP'nin belirli bir süre içinde aynı içeriği tekrar izlemesini engeller.
+    PostgreSQL üzerinde UNLOGGED view_dedupe tablosuyla çoklu worker arası atomik
+    deduplication yapar; SQLite testlerinde veya tablo henüz migrate edilmemişken
+    bellek içi sözlüğe sorunsuz geri döner.
     """
 
     def __init__(self, ttl_seconds: int = 3600, cleanup_interval_seconds: int = 60):
@@ -141,8 +158,40 @@ class ViewTracker:
         self.views = {}  # {(ip, content_type, content_id): timestamp}
         self.last_cleanup = datetime.now()
         self.lock = threading.Lock()
+        self._last_pg_cleanup_mono = 0.0
+        self._pg_fallback_until_mono = 0.0
 
-    def should_count_view(self, ip: str, content_type: str, content_id: int) -> bool:
+    @staticmethod
+    def _build_dedupe_key(ip: str, content_type: str, content_id: int) -> str:
+        raw = f"{content_type}:{content_id}:{ip}"
+        if len(raw) <= 160:
+            return raw
+        ip_hash = hashlib.sha256((ip or "").encode("utf-8")).hexdigest()[:48]
+        return f"{content_type}:{content_id}:{ip_hash}"[:160]
+
+    def _is_postgres_active(self) -> bool:
+        engine = getattr(database, "engine", None)
+        dialect_name = getattr(getattr(engine, "dialect", None), "name", None)
+        return dialect_name == "postgresql"
+
+    def _should_count_postgres(self, ip: str, content_type: str, content_id: int) -> bool:
+        dedupe_key = self._build_dedupe_key(ip, content_type, content_id)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=self.ttl)
+        now_mono = time.monotonic()
+
+        should_prune = False
+        with self.lock:
+            if (now_mono - self._last_pg_cleanup_mono) >= self.cleanup_interval:
+                self._last_pg_cleanup_mono = now_mono
+                should_prune = True
+
+        with database.engine.begin() as conn:
+            row = conn.execute(_PG_UPSERT_SQL, {"k": dedupe_key, "exp": expires_at}).first()
+            if should_prune:
+                conn.execute(_PG_PRUNE_SQL)
+        return row is not None
+
+    def _should_count_memory(self, ip: str, content_type: str, content_id: int) -> bool:
         key = (ip, content_type, content_id)
         now = datetime.now()
 
@@ -162,6 +211,16 @@ class ViewTracker:
             self.views[key] = now
             return True
 
+    def should_count_view(self, ip: str, content_type: str, content_id: int) -> bool:
+        if self._is_postgres_active() and time.monotonic() >= self._pg_fallback_until_mono:
+            try:
+                return self._should_count_postgres(ip, content_type, content_id)
+            except SQLAlchemyError as exc:
+                self._pg_fallback_until_mono = time.monotonic() + 60.0
+                logger.warning("view_dedupe PostgreSQL fallback to memory: %s", exc)
+
+        return self._should_count_memory(ip, content_type, content_id)
+
     def _cleanup_old_entries(self, now: datetime):
         expired_keys = [
             k for k, v in self.views.items()
@@ -180,6 +239,7 @@ class ViewTracker:
                 "total_entries": total,
                 "content_types": breakdown,
                 "ttl_seconds": self.ttl,
+                "backend": "postgresql" if self._is_postgres_active() else "memory",
             }
 
 

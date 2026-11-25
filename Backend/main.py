@@ -10,6 +10,7 @@ from sqladmin.authentication import AuthenticationBackend
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.datastructures import UploadFile
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -18,7 +19,8 @@ from database import engine, get_db
 import models
 import os
 import signals
-from utils.media import validate_and_save_image
+from utils.cache import invalidate_content_caches, vitrin_cache
+from utils.media import delete_static_file_safe, validate_and_save_image
 from wtforms import TextAreaField, FileField, Field
 from wtforms.widgets import FileInput
 import uuid
@@ -70,6 +72,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "Origin"],
+    expose_headers=["X-Total-Count"],
 )
 
 # ==========================================
@@ -159,15 +162,24 @@ class WebtoonAdmin(ModelView, model=models.Webtoon):
             val = data.get(field)
             if isinstance(val, UploadFile) and val.filename and val.size > 0:
                 if not is_created and getattr(model, field):
-                    signals.delete_file(getattr(model, field))
+                    delete_static_file_safe(getattr(model, field))
                 folder = UPLOAD_DIR_COVERS if field == "cover_image" else UPLOAD_DIR_BANNERS
                 prefix = "banner-" if field == "banner_image" else ""
+                max_w = 1200 if field == "cover_image" else 1920
                 data[field] = await run_in_threadpool(
-                    validate_and_save_image, val, folder, 15 * 1024 * 1024, prefix
+                    validate_and_save_image, val, folder, 15 * 1024 * 1024, prefix, True, max_w
                 )
             else:
                 if field in data: del data[field]
         return await super().on_model_change(data, model, is_created, request)
+
+    async def after_model_change(self, data, model, is_created, request):
+        invalidate_content_caches()
+        return await super().after_model_change(data, model, is_created, request)
+
+    async def after_model_delete(self, model, request):
+        invalidate_content_caches()
+        return await super().after_model_delete(model, request)
 
     column_formatters = {
         models.Webtoon.cover_image: lambda m, a: Markup(f'<img src="/{m.cover_image}" width="50" height="75" style="border-radius:4px; object-fit:cover;">') if m.cover_image else "Yok",
@@ -220,15 +232,24 @@ class NovelAdmin(ModelView, model=models.Novel):
             val = data.get(field)
             if isinstance(val, UploadFile) and val.filename and val.size > 0:
                 if not is_created and getattr(model, field):
-                    signals.delete_file(getattr(model, field))
+                    delete_static_file_safe(getattr(model, field))
                 folder = UPLOAD_DIR_COVERS if field == "cover_image" else UPLOAD_DIR_BANNERS
                 prefix = "novel-banner-" if field == "banner_image" else "novel-"
+                max_w = 1200 if field == "cover_image" else 1920
                 data[field] = await run_in_threadpool(
-                    validate_and_save_image, val, folder, 15 * 1024 * 1024, prefix
+                    validate_and_save_image, val, folder, 15 * 1024 * 1024, prefix, True, max_w
                 )
             else:
                 if field in data: del data[field]
         return await super().on_model_change(data, model, is_created, request)
+
+    async def after_model_change(self, data, model, is_created, request):
+        invalidate_content_caches()
+        return await super().after_model_change(data, model, is_created, request)
+
+    async def after_model_delete(self, model, request):
+        invalidate_content_caches()
+        return await super().after_model_delete(model, request)
 
 class NovelChapterAdmin(ModelView, model=models.NovelChapter):
     name = "Roman Bölümü"
@@ -282,6 +303,16 @@ app.include_router(sitemap.router)
 def ana_sayfa():
     return {"durum": "Sistem Hazır", "mesaj": "Webtoon, Manga & Novel API Hazır! 🚀"}
 
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"status": "ok"}
+
+
 @app.get("/categories")
 def public_categories(db: Session = Depends(get_db)):
     cats = db.query(models.Category).order_by(models.Category.name.asc()).all()
@@ -290,6 +321,10 @@ def public_categories(db: Session = Depends(get_db)):
 
 @app.get("/vitrin")
 def get_vitrin(db: Session = Depends(get_db)):
+    cached = vitrin_cache.get("vitrin")
+    if cached is not None:
+        return cached
+
     try:
         featured_webtoons = (
             db.query(models.Webtoon)
@@ -325,4 +360,5 @@ def get_vitrin(db: Session = Depends(get_db)):
             "status": n.status or "ongoing", "type": "novel", "typeLabel": "NOVEL", "bg_color": "purple"
         })
     vitrin_listesi.sort(key=lambda item: (-int(item["id"]), item["type"]))
+    vitrin_cache.set("vitrin", vitrin_listesi)
     return vitrin_listesi

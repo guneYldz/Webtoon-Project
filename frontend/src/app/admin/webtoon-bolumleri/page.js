@@ -29,7 +29,19 @@ export default function WebtoonChaptersPage() {
       try {
         const token = getAdminToken();
         if (token) {
-          const adminRes = await apiFetch("/admin/webtoon/list", {
+          const optRes = await apiFetch("/admin/options/webtoons", {
+            auth: "admin",
+            cache: "no-store",
+          });
+          if (optRes.ok) {
+            const data = await optRes.json();
+            const list = Array.isArray(data) ? data : data.data || [];
+            if (list.length) {
+              setWebtoons(list);
+              return;
+            }
+          }
+          const adminRes = await apiFetch("/admin/webtoons/list", {
             auth: "admin",
             cache: "no-store",
           });
@@ -39,7 +51,7 @@ export default function WebtoonChaptersPage() {
             return;
           }
         }
-        const res = await apiFetch("/webtoons/?limit=1000");
+        const res = await apiFetch("/webtoons/?limit=100");
         if (res.ok) {
           const data = await res.json();
           setWebtoons(Array.isArray(data) ? data : []);

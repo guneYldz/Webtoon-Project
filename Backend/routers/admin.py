@@ -10,9 +10,14 @@ import os
 import re
 import uuid
 from typing import Optional, List
-from routers.auth import get_current_admin  # ADMIN AUTH
+from routers.auth import get_current_admin, get_current_editor  # ADMIN / EDITOR AUTH
 from fastapi.encoders import jsonable_encoder
-from utils.media import validate_and_save_image
+from utils.cache import (
+    admin_stats_cache,
+    invalidate_admin_stats_cache,
+    invalidate_content_caches,
+)
+from utils.media import delete_static_file_safe, validate_and_save_image
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +48,6 @@ def _validate_announcement_link(link: Optional[str]) -> Optional[str]:
         status_code=400,
         detail="Duyuru bağlantısı '/', 'http://' veya 'https://' ile başlamalıdır.",
     )
-
-
-def _remove_file_quietly(path: Optional[str]):
-    if path and os.path.exists(path):
-        try:
-            os.remove(path)
-        except OSError:
-            pass
 
 
 def _slugify_title(title: str) -> str:
@@ -105,6 +102,62 @@ def with_categories(obj):
     return data
 
 
+# ==================== SLIM OPTIONS (DROPDOWNS) ====================
+
+@router.get("/options/webtoons")
+async def get_webtoon_options(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_editor),
+):
+    rows = (
+        db.query(
+            models.Webtoon.id,
+            models.Webtoon.title,
+            models.Webtoon.slug,
+            models.Webtoon.type,
+            models.Webtoon.is_published,
+        )
+        .order_by(models.Webtoon.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "title": row.title,
+            "slug": row.slug,
+            "type": getattr(row.type, "value", row.type) or "WEBTOON",
+            "is_published": bool(row.is_published),
+        }
+        for row in rows
+    ]
+
+
+@router.get("/options/novels")
+async def get_novel_options(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_editor),
+):
+    rows = (
+        db.query(
+            models.Novel.id,
+            models.Novel.title,
+            models.Novel.slug,
+            models.Novel.is_published,
+        )
+        .order_by(models.Novel.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "title": row.title,
+            "slug": row.slug,
+            "is_published": bool(row.is_published),
+        }
+        for row in rows
+    ]
+
+
 # ==================== WEBTOONS ====================
 
 @router.post("/webtoon/create")
@@ -128,12 +181,12 @@ async def create_webtoon(
     try:
         if cover_image and cover_image.filename:
             cover_path = await run_in_threadpool(
-                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024, "", True, 1200
             )
 
         if banner_image and banner_image.filename:
             banner_path = await run_in_threadpool(
-                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-", True, 1920
             )
 
         base_slug = _slugify_title(title)
@@ -160,18 +213,19 @@ async def create_webtoon(
         db.add(new_webtoon)
         db.commit()
         db.refresh(new_webtoon)
+        invalidate_content_caches()
 
         return {"status": "success", "message": "Webtoon başarıyla oluşturuldu!", "data": with_categories(new_webtoon)}
 
     except HTTPException:
         db.rollback()
-        _remove_file_quietly(cover_path)
-        _remove_file_quietly(banner_path)
+        delete_static_file_safe(cover_path)
+        delete_static_file_safe(banner_path)
         raise
     except Exception:
         db.rollback()
-        _remove_file_quietly(cover_path)
-        _remove_file_quietly(banner_path)
+        delete_static_file_safe(cover_path)
+        delete_static_file_safe(banner_path)
         logger.exception("Webtoon oluşturma hatası")
         raise HTTPException(status_code=500, detail="Webtoon oluşturulurken sunucu hatası oluştu.")
 
@@ -292,13 +346,13 @@ async def update_webtoon(
     try:
         if cover_image and cover_image.filename:
             new_cover_path = await run_in_threadpool(
-                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024, "", True, 1200
             )
             webtoon.cover_image = new_cover_path
 
         if banner_image and banner_image.filename:
             new_banner_path = await run_in_threadpool(
-                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-", True, 1920
             )
             webtoon.banner_image = new_banner_path
 
@@ -308,22 +362,23 @@ async def update_webtoon(
 
         db.commit()
         db.refresh(webtoon)
+        invalidate_content_caches()
 
         if new_cover_path and old_cover_path and old_cover_path != new_cover_path:
-            _remove_file_quietly(old_cover_path)
+            delete_static_file_safe(old_cover_path)
         if new_banner_path and old_banner_path and old_banner_path != new_banner_path:
-            _remove_file_quietly(old_banner_path)
+            delete_static_file_safe(old_banner_path)
 
         return {"status": "success", "message": "Webtoon güncellendi", "data": with_categories(webtoon)}
     except HTTPException:
         db.rollback()
-        _remove_file_quietly(new_cover_path)
-        _remove_file_quietly(new_banner_path)
+        delete_static_file_safe(new_cover_path)
+        delete_static_file_safe(new_banner_path)
         raise
     except Exception:
         db.rollback()
-        _remove_file_quietly(new_cover_path)
-        _remove_file_quietly(new_banner_path)
+        delete_static_file_safe(new_cover_path)
+        delete_static_file_safe(new_banner_path)
         logger.exception("Webtoon güncelleme hatası (id=%s)", webtoon_id)
         raise HTTPException(status_code=500, detail="Webtoon güncellenirken sunucu hatası oluştu.")
 
@@ -341,6 +396,7 @@ async def delete_webtoon(
     try:
         db.delete(webtoon)
         db.commit()
+        invalidate_content_caches()
         return {"status": "success", "message": f"'{webtoon.title}' silindi"}
     except Exception:
         db.rollback()
@@ -432,12 +488,12 @@ async def create_novel(
     try:
         if cover_image and cover_image.filename:
             cover_path = await run_in_threadpool(
-                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024, "", True, 1200
             )
 
         if banner_image and banner_image.filename:
             banner_path = await run_in_threadpool(
-                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-", True, 1920
             )
 
         base_slug = _slugify_title(title)
@@ -464,16 +520,17 @@ async def create_novel(
         db.add(new_novel)
         db.commit()
         db.refresh(new_novel)
+        invalidate_content_caches()
         return {"status": "success", "message": "Novel oluşturuldu", "data": with_categories(new_novel)}
     except HTTPException:
         db.rollback()
-        _remove_file_quietly(cover_path)
-        _remove_file_quietly(banner_path)
+        delete_static_file_safe(cover_path)
+        delete_static_file_safe(banner_path)
         raise
     except Exception:
         db.rollback()
-        _remove_file_quietly(cover_path)
-        _remove_file_quietly(banner_path)
+        delete_static_file_safe(cover_path)
+        delete_static_file_safe(banner_path)
         logger.exception("Novel oluşturma hatası")
         raise HTTPException(status_code=500, detail="Novel oluşturulurken sunucu hatası oluştu.")
 
@@ -521,13 +578,13 @@ async def update_novel(
     try:
         if cover_image and cover_image.filename:
             new_cover_path = await run_in_threadpool(
-                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024
+                validate_and_save_image, cover_image, UPLOAD_DIR, 15 * 1024 * 1024, "", True, 1200
             )
             novel.cover_image = new_cover_path
 
         if banner_image and banner_image.filename:
             new_banner_path = await run_in_threadpool(
-                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-"
+                validate_and_save_image, banner_image, UPLOAD_DIR_BANNERS, 15 * 1024 * 1024, "banner-", True, 1920
             )
             novel.banner_image = new_banner_path
 
@@ -537,22 +594,23 @@ async def update_novel(
 
         db.commit()
         db.refresh(novel)
+        invalidate_content_caches()
 
         if new_cover_path and old_cover_path and old_cover_path != new_cover_path:
-            _remove_file_quietly(old_cover_path)
+            delete_static_file_safe(old_cover_path)
         if new_banner_path and old_banner_path and old_banner_path != new_banner_path:
-            _remove_file_quietly(old_banner_path)
+            delete_static_file_safe(old_banner_path)
 
         return {"status": "success", "message": "Novel güncellendi", "data": with_categories(novel)}
     except HTTPException:
         db.rollback()
-        _remove_file_quietly(new_cover_path)
-        _remove_file_quietly(new_banner_path)
+        delete_static_file_safe(new_cover_path)
+        delete_static_file_safe(new_banner_path)
         raise
     except Exception:
         db.rollback()
-        _remove_file_quietly(new_cover_path)
-        _remove_file_quietly(new_banner_path)
+        delete_static_file_safe(new_cover_path)
+        delete_static_file_safe(new_banner_path)
         logger.exception("Novel güncelleme hatası (id=%s)", novel_id)
         raise HTTPException(status_code=500, detail="Novel güncellenirken sunucu hatası oluştu.")
 
@@ -570,6 +628,7 @@ async def delete_novel(
     try:
         db.delete(novel)
         db.commit()
+        invalidate_content_caches()
         return {"status": "success", "message": f"'{novel.title}' silindi"}
     except Exception:
         db.rollback()
@@ -599,6 +658,7 @@ async def create_category(
         db.add(new_cat)
         db.commit()
         db.refresh(new_cat)
+        invalidate_content_caches()
         return {"status": "success", "message": "Kategori oluşturuldu", "data": new_cat}
     except Exception:
         db.rollback()
@@ -620,6 +680,7 @@ async def update_category(
     cat.name = name
     try:
         db.commit()
+        invalidate_content_caches()
         return {"status": "success", "message": "Kategori güncellendi", "data": cat}
     except Exception:
         db.rollback()
@@ -640,6 +701,7 @@ async def delete_category(
     try:
         db.delete(cat)
         db.commit()
+        invalidate_content_caches()
         return {"status": "success", "message": f"'{cat.name}' silindi"}
     except Exception:
         db.rollback()
@@ -742,6 +804,7 @@ async def update_user(
     try:
         db.commit()
         db.refresh(user)
+        invalidate_admin_stats_cache()
         return {
             "status": "success",
             "message": "Kullanıcı güncellendi",
@@ -768,6 +831,7 @@ async def delete_user(
     try:
         db.delete(user)
         db.commit()
+        invalidate_admin_stats_cache()
         return {"status": "success", "message": f"'{user.username}' silindi"}
     except Exception:
         db.rollback()
@@ -786,8 +850,8 @@ async def create_announcement(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
-    """Admin duyurusu — duyuru kanalına kaydeder + tüm aktif kullanıcılara bildirim gönderir."""
-    from routers.notifications import create_notification
+    """Admin duyurusu — duyuru kanalına kaydeder + tüm aktif kullanıcılara toplu SQL ile bildirim gönderir."""
+    from routers.notifications import notify_all_active_users
 
     title = title.strip()
     message = message.strip()
@@ -800,7 +864,7 @@ async def create_announcement(
     try:
         if image and image.filename:
             image_path = await run_in_threadpool(
-                validate_and_save_image, image, UPLOAD_DIR_ANNOUNCEMENTS, 10 * 1024 * 1024
+                validate_and_save_image, image, UPLOAD_DIR_ANNOUNCEMENTS, 10 * 1024 * 1024, "", True, 1200
             )
 
         # 1) Duyuru kanalına kalıcı kayıt
@@ -816,21 +880,17 @@ async def create_announcement(
 
         duyuru_link = f"/duyurular#duyuru-{announcement.id}"
 
-        # 2) Herkese bildirim (tıklanınca duyuru sayfasına gider)
-        users = db.query(models.User).filter(models.User.is_active == True).all()
-        count = 0
-        for u in users:
-            create_notification(
-                db,
-                user_id=u.id,
-                type_="announcement",
-                title=title,
-                message=message,
-                link=duyuru_link,
-            )
-            count += 1
+        # 2) Tüm aktif kullanıcılara tek toplu SQL INSERT ile bildirim
+        count = notify_all_active_users(
+            db,
+            type_="announcement",
+            title=title,
+            message=message,
+            link=duyuru_link,
+        )
 
         db.commit()
+        invalidate_admin_stats_cache()
         return {
             "status": "success",
             "message": f"Duyuru yayınlandı ve {count} kullanıcıya bildirildi",
@@ -840,11 +900,11 @@ async def create_announcement(
         }
     except HTTPException:
         db.rollback()
-        _remove_file_quietly(image_path)
+        delete_static_file_safe(image_path)
         raise
     except Exception:
         db.rollback()
-        _remove_file_quietly(image_path)
+        delete_static_file_safe(image_path)
         logger.exception("Duyuru oluşturma hatası")
         raise HTTPException(status_code=500, detail="Duyuru yayınlanırken sunucu hatası oluştu.")
 
@@ -918,6 +978,7 @@ async def delete_comment_admin(
         db.query(models.Comment).filter(models.Comment.parent_id == comment_id).delete()
         db.delete(comment)
         db.commit()
+        invalidate_admin_stats_cache()
         return {"status": "success", "message": "Yorum ve yanıtları silindi"}
     except Exception:
         db.rollback()
@@ -932,6 +993,10 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
+    cached = admin_stats_cache.get("stats")
+    if cached is not None:
+        return {"status": "success", "data": cached}
+
     stats = {
         "total_users": db.query(func.count(models.User.id)).scalar(),
         "total_webtoons": db.query(func.count(models.Webtoon.id)).scalar(),
@@ -942,4 +1007,5 @@ async def get_dashboard_stats(
         "total_chapters": db.query(func.count(models.NovelChapter.id)).scalar(),
         "total_comments": db.query(func.count(models.Comment.id)).scalar(),
     }
+    admin_stats_cache.set("stats", stats)
     return {"status": "success", "data": stats}

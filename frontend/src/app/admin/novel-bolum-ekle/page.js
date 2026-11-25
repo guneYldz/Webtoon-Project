@@ -52,14 +52,27 @@ function NovelBolumEkle() {
       let list = [];
       try {
         if (token) {
-          const res = await apiFetch("/admin/novel/list", { auth: "admin" });
-          if (res.ok) {
-            const data = await res.json();
+          const optRes = await apiFetch("/admin/options/novels", {
+            auth: "admin",
+            cache: "no-store",
+          });
+          if (optRes.ok) {
+            const data = await optRes.json();
             list = Array.isArray(data) ? data : data.data || [];
+          }
+          if (!list.length) {
+            const res = await apiFetch("/admin/novels/list", {
+              auth: "admin",
+              cache: "no-store",
+            });
+            if (res.ok) {
+              const data = await res.json();
+              list = Array.isArray(data) ? data : data.data || [];
+            }
           }
         }
         if (!list.length) {
-          const res = await apiFetch("/novels/?limit=1000");
+          const res = await apiFetch("/novels/?limit=100");
           if (res.ok) {
             const data = await res.json();
             list = Array.isArray(data) ? data : data.data || [];

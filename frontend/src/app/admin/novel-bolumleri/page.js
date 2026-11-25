@@ -63,7 +63,19 @@ export default function NovelChaptersPage() {
       try {
         const token = getAdminToken();
         if (token) {
-          const adminRes = await apiFetch("/admin/novel/list", {
+          const optRes = await apiFetch("/admin/options/novels", {
+            auth: "admin",
+            cache: "no-store",
+          });
+          if (optRes.ok) {
+            const data = await optRes.json();
+            const list = Array.isArray(data) ? data : data.data || [];
+            if (list.length) {
+              setNovels(list);
+              return;
+            }
+          }
+          const adminRes = await apiFetch("/admin/novels/list", {
             auth: "admin",
             cache: "no-store",
           });
@@ -73,7 +85,7 @@ export default function NovelChaptersPage() {
             return;
           }
         }
-        const res = await apiFetch("/novels/?limit=1000");
+        const res = await apiFetch("/novels/?limit=100");
         if (res.ok) {
           const data = await res.json();
           setNovels(Array.isArray(data) ? data : []);

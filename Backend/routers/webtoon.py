@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, File, UploadFile, Form, Query, status, Response, Request
 from sqlalchemy.orm import Session, selectinload, defer
-from sqlalchemy import desc, func
-from typing import List
+from sqlalchemy import desc, func, or_
+from typing import List, Optional
 import os
 import uuid # Resim isimleri çakışmasın diye rastgele isim üretici
 import re   # Slug üretimi için regex
@@ -12,7 +12,8 @@ import models
 import schemas
 # Admin kontrolünü içeri aktarıyoruz
 from routers.auth import get_current_admin
-from utils.media import validate_and_save_image
+from utils.cache import invalidate_content_caches
+from utils.media import delete_static_file_safe, validate_and_save_image
 from utils.query_helpers import parse_pg_int
 from utils.view_tracker import schedule_view_increment
 
@@ -32,8 +33,39 @@ def slug_olustur(text: str):
     text = re.sub(r'[\s-]+', '-', text)      # Boşlukları tire yap
     return text.strip('-')
 
-def _get_webtoons_logic(db: Session, limit: int, skip: int, sort_by: str):
-    query = db.query(models.Webtoon).filter(models.Webtoon.is_published == True).options(
+def _get_webtoons_logic(
+    db: Session,
+    limit: int,
+    skip: int,
+    sort_by: str,
+    response: Optional[Response] = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    category_id: Optional[int] = None,
+):
+    base_query = db.query(models.Webtoon).filter(models.Webtoon.is_published == True)
+
+    clean_search = (search or "").strip()
+    if clean_search:
+        base_query = base_query.filter(
+            or_(
+                models.Webtoon.title.ilike(f"%{clean_search}%"),
+                models.Webtoon.summary.ilike(f"%{clean_search}%"),
+            )
+        )
+
+    clean_status = (status or "").strip()
+    if clean_status and clean_status.lower() != "all":
+        base_query = base_query.filter(models.Webtoon.status == clean_status)
+
+    if category_id is not None:
+        base_query = base_query.filter(models.Webtoon.categories.any(models.Category.id == category_id))
+
+    total = base_query.count()
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
+    query = base_query.options(
         selectinload(models.Webtoon.episodes.and_(models.WebtoonEpisode.is_published == True)).defer(
             models.WebtoonEpisode.content_text
         ),
@@ -53,22 +85,34 @@ def _get_webtoons_logic(db: Session, limit: int, skip: int, sort_by: str):
 # 1. ANASAYFA LİSTELEME (Sadece Kart Bilgileri) - HERKESE AÇIK
 @router.get("/", response_model=List[schemas.WebtoonCard]) 
 def webtoonlari_getir(
-    db: Session = Depends(get_db),
-    limit: int = Query(default=20, ge=1, le=1000),
-    skip: int = Query(default=0, ge=0),
-    sort_by: str = "newest" 
-):
-    return _get_webtoons_logic(db, limit, skip, sort_by)
-
-
-@router.get("", include_in_schema=False, response_model=List[schemas.WebtoonCard])
-def webtoonlari_getir_no_slash(
+    response: Response,
     db: Session = Depends(get_db),
     limit: int = Query(default=20, ge=1, le=1000),
     skip: int = Query(default=0, ge=0),
     sort_by: str = "newest",
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    category_id: Optional[int] = Query(default=None),
 ):
-    return _get_webtoons_logic(db, limit, skip, sort_by)
+    return _get_webtoons_logic(
+        db, limit, skip, sort_by, response=response, search=search, status=status, category_id=category_id
+    )
+
+
+@router.get("", include_in_schema=False, response_model=List[schemas.WebtoonCard])
+def webtoonlari_getir_no_slash(
+    response: Response,
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=1000),
+    skip: int = Query(default=0, ge=0),
+    sort_by: str = "newest",
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    category_id: Optional[int] = Query(default=None),
+):
+    return _get_webtoons_logic(
+        db, limit, skip, sort_by, response=response, search=search, status=status, category_id=category_id
+    )
 
 # 2. DETAY GÖSTERME (Hem ID hem Slug destekler) - HERKESE AÇIK
 @router.get("/{id_or_slug}", response_model=schemas.WebtoonDetail)
@@ -133,18 +177,14 @@ def webtoon_ekle(
     kapak_klasoru = "static/covers"
     banner_klasoru = "static/banners"
 
-    kapak_yolu = validate_and_save_image(resim, kapak_klasoru, max_bytes=15 * 1024 * 1024)
+    kapak_yolu = validate_and_save_image(resim, kapak_klasoru, max_bytes=15 * 1024 * 1024, max_width=1200)
 
     banner_yolu = None
     if banner and banner.filename:
         try:
-            banner_yolu = validate_and_save_image(banner, banner_klasoru, max_bytes=15 * 1024 * 1024, prefix="banner-")
+            banner_yolu = validate_and_save_image(banner, banner_klasoru, max_bytes=15 * 1024 * 1024, prefix="banner-", max_width=1920)
         except Exception:
-            if kapak_yolu and os.path.exists(kapak_yolu):
-                try:
-                    os.remove(kapak_yolu)
-                except OSError:
-                    pass
+            delete_static_file_safe(kapak_yolu)
             raise
 
     # --- 3. Veritabanına Kayıt ---
@@ -163,6 +203,7 @@ def webtoon_ekle(
     db.add(yeni)
     db.commit()
     db.refresh(yeni)
+    invalidate_content_caches()
     
     return {
         "mesaj": "Webtoon Başarıyla Eklendi", 

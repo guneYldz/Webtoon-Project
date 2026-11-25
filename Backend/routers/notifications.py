@@ -1,6 +1,7 @@
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, insert, literal, select
 from pydantic import BaseModel
 from typing import List, Optional
 from database import get_db
@@ -57,36 +58,94 @@ def notify_favorite_users_new_chapter(
     series_title: str,
     chapter_label: str,
     link: str,
-):
+) -> int:
     """
-    Favorisinde bu seri olan kullanıcılara yeni bölüm bildirimi gönder.
-    chapter_label örn: 'Bölüm 2880' veya '#124 - Başlık'
+    Favorisinde bu seri olan aktif kullanıcılara tek toplu SQL INSERT ile yeni bölüm bildirimi gönderir.
     """
-    q = db.query(models.Favorite)
     if novel_id is not None:
-        q = q.filter(models.Favorite.novel_id == novel_id)
+        target_filter = models.Favorite.novel_id == novel_id
     elif webtoon_id is not None:
-        q = q.filter(models.Favorite.webtoon_id == webtoon_id)
+        target_filter = models.Favorite.webtoon_id == webtoon_id
     else:
         return 0
 
-    favorites = q.all()
-    count = 0
+    now_utc = datetime.utcnow()
+    title = f"{series_title} — yeni bölüm"
     msg = (
         f"Favorilerinizde olan {series_title} serisinin "
         f"{chapter_label} bölümü gelmiştir, keyifli okumalar dileriz."
     )
-    for fav in favorites:
-        create_notification(
-            db,
-            user_id=fav.user_id,
-            type_="favorite_update",
-            title=f"📚 {series_title} — yeni bölüm",
-            message=msg,
-            link=link,
+
+    select_stmt = (
+        select(
+            models.Favorite.user_id.label("user_id"),
+            literal("favorite_update").label("type"),
+            literal(title).label("title"),
+            literal(msg).label("message"),
+            literal(link).label("link"),
+            literal(False).label("is_read"),
+            literal(now_utc).label("created_at"),
         )
-        count += 1
-    return count
+        .select_from(models.Favorite)
+        .join(models.User, models.User.id == models.Favorite.user_id)
+        .where(
+            models.Favorite.user_id.isnot(None),
+            models.User.is_active == True,
+            target_filter,
+        )
+        .distinct()
+    )
+
+    stmt = insert(models.Notification).from_select(
+        ["user_id", "type", "title", "message", "link", "is_read", "created_at"],
+        select_stmt,
+    )
+    result = db.execute(stmt)
+    return int(result.rowcount or 0)
+
+
+def notify_all_active_users(
+    db: Session,
+    *,
+    type_: str = "announcement",
+    title: str,
+    message: str,
+    link: Optional[str] = None,
+) -> int:
+    """Tüm aktif kullanıcılara tek toplu SQL INSERT ... SELECT ile bildirim oluşturur."""
+    now_utc = datetime.utcnow()
+    select_stmt = (
+        select(
+            models.User.id.label("user_id"),
+            literal(type_).label("type"),
+            literal(title).label("title"),
+            literal(message).label("message"),
+            literal(link).label("link"),
+            literal(False).label("is_read"),
+            literal(now_utc).label("created_at"),
+        )
+        .where(models.User.is_active == True)
+    )
+    stmt = insert(models.Notification).from_select(
+        ["user_id", "type", "title", "message", "link", "is_read", "created_at"],
+        select_stmt,
+    )
+    result = db.execute(stmt)
+    return int(result.rowcount or 0)
+
+
+def prune_old_read_notifications(db: Session, older_than_days: int = 90) -> int:
+    """Belirtilen günden eski ve okunmuş bildirim kayıtlarını toplu siler."""
+    cutoff = datetime.utcnow() - timedelta(days=older_than_days)
+    deleted = (
+        db.query(models.Notification)
+        .filter(
+            models.Notification.is_read == True,
+            models.Notification.created_at < cutoff,
+        )
+        .delete(synchronize_session=False)
+    )
+    return int(deleted or 0)
 
 
 # Herkese açık duyuru listesi (Duyurular sayfası)

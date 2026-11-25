@@ -39,3 +39,4 @@ email-validator>=2.2.0
 alembic>=1.14.0
 google-auth>=2.35.0
 requests>=2.32.0
+cachetools>=5.5.0

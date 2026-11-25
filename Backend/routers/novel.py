@@ -1,7 +1,7 @@
 import math
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, File, UploadFile, Form, Query, status, Request, Response
 from sqlalchemy.orm import Session, selectinload, defer
-from sqlalchemy import desc, asc, func
+from sqlalchemy import desc, asc, func, or_
 from typing import List, Optional
 
 # Proje dosyaları
@@ -9,6 +9,7 @@ from database import get_db
 import models 
 import schemas
 from routers.auth import get_current_user, get_optional_user
+from utils.cache import invalidate_admin_stats_cache, invalidate_content_caches
 from utils.chapter_title import (
     clean_chapter_number,
     default_chapter_title,
@@ -49,9 +50,40 @@ def _to_category_out(cat: models.Category) -> schemas.CategoryOut:
 
 
 # --- YARDIMCI FONSİYONLAR ---
-def get_novels_logic(db: Session, limit: int, skip: int) -> List[schemas.NovelCard]:
+def get_novels_logic(
+    db: Session,
+    limit: int,
+    skip: int,
+    response: Optional[Response] = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    category_id: Optional[int] = None,
+) -> List[schemas.NovelCard]:
     # RAM optimizasyonu: NovelChapter.content sütununu defer ile hariç tut ve yalnızca yayındaki bölümleri yükle
-    query = db.query(models.Novel).filter(models.Novel.is_published == True).options(
+    base_query = db.query(models.Novel).filter(models.Novel.is_published == True)
+
+    clean_search = (search or "").strip()
+    if clean_search:
+        base_query = base_query.filter(
+            or_(
+                models.Novel.title.ilike(f"%{clean_search}%"),
+                models.Novel.author.ilike(f"%{clean_search}%"),
+                models.Novel.summary.ilike(f"%{clean_search}%"),
+            )
+        )
+
+    clean_status = (status or "").strip()
+    if clean_status and clean_status.lower() != "all":
+        base_query = base_query.filter(models.Novel.status == clean_status)
+
+    if category_id is not None:
+        base_query = base_query.filter(models.Novel.categories.any(models.Category.id == category_id))
+
+    total = base_query.count()
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
+    query = base_query.options(
         selectinload(models.Novel.chapters.and_(models.NovelChapter.is_published == True)).defer(
             models.NovelChapter.content
         ),
@@ -92,20 +124,32 @@ def get_novels_logic(db: Session, limit: int, skip: int) -> List[schemas.NovelCa
 # 1. LİSTELEME
 @router.get("/", response_model=List[schemas.NovelCard])
 def novelleri_getir(
+    response: Response,
     db: Session = Depends(get_db),
     limit: int = Query(default=100, ge=1, le=1000),
     skip: int = Query(default=0, ge=0),
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    category_id: Optional[int] = Query(default=None),
 ):
-    return get_novels_logic(db, limit, skip)
+    return get_novels_logic(
+        db, limit, skip, response=response, search=search, status=status, category_id=category_id
+    )
 
 # 1.1 LİSTELEME (SLASHSIZ ERİŞİM İÇİN ALIAS - CORS FIX)
 @router.get("", include_in_schema=False, response_model=List[schemas.NovelCard])
 def novelleri_getir_no_slash(
+    response: Response,
     db: Session = Depends(get_db),
     limit: int = Query(default=100, ge=1, le=1000),
     skip: int = Query(default=0, ge=0),
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    category_id: Optional[int] = Query(default=None),
 ):
-    return get_novels_logic(db, limit, skip)
+    return get_novels_logic(
+        db, limit, skip, response=response, search=search, status=status, category_id=category_id
+    )
 
 # 2. TEK ROMAN GETİR
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
@@ -204,7 +248,7 @@ def novel_ekle(
 
     cover_path = None
     if cover and cover.filename:
-        cover_path = validate_and_save_image(cover, "static/novel_covers", max_bytes=15 * 1024 * 1024)
+        cover_path = validate_and_save_image(cover, "static/novel_covers", max_bytes=15 * 1024 * 1024, max_width=1200)
 
     yeni_novel = models.Novel(
         title=title,
@@ -220,6 +264,7 @@ def novel_ekle(
     db.add(yeni_novel)
     db.commit()
     db.refresh(yeni_novel)
+    invalidate_content_caches()
     return {"durum": "Başarılı", "slug": yeni_novel.slug, "mesaj": "Roman oluşturuldu"}
 
 # 4. BÖLÜM EKLEME
@@ -264,6 +309,7 @@ def novel_bolum_ekle(
     db.add(yeni_bolum)
     db.commit()
     db.refresh(yeni_bolum)
+    invalidate_admin_stats_cache()
 
     # Favorisinde bu roman olanlara bildirim
     try:
@@ -402,6 +448,7 @@ def novel_bolum_sil(
 
     db.delete(chapter)
     db.commit()
+    invalidate_admin_stats_cache()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -452,6 +499,7 @@ def novel_bolum_guncelle(
 
     db.commit()
     db.refresh(chapter)
+    invalidate_admin_stats_cache()
 
     return {"status": "success", "message": "Bölüm güncellendi", "data": {
         "id": chapter.id,

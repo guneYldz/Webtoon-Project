@@ -10,6 +10,7 @@ import schemas
 from database import get_db
 from routers.auth import get_current_admin
 from utils.chapter_title import clean_chapter_number, default_chapter_title, chapter_display_label
+from utils.cache import invalidate_admin_stats_cache, invalidate_content_caches
 from utils.media import validate_and_save_image
 from utils.view_tracker import schedule_view_increment
 
@@ -88,6 +89,7 @@ def create_episode(
                     klasor_yolu,
                     max_bytes=15 * 1024 * 1024,
                     prefix=f"page_{index + 1}_",
+                    max_width=1920,
                 )
                 saved_count += 1
 
@@ -106,6 +108,7 @@ def create_episode(
     webtoon.created_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(yeni_bolum)
+    invalidate_content_caches()
 
     # Favorisinde bu webtoon olanlara bildirim
     try:
@@ -265,6 +268,7 @@ def bolum_sil(
 
     db.delete(bolum)
     db.commit()
+    invalidate_admin_stats_cache()
 
     klasor = f"static/images/{webtoon_id}/{episode_id}"
     if os.path.isdir(klasor):
