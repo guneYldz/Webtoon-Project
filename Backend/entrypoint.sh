@@ -4,14 +4,21 @@ set -eu
 # Ensure persistent static media subdirectories exist
 mkdir -p \
   /app/static/covers \
+  /app/static/banners \
   /app/static/novel_covers \
   /app/static/images \
   /app/static/profile_images \
   /app/static/announcements
 
-# Fix ownership on bind-mounted static volume before dropping root privileges
+# Fix ownership on top-level persistent directories without slow recursive walks over chapter images
 if [ "$(id -u)" = "0" ]; then
-  chown -R appuser:appuser /app/static || true
+  chown appuser:appuser /app/static \
+    /app/static/covers \
+    /app/static/banners \
+    /app/static/novel_covers \
+    /app/static/images \
+    /app/static/profile_images \
+    /app/static/announcements || true
   if [ "$#" -gt 0 ]; then
     exec gosu appuser "$@"
   fi
