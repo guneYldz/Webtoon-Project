@@ -38,26 +38,6 @@ load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 import platform as _platform
 
-# DB bağlantısı — .env dosyasından okunur (şifreler kodda OLMAMALI)
-# BOT_DB_CONNECTION → Bot sunucuda direkt çalışırken (localhost:5433)
-# DB_CONNECTION     → Docker içinde çalışırken (db:5432)
-_raw_db = os.getenv("BOT_DB_CONNECTION") or os.getenv("DB_CONNECTION", "")
-
-if not _raw_db:
-    raise RuntimeError(
-        "❌ Veritabanı bağlantısı bulunamadı!\n"
-        "   .env dosyasına şunu ekle:\n"
-        "   BOT_DB_CONNECTION=postgresql://kullanici:sifre@localhost:5433/webtoon_db"
-    )
-
-# Linux'ta Docker dışı çalışırken 'db' hostname'ini localhost:5433'e çevir
-if _platform.system() == "Linux" and "@db:" in _raw_db:
-    _raw_db = re.sub(r"@db:(\d+)", "@localhost:5433", _raw_db)
-    print("⚠️  DB hostname 'db' → 'localhost:5433' olarak otomatik düzeltildi")
-
-DB_CONNECTION = _raw_db
-print(f"🔌 DB Bağlantısı: {DB_CONNECTION.split('@')[-1]}")
-
 
 BASE_PATH       = os.path.join(BACKEND_DIR, "static")
 SERI_DOSYASI    = os.path.join(CURRENT_DIR, "seriler.txt")
@@ -128,6 +108,10 @@ def get_bot_token() -> str:
         raise RuntimeError(f"\u274c Sunucu giri\u015f hatas\u0131: {e}")
 
 
+def _has_api_config() -> bool:
+    return bool(API_URL and BOT_USERNAME and BOT_PASSWORD)
+
+
 def api_check_episode(webtoon_id: int, chap_num) -> bool:
     """
     Sunucuda bu b\u00f6l\u00fcm zaten var m\u0131 kontrol et.
@@ -187,52 +171,100 @@ def api_upload_episode(webtoon_id: int, chap_num, image_paths: list[str]) -> boo
             )
 
             if resp.status_code in (200, 201):
-                print(f"      \u2705 Sunucuya y\u00fcklendi: {resp.json().get('mesaj', 'OK')}")
+                print(f"      ✅ Sunucuya yüklendi: {resp.json().get('mesaj', 'OK')}")
                 return True
-            elif resp.status_code == 400 and "mevcut" in resp.text:
-                print(f"      \u26a0\ufe0f B\u00f6l\u00fcm zaten mevcut (sunucu r\u00edddet), atlan\u0131yor.")
-                return True  # Baz\u0131 durumlarda zaten vard\u0131r, hata de\u011fil
+            elif resp.status_code == 400 and any(k in resp.text.lower() for k in ("mevcut", "zaten var")):
+                print("      ⚠️ Bölüm zaten mevcut (sunucu reddetti), atlanıyor.")
+                return True  # Zaten vardır, hata değil
             else:
-                print(f"      \u274c Y\u00fckleme hatas\u0131: {resp.status_code} - {resp.text[:300]}")
+                print(f"      ❌ Yükleme hatası: {resp.status_code} - {resp.text[:300]}")
                 return False
         finally:
             for f in opened:
                 f.close()
 
     except Exception as e:
-        print(f"      \u274c api_upload_episode hatas\u0131: {e}")
+        print(f"      ❌ api_upload_episode hatası: {e}")
         return False
+
+
+def _persist_episode(webtoon_id, chap_num, saved_paths: list[str]) -> bool:
+    if not saved_paths:
+        print("      ⚠️ Hiçbir sayfa kaydedilemedi, bölüm atlanıyor.")
+        return False
+
+    if _has_api_config():
+        abs_paths = [
+            p if os.path.isabs(p) else os.path.join(BACKEND_DIR, p)
+            for p in saved_paths
+        ]
+        return api_upload_episode(webtoon_id, chap_num, abs_paths)
+
+    if engine:
+        with engine.connect() as conn:
+            check = conn.execute(
+                text("SELECT id FROM webtoon_episodes WHERE webtoon_id=:w AND episode_number=:e"),
+                {"w": webtoon_id, "e": chap_num}
+            ).fetchone()
+            if not check:
+                result = conn.execute(text("""
+                    INSERT INTO webtoon_episodes
+                        (webtoon_id, episode_number, title, view_count, is_published, created_at)
+                    VALUES (:w, :e, :t, 0, TRUE, NOW()) RETURNING id
+                """), {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
+                episode_id = result.fetchone()[0]
+                for order, path in enumerate(saved_paths, start=1):
+                    conn.execute(text("""
+                        INSERT INTO episode_images (episode_id, image_url, page_order)
+                        VALUES (:eid, :url, :ord)
+                    """), {"eid": episode_id, "url": path, "ord": order})
+                conn.commit()
+                print(f"      ✅ DB'ye kaydedildi: {len(saved_paths)} sayfa")
+        return True
+
+    print("      ⚠️ Ne API bilgisi ne de DB bağlantısı var — kayıt yapılamadı!")
+    return False
 
 
 def api_get_or_create_webtoon(title: str, slug: str, cover_url: str = None) -> int:
     """
-    Sunucuda webtoon var m\u0131 kontrol et, yoksa olu\u015ftur. ID d\u00f6nd\u00fcr.
+    Sunucuda webtoon var mı kontrol et, yoksa oluştur. ID döndür.
     """
     try:
         token = get_bot_token()
         headers = {"Authorization": f"Bearer {token}"}
 
-        # Slug ile sorgula
+        # 1. Yayındaki webtoonlarda slug ile sorgula
         resp = requests.get(f"{API_URL}/webtoons/{slug}", timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            wid  = data.get("id")
+            wid = data.get("id")
             if wid:
-                print(f"    \u2705 Webtoon bulundu: {title} (ID: {wid})")
+                print(f"    ✅ Webtoon bulundu: {title} (ID: {wid})")
                 return wid
 
-        # Bulunamad\u0131 \u2014 olu\u015ftur
-        print(f"    \U0001f195 Yeni webtoon olu\u015fturuluyor: {title}")
+        # 2. Yayında olmayanlar dahil admin listesinden kontrol et
+        list_resp = requests.get(f"{API_URL}/admin/webtoon/list", headers=headers, timeout=10)
+        if list_resp.status_code == 200:
+            norm_title = (title or "").strip().lower()
+            for item in list_resp.json() or []:
+                if item.get("slug") == slug or (item.get("title") or "").strip().lower() == norm_title:
+                    wid = item.get("id")
+                    if wid:
+                        print(f"    ✅ Webtoon admin listesinde bulundu: {title} (ID: {wid})")
+                        return wid
+
+        # 3. Bulunamadı — oluştur
+        print(f"    🆕 Yeni webtoon oluşturuluyor: {title}")
         form_data = {
             "title":        title,
-            "summary":      f"{title} \u00f6zeti",
+            "summary":      f"{title} özeti",
             "status":       "ongoing",
-            "is_published": "false",   # Admin yay\u0131nlayana kadar gizli
+            "is_published": "false",   # Admin yayınlayana kadar gizli
             "series_type":  "WEBTOON",
             "source_url":   "",
         }
         files = []
-        cover_file = None
         if cover_url:
             try:
                 cover_resp = requests.get(cover_url, timeout=15,
@@ -251,13 +283,14 @@ def api_get_or_create_webtoon(title: str, slug: str, cover_url: str = None) -> i
             timeout=30,
         )
         if resp.status_code in (200, 201):
-            wid = resp.json().get("id")
-            print(f"    \u2705 Webtoon olu\u015fturuldu: {title} (ID: {wid})")
+            body = resp.json()
+            wid = body.get("id") or (body.get("data") or {}).get("id")
+            print(f"    ✅ Webtoon oluşturuldu: {title} (ID: {wid})")
             return wid
         else:
-            print(f"    \u274c Webtoon olu\u015fturma hatas\u0131: {resp.status_code} - {resp.text[:200]}")
+            print(f"    ❌ Webtoon oluşturma hatası: {resp.status_code} - {resp.text[:200]}")
     except Exception as e:
-        print(f"    \u274c api_get_or_create_webtoon hatas\u0131: {e}")
+        print(f"    ❌ api_get_or_create_webtoon hatası: {e}")
     return None
 
 
@@ -895,34 +928,7 @@ class AutoBot:
                 return
 
             print(f"      🖼️ {len(saved_paths)} sayfa tamamlandı.")
-
-            if BOT_USERNAME and BOT_PASSWORD:
-                # 🌐 API Modu — Yerel PC'den sunucuya yükle
-                abs_paths = [os.path.join(BACKEND_DIR, p) for p in saved_paths]
-                api_upload_episode(webtoon_id, chap_num, abs_paths)
-            elif engine:
-                # 🗄️ Direkt DB Modu — Bot sunucuda çalışıyor
-                with engine.connect() as conn:
-                    check = conn.execute(
-                        text("SELECT id FROM webtoon_episodes WHERE webtoon_id=:w AND episode_number=:e"),
-                        {"w": webtoon_id, "e": chap_num}
-                    ).fetchone()
-                    if not check:
-                        result = conn.execute(text("""
-                            INSERT INTO webtoon_episodes
-                                (webtoon_id, episode_number, title, view_count, is_published, created_at)
-                            VALUES (:w, :e, :t, 0, TRUE, NOW()) RETURNING id
-                        """), {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
-                        episode_id = result.fetchone()[0]
-                        for order, path in enumerate(saved_paths, start=1):
-                            conn.execute(text("""
-                                INSERT INTO episode_images (episode_id, image_url, page_order)
-                                VALUES (:eid, :url, :ord)
-                            """), {"eid": episode_id, "url": path, "ord": order})
-                        conn.commit()
-                        print(f"      ✅ DB'ye kaydedildi: {len(saved_paths)} sayfa")
-            else:
-                print("      ⚠️ Ne API bilgisi ne de DB bağlantısı var — kayıt yapılamadı!")
+            _persist_episode(webtoon_id, chap_num, saved_paths)
 
         except Exception as e:
             print(f"      ❌ İndirme hatası: {e}")
@@ -1523,31 +1529,21 @@ class AutoBot:
                 return
 
             print(f"      🖼️ {len(saved_paths)} sayfa tamamlandı.")
-            with engine.connect() as conn:
-                check = conn.execute(
-                    text("SELECT id FROM webtoon_episodes WHERE webtoon_id=:w AND episode_number=:e"),
-                    {"w": webtoon_id, "e": chap_num}
-                ).fetchone()
-                if not check:
-                    result = conn.execute(text("""
-                        INSERT INTO webtoon_episodes
-                            (webtoon_id, episode_number, title, view_count, is_published, created_at)
-                        VALUES (:w, :e, :t, 0, TRUE, NOW()) RETURNING id
-                    """), {"w": webtoon_id, "e": chap_num, "t": f"Bölüm {chap_num}"})
-                    episode_id = result.fetchone()[0]
-                    for order, path in enumerate(saved_paths, start=1):
-                        conn.execute(text("""
-                            INSERT INTO episode_images (episode_id, image_url, page_order)
-                            VALUES (:eid, :url, :ord)
-                        """), {"eid": episode_id, "url": path, "ord": order})
-                    conn.commit()
-                    print(f"      ✅ DB'ye kaydedildi: {len(saved_paths)} sayfa")
+            _persist_episode(webtoon_id, chap_num, saved_paths)
 
         except Exception as e:
             print(f"      ❌ [asurascans] İndirme hatası: {e}")
 
 
     def sync_webtoon_info(self, title, slug, cover_url):
+        if _has_api_config():
+            wid = api_get_or_create_webtoon(title, slug, cover_url)
+            if wid:
+                return wid
+
+        if not engine:
+            return None
+
         cover_path = ""
         with engine.connect() as conn:
             row = conn.execute(
@@ -1573,6 +1569,31 @@ class AutoBot:
             return new_id
 
     def get_db_chapters(self, webtoon_id):
+        if not webtoon_id:
+            return []
+
+        if _has_api_config():
+            try:
+                token = get_bot_token()
+                resp = requests.get(
+                    f"{API_URL}/admin/webtoon/{webtoon_id}/episodes",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    episodes = resp.json() or []
+                    return [
+                        str(int(float(e["episode_number"])))
+                        if float(e["episode_number"]) % 1 == 0
+                        else str(e["episode_number"])
+                        for e in episodes
+                    ]
+            except Exception as e:
+                print(f"    ⚠️ API bölüm listesi alınamadı: {e}")
+
+        if not engine:
+            return []
+
         with engine.connect() as conn:
             result = conn.execute(
                 text("SELECT episode_number FROM webtoon_episodes WHERE webtoon_id = :wid"),
@@ -1615,29 +1636,7 @@ class AutoBot:
                 if saved:
                     saved_paths.append(saved)
 
-            with engine.connect() as conn:
-                check = conn.execute(
-                    text("SELECT id FROM webtoon_episodes WHERE webtoon_id=:w AND episode_number=:e"),
-                    {"w": webtoon_id, "e": chap_num}
-                ).fetchone()
-                if not check:
-                    result = conn.execute(text("""
-                        INSERT INTO webtoon_episodes (webtoon_id, episode_number, title, view_count, is_published, created_at)
-                        VALUES (:w, :e, :t, 0, TRUE, NOW())
-                        RETURNING id
-                    """), {
-                        "w": webtoon_id,
-                        "e": chap_num,
-                        "t": f"Bölüm {chap_num}",
-                    })
-                    episode_id = result.fetchone()[0]
-                    for order, path in enumerate(saved_paths, start=1):
-                        conn.execute(text("""
-                            INSERT INTO episode_images (episode_id, image_url, page_order)
-                            VALUES (:eid, :url, :ord)
-                        """), {"eid": episode_id, "url": path, "ord": order})
-                    conn.commit()
-                    print(f"      ✅ DB'ye kaydedildi: {len(saved_paths)} sayfa")
+            _persist_episode(webtoon_id, chap_num, saved_paths)
 
         except Exception as e:
             print(f"      ❌ İndirme hatası: {e}")

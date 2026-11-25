@@ -50,6 +50,26 @@ def _to_category_out(cat: models.Category) -> schemas.CategoryOut:
 
 
 # --- YARDIMCI FONSİYONLAR ---
+def _find_published_novel(db: Session, slug_or_id: str, *, with_categories: bool = False):
+    clean_key = (slug_or_id or "").strip()
+    query = db.query(models.Novel)
+    if with_categories:
+        query = query.options(selectinload(models.Novel.categories))
+    if clean_key.isdigit():
+        parsed_id = parse_pg_int(clean_key)
+        if parsed_id is None:
+            return None
+        return query.filter(models.Novel.id == parsed_id, models.Novel.is_published == True).first()
+
+    novel = query.filter(models.Novel.slug == clean_key, models.Novel.is_published == True).first()
+    if not novel and clean_key:
+        novel = query.filter(
+            func.trim(func.lower(models.Novel.slug)) == clean_key.lower(),
+            models.Novel.is_published == True,
+        ).first()
+    return novel
+
+
 def get_novels_logic(
     db: Session,
     limit: int,
@@ -58,6 +78,8 @@ def get_novels_logic(
     search: Optional[str] = None,
     status: Optional[str] = None,
     category_id: Optional[int] = None,
+    sort_by: str = "newest",
+    sort: Optional[str] = None,
 ) -> List[schemas.NovelCard]:
     # RAM optimizasyonu: NovelChapter.content sütununu defer ile hariç tut ve yalnızca yayındaki bölümleri yükle
     base_query = db.query(models.Novel).filter(models.Novel.is_published == True)
@@ -89,7 +111,22 @@ def get_novels_logic(
         ),
         selectinload(models.Novel.categories),
     )
-    novels = query.order_by(desc(models.Novel.created_at)).offset(skip).limit(limit).all()
+
+    effective_sort = (sort or sort_by or "newest").strip().lower()
+    if effective_sort == "rating":
+        query = query.order_by(
+            desc(models.Novel.rating_avg),
+            desc(models.Novel.rating_count),
+            desc(models.Novel.created_at),
+        )
+    elif effective_sort == "popular":
+        query = query.order_by(desc(models.Novel.view_count), desc(models.Novel.created_at))
+    elif effective_sort == "alphabetical":
+        query = query.order_by(models.Novel.title.asc())
+    else:
+        query = query.order_by(desc(models.Novel.created_at))
+
+    novels = query.offset(skip).limit(limit).all()
 
     cards: List[schemas.NovelCard] = []
     for n in novels:
@@ -110,6 +147,8 @@ def get_novels_logic(
                 cover_image=n.cover_image,
                 status=n.status or "ongoing",
                 view_count=n.view_count or 0,
+                rating_avg=float(getattr(n, "rating_avg", 0.0) or 0.0),
+                rating_count=int(getattr(n, "rating_count", 0) or 0),
                 source_url=n.source_url,
                 is_published=bool(n.is_published),
                 created_at=n.created_at,
@@ -128,12 +167,14 @@ def novelleri_getir(
     db: Session = Depends(get_db),
     limit: int = Query(default=100, ge=1, le=1000),
     skip: int = Query(default=0, ge=0),
+    sort_by: str = "newest",
+    sort: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     category_id: Optional[int] = Query(default=None),
 ):
     return get_novels_logic(
-        db, limit, skip, response=response, search=search, status=status, category_id=category_id
+        db, limit, skip, response=response, search=search, status=status, category_id=category_id, sort_by=sort_by, sort=sort
     )
 
 # 1.1 LİSTELEME (SLASHSIZ ERİŞİM İÇİN ALIAS - CORS FIX)
@@ -143,13 +184,50 @@ def novelleri_getir_no_slash(
     db: Session = Depends(get_db),
     limit: int = Query(default=100, ge=1, le=1000),
     skip: int = Query(default=0, ge=0),
+    sort_by: str = "newest",
+    sort: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     category_id: Optional[int] = Query(default=None),
 ):
     return get_novels_logic(
-        db, limit, skip, response=response, search=search, status=status, category_id=category_id
+        db, limit, skip, response=response, search=search, status=status, category_id=category_id, sort_by=sort_by, sort=sort
     )
+
+
+@router.get("/{slug}/latest-chapter")
+def novel_latest_chapter(
+    slug: str,
+    db: Session = Depends(get_db),
+):
+    """Bot ve araçlar için bölüm metni yüklemeden son bölüm bilgisini ve çeviri sözlüğünü döner."""
+    novel = _find_published_novel(db, slug)
+    if not novel:
+        raise HTTPException(status_code=404, detail="Roman bulunamadı")
+
+    agg = (
+        db.query(
+            func.max(models.NovelChapter.chapter_number),
+            func.count(models.NovelChapter.id),
+        )
+        .filter(
+            models.NovelChapter.novel_id == novel.id,
+            models.NovelChapter.is_published == True,
+        )
+        .first()
+    )
+    raw_max, raw_count = agg if agg else (None, 0)
+    latest_num = clean_chapter_number(raw_max) if raw_max is not None else 0
+
+    return {
+        "novel_id": novel.id,
+        "slug": novel.slug,
+        "title": novel.title,
+        "latest_chapter_number": latest_num,
+        "chapter_count": int(raw_count or 0),
+        "translation_glossary": novel.translation_glossary,
+    }
+
 
 # 2. TEK ROMAN GETİR
 @router.get("/{slug_or_id}", response_model=schemas.NovelDetail)
@@ -160,19 +238,7 @@ def novel_detay(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    clean_key = (slug_or_id or "").strip()
-    if clean_key.isdigit():
-        parsed_id = parse_pg_int(clean_key)
-        if parsed_id is None:
-            raise HTTPException(status_code=404, detail="Roman bulunamadı")
-        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.id == parsed_id, models.Novel.is_published == True).first()
-    else:
-        novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(models.Novel.slug == clean_key, models.Novel.is_published == True).first()
-        if not novel and clean_key:
-            novel = db.query(models.Novel).options(selectinload(models.Novel.categories)).filter(
-                func.trim(func.lower(models.Novel.slug)) == clean_key.lower(),
-                models.Novel.is_published == True,
-            ).first()
+    novel = _find_published_novel(db, slug_or_id, with_categories=True)
 
     if not novel:
         raise HTTPException(status_code=404, detail="Roman bulunamadı")
@@ -186,6 +252,8 @@ def novel_detay(
     banner_image = novel.banner_image
     author = novel.author
     current_views = novel.view_count or 0
+    rating_avg = float(getattr(novel, "rating_avg", 0.0) or 0.0)
+    rating_count = int(getattr(novel, "rating_count", 0) or 0)
     is_featured = bool(novel.is_featured)
     is_published = bool(novel.is_published)
     source_url = novel.source_url
@@ -221,6 +289,8 @@ def novel_detay(
         banner_image=banner_image,
         author=author,
         view_count=current_views,
+        rating_avg=rating_avg,
+        rating_count=rating_count,
         is_featured=is_featured,
         is_published=is_published,
         source_url=source_url,

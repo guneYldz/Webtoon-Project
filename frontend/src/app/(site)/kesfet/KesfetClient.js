@@ -30,6 +30,7 @@ const STATUS_OPTIONS = [
 const SORT_OPTIONS = [
   { value: "updated", label: "Son Güncellenen" },
   { value: "popular", label: "En Çok Okunan" },
+  { value: "rating", label: "En Yüksek Puanlı" },
   { value: "newest", label: "Yeni Eklenen" },
   { value: "az", label: "A'dan Z'ye" },
 ];
@@ -341,6 +342,13 @@ export default function KesfetClient({
 
     if (sortBy === "popular") {
       result.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+    } else if (sortBy === "rating") {
+      result.sort((a, b) => {
+        const avgDiff =
+          (Number(b.rating_avg) || 0) - (Number(a.rating_avg) || 0);
+        if (avgDiff !== 0) return avgDiff;
+        return (Number(b.rating_count) || 0) - (Number(a.rating_count) || 0);
+      });
     } else if (sortBy === "newest") {
       result.sort(
         (a, b) =>

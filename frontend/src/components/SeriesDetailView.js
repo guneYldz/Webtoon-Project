@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import FavoriteButton from "@/components/FavoriteButton";
+import SeriesRatingWidget from "@/components/SeriesRatingWidget";
 import SeriesSummary from "@/components/SeriesSummary";
 import ChapterDirectory from "@/components/ChapterDirectory";
 import CommentSection from "@/components/CommentSection";
@@ -175,6 +176,16 @@ export default function SeriesDetailView({
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-ink-primary drop-shadow-md mb-4">
                 {series.title}
               </h1>
+
+              {/* 1-5 Star Interactive Series Rating Bar */}
+              <div className="flex justify-center md:justify-start">
+                <SeriesRatingWidget
+                  type={type}
+                  seriesId={series.id}
+                  initialAvg={series.rating_avg}
+                  initialCount={series.rating_count}
+                />
+              </div>
 
               {/* Clickable Categories */}
               {Array.isArray(series.categories) &&

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Save, ArrowLeft } from "lucide-react";
+import { Save, ArrowLeft, BookText } from "lucide-react";
 import { toast } from "sonner";
 import {
   apiFetch,
@@ -22,7 +22,11 @@ import {
   adminLabelClass,
 } from "../../../_components/AdminUi";
 
-export default function EditWebtoonPage({ params }: { params: { id: string } }) {
+export default function EditWebtoonPage({
+  params,
+}: {
+  params: { id: string };
+}) {
   const router = useRouter();
   const [webtoon, setWebtoon] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +40,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
     is_featured: false,
     source_url: "",
     series_type: "WEBTOON",
+    translation_glossary: "",
   });
 
   const [coverImage, setCoverImage] = useState<File | null>(null);
@@ -68,6 +73,7 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
             is_featured: Boolean(w.is_featured),
             source_url: w.source_url || "",
             series_type: rawType.includes("MANGA") ? "MANGA" : "WEBTOON",
+            translation_glossary: w.translation_glossary || "",
           });
           setSelectedCategoryIds((w.categories || []).map((c: any) => c.id));
         } else {
@@ -97,6 +103,10 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
       form.append("is_featured", String(formData.is_featured));
       form.append("source_url", formData.source_url || "");
       form.append("series_type", formData.series_type || "WEBTOON");
+      form.append(
+        "translation_glossary",
+        formData.translation_glossary || ""
+      );
       form.append("category_ids", selectedCategoryIds.join(","));
 
       if (coverImage) form.append("cover_image", coverImage);
@@ -146,7 +156,9 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
   return (
     <div className="max-w-4xl mx-auto">
       <AdminPageHeader
-        title={`${formData.series_type === "MANGA" ? "Manga" : "Webtoon"} Düzenle`}
+        title={`${
+          formData.series_type === "MANGA" ? "Manga" : "Webtoon"
+        } Düzenle`}
         description={webtoon.title}
         actions={
           <Button variant="secondary" size="sm" onClick={() => router.back()}>
@@ -156,14 +168,19 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
         }
       />
 
-      <form onSubmit={handleSubmit} className={`${adminCardClass} p-6 space-y-6`}>
+      <form
+        onSubmit={handleSubmit}
+        className={`${adminCardClass} p-6 space-y-6`}
+      >
         <div>
           <label className={adminLabelClass}>Başlık *</label>
           <input
             type="text"
             required
             value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, title: e.target.value })
+            }
             className={adminInputClass}
           />
         </div>
@@ -173,8 +190,36 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
           <textarea
             rows={5}
             value={formData.summary}
-            onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, summary: e.target.value })
+            }
             className={adminTextareaClass}
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className={`${adminLabelClass} !mb-0 flex items-center gap-1.5`}>
+              <BookText className="h-3.5 w-3.5 text-brand" />
+              <span>Çeviri Sözlüğü (Bot Glossary)</span>
+            </label>
+            <span className="text-[11px] text-ink-muted">
+              Karakter adları ve özel terimler için çeviri kılavuzu
+            </span>
+          </div>
+          <textarea
+            rows={4}
+            value={formData.translation_glossary}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                translation_glossary: e.target.value,
+              })
+            }
+            placeholder={
+              "Örnek:\nSung Jin-Woo -> Sung Jin-Woo\nShadow Monarch -> Gölge Hükümdarı"
+            }
+            className={`${adminTextareaClass} font-mono text-xs leading-relaxed`}
           />
         </div>
 
@@ -306,7 +351,11 @@ export default function EditWebtoonPage({ params }: { params: { id: string } }) 
             <Save className="h-4 w-4" />
             Güncelle
           </Button>
-          <Button type="button" variant="secondary" onClick={() => router.back()}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => router.back()}
+          >
             İptal
           </Button>
         </div>

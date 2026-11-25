@@ -21,6 +21,7 @@ import {
   Plus,
   ChevronRight,
   ShieldCheck,
+  Activity,
 } from "lucide-react";
 import {
   clearAdminToken,
@@ -43,6 +44,7 @@ const BREADCRUMB_MAP: Record<string, string> = {
   "/admin/users": "Üyeler",
   "/admin/comments": "Yorumlar",
   "/admin/announcements": "Duyurular",
+  "/admin/health": "Sağlık Tarayıcısı",
 };
 
 function getPageBreadcrumb(pathname: string) {
@@ -188,6 +190,13 @@ function AdminSidebarNav({
         icon={Megaphone}
         label="Duyurular"
         active={isNavActive("/admin/announcements")}
+        onNavigate={onNavigate}
+      />
+      <NavItem
+        href="/admin/health"
+        icon={Activity}
+        label="Sağlık Tarayıcısı"
+        active={isNavActive("/admin/health")}
         onNavigate={onNavigate}
       />
     </nav>

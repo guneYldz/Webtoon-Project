@@ -63,6 +63,8 @@ export function SeriesCard({
     String(item.status || "").toLowerCase() === "güncel";
   const hasStatus = Boolean(item.status);
   const isNew = Boolean(item.isNew);
+  const hasRealRating =
+    Number(item.rating_count) > 0 && Number(item.rating_avg) > 0;
 
   const latestChapters = Array.isArray(item.latestChapters)
     ? item.latestChapters
@@ -103,11 +105,17 @@ export function SeriesCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-65 group-hover:opacity-45 transition-opacity pointer-events-none" />
         </Link>
 
-        {/* Top-Left Format Badge */}
+        {/* Top-Left Format Badge + Optional Real Rating Badge */}
         <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 pointer-events-none">
           <Badge variant={badgeVariant} tone="solid" size="sm">
             {typeLabel}
           </Badge>
+          {hasRealRating && (
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-black/75 backdrop-blur-md border border-amber-400/40 px-1.5 py-0.5 text-[11px] font-bold text-amber-300 shadow-sm tabular-nums">
+              <span>★</span>
+              <span>{Number(item.rating_avg).toFixed(1)}</span>
+            </span>
+          )}
         </div>
 
         {/* Top-Right Status / New Badge */}

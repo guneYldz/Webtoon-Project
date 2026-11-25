@@ -42,6 +42,7 @@ def _get_webtoons_logic(
     search: Optional[str] = None,
     status: Optional[str] = None,
     category_id: Optional[int] = None,
+    sort: Optional[str] = None,
 ):
     base_query = db.query(models.Webtoon).filter(models.Webtoon.is_published == True)
 
@@ -72,12 +73,19 @@ def _get_webtoons_logic(
         selectinload(models.Webtoon.categories)
     )
 
-    if sort_by == "newest":
-        query = query.order_by(desc(models.Webtoon.created_at))
-    elif sort_by == "alphabetical":
+    effective_sort = (sort or sort_by or "newest").strip().lower()
+    if effective_sort == "rating":
+        query = query.order_by(
+            desc(models.Webtoon.rating_avg),
+            desc(models.Webtoon.rating_count),
+            desc(models.Webtoon.created_at),
+        )
+    elif effective_sort == "alphabetical":
         query = query.order_by(models.Webtoon.title.asc())
-    elif sort_by == "popular":
-        query = query.order_by(desc(models.Webtoon.view_count))
+    elif effective_sort == "popular":
+        query = query.order_by(desc(models.Webtoon.view_count), desc(models.Webtoon.created_at))
+    else:
+        query = query.order_by(desc(models.Webtoon.created_at))
 
     return query.offset(skip).limit(limit).all()
 
@@ -90,12 +98,13 @@ def webtoonlari_getir(
     limit: int = Query(default=20, ge=1, le=1000),
     skip: int = Query(default=0, ge=0),
     sort_by: str = "newest",
+    sort: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     category_id: Optional[int] = Query(default=None),
 ):
     return _get_webtoons_logic(
-        db, limit, skip, sort_by, response=response, search=search, status=status, category_id=category_id
+        db, limit, skip, sort_by, response=response, search=search, status=status, category_id=category_id, sort=sort
     )
 
 
@@ -106,12 +115,13 @@ def webtoonlari_getir_no_slash(
     limit: int = Query(default=20, ge=1, le=1000),
     skip: int = Query(default=0, ge=0),
     sort_by: str = "newest",
+    sort: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     category_id: Optional[int] = Query(default=None),
 ):
     return _get_webtoons_logic(
-        db, limit, skip, sort_by, response=response, search=search, status=status, category_id=category_id
+        db, limit, skip, sort_by, response=response, search=search, status=status, category_id=category_id, sort=sort
     )
 
 # 2. DETAY GÖSTERME (Hem ID hem Slug destekler) - HERKESE AÇIK

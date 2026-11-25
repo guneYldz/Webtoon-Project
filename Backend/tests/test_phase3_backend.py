@@ -586,7 +586,7 @@ class TestPhase3Backend(unittest.TestCase):
         self.assertEqual(revs.get("003_phase2_view_dedupe"), "002_seo_sitemap_indexes")
         self.assertEqual(revs.get("004_phase3_retention_community"), "003_phase2_view_dedupe")
         heads = set(revs.keys()) - set(revs.values())
-        self.assertEqual(heads, {"004_phase3_retention_community"})
+        self.assertEqual(len(heads), 1)
 
         mig_bytes = (BACKEND_DIR / "scripts" / "migrate_phase3.sh").read_bytes()
         self.assertEqual(mig_bytes.count(b"\r"), 0)

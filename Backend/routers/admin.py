@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import desc, or_, func
 from database import get_db 
+from datetime import datetime, timezone
+import html
 import logging
 import models 
 import schemas
 import os
 import re
+import urllib.parse
 import uuid
 from typing import Optional, List
 from routers.auth import get_current_admin, get_current_editor  # ADMIN / EDITOR AUTH
@@ -17,6 +20,7 @@ from utils.cache import (
     invalidate_admin_stats_cache,
     invalidate_content_caches,
 )
+import utils.media as media_utils
 from utils.media import delete_static_file_safe, validate_and_save_image
 
 logger = logging.getLogger(__name__)
@@ -96,10 +100,89 @@ def with_categories(obj):
     for key in ("categories", "category_links", "webtoon_links", "novel_links", "chapters", "episodes", "favorites"):
         data.pop(key, None)
     data["categories"] = [{"id": c.id, "name": c.name} for c in (getattr(obj, "categories", None) or [])]
+    data["translation_glossary"] = getattr(obj, "translation_glossary", None)
     t = getattr(obj, "type", None)
     if t is not None:
         data["type"] = getattr(t, "value", t)
     return data
+
+
+async def _extract_series_update_data(request: Request) -> tuple[dict, Optional[UploadFile], Optional[UploadFile]]:
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Geçersiz JSON gövdesi")
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="JSON gövdesi nesne olmalıdır")
+        return payload, None, None
+
+    if "application/x-www-form-urlencoded" in content_type:
+        raw_body = (await request.body()).decode("utf-8")
+        return {k: v for k, v in urllib.parse.parse_qsl(raw_body, keep_blank_values=True)}, None, None
+
+    form = await request.form()
+    fields: dict = {}
+    cover_file = None
+    banner_file = None
+    for key, val in form.multi_items():
+        if key == "cover_image" and hasattr(val, "filename"):
+            if val.filename:
+                cover_file = val
+        elif key == "banner_image" and hasattr(val, "filename"):
+            if val.filename:
+                banner_file = val
+        else:
+            fields[key] = val
+    return fields, cover_file, banner_file
+
+
+def _normalize_optional_text(value) -> Optional[str]:
+    if value is None:
+        return None
+    return str(value).strip() or None
+
+
+def _coerce_optional_bool(value) -> Optional[bool]:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes", "evet"):
+        return True
+    if text in ("false", "0", "no", "hayir", "hayır"):
+        return False
+    return None
+
+
+def _apply_common_series_fields(series, fields: dict) -> Optional[str]:
+    if "title" in fields and fields["title"] is not None:
+        series.title = str(fields["title"])
+    if "summary" in fields and fields["summary"] is not None:
+        series.summary = str(fields["summary"])
+    if "status" in fields and fields["status"] is not None:
+        series.status = str(fields["status"])
+    if "is_published" in fields:
+        parsed_pub = _coerce_optional_bool(fields["is_published"])
+        if parsed_pub is not None:
+            series.is_published = parsed_pub
+    if "is_featured" in fields:
+        parsed_feat = _coerce_optional_bool(fields["is_featured"])
+        if parsed_feat is not None:
+            series.is_featured = parsed_feat
+    if "source_url" in fields:
+        series.source_url = _normalize_optional_text(fields["source_url"])
+    if "translation_glossary" in fields:
+        series.translation_glossary = _normalize_optional_text(fields["translation_glossary"])
+
+    if "category_ids" in fields and fields["category_ids"] is not None:
+        cat_val = fields["category_ids"]
+        if isinstance(cat_val, list):
+            return ",".join(str(x) for x in cat_val)
+        return str(cat_val)
+    return None
 
 
 # ==================== SLIM OPTIONS (DROPDOWNS) ====================
@@ -306,37 +389,18 @@ async def get_webtoon(
 @router.put("/webtoons/{webtoon_id}")
 async def update_webtoon(
     webtoon_id: int,
-    title: Optional[str] = Form(None),
-    summary: Optional[str] = Form(None),
-    status: Optional[str] = Form(None),
-    is_published: Optional[bool] = Form(None),
-    is_featured: Optional[bool] = Form(None),
-    source_url: Optional[str] = Form(None),
-    series_type: Optional[str] = Form(None),
-    cover_image: Optional[UploadFile] = File(None),
-    banner_image: Optional[UploadFile] = File(None),
-    category_ids: Optional[str] = Form(None),
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
     webtoon = db.query(models.Webtoon).filter(models.Webtoon.id == webtoon_id).first()
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
-    
-    if title is not None:
-        webtoon.title = title
-    if summary is not None:
-        webtoon.summary = summary
-    if status is not None:
-        webtoon.status = status
-    if is_published is not None:
-        webtoon.is_published = is_published
-    if is_featured is not None:
-        webtoon.is_featured = is_featured
-    if source_url is not None:
-        webtoon.source_url = source_url.strip() or None  # Boş string → NULL
-    if series_type is not None:
-        webtoon.type = parse_comic_type(series_type)
+
+    fields, cover_image, banner_image = await _extract_series_update_data(request)
+    category_ids = _apply_common_series_fields(webtoon, fields)
+    if "series_type" in fields and fields["series_type"] is not None:
+        webtoon.type = parse_comic_type(str(fields["series_type"]))
 
     new_cover_path = None
     new_banner_path = None
@@ -538,37 +602,18 @@ async def create_novel(
 @router.put("/novels/{novel_id}")
 async def update_novel(
     novel_id: int,
-    title: Optional[str] = Form(None),
-    summary: Optional[str] = Form(None),
-    author: Optional[str] = Form(None),
-    status: Optional[str] = Form(None),
-    is_published: Optional[bool] = Form(None),
-    is_featured: Optional[bool] = Form(None),
-    source_url: Optional[str] = Form(None),
-    cover_image: Optional[UploadFile] = File(None),
-    banner_image: Optional[UploadFile] = File(None),
-    category_ids: Optional[str] = Form(None),
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)  # AUTH
 ):
     novel = db.query(models.Novel).filter(models.Novel.id == novel_id).first()
     if not novel:
         raise HTTPException(status_code=404, detail="Novel bulunamadı")
-    
-    if title is not None:
-        novel.title = title
-    if summary is not None:
-        novel.summary = summary
-    if author is not None:
-        novel.author = author
-    if status is not None:
-        novel.status = status
-    if is_published is not None:
-        novel.is_published = is_published
-    if is_featured is not None:
-        novel.is_featured = is_featured
-    if source_url is not None:
-        novel.source_url = source_url.strip() or None  # Boş string → NULL
+
+    fields, cover_image, banner_image = await _extract_series_update_data(request)
+    category_ids = _apply_common_series_fields(novel, fields)
+    if "author" in fields:
+        novel.author = _normalize_optional_text(fields["author"])
 
     new_cover_path = None
     new_banner_path = None
@@ -1091,3 +1136,215 @@ async def get_dashboard_stats(
     }
     admin_stats_cache.set("stats", stats)
     return {"status": "success", "data": stats}
+
+
+@router.get("/webtoon/{webtoon_id}/episodes")
+def list_webtoon_episodes_for_admin(
+    webtoon_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_editor),
+):
+    """Editör ve bot kontrolleri için bir webtoon'un bölüm listesini döner."""
+    exists = db.query(models.Webtoon.id).filter(models.Webtoon.id == webtoon_id).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Webtoon bulunamadı")
+
+    rows = (
+        db.query(
+            models.WebtoonEpisode.id,
+            models.WebtoonEpisode.webtoon_id,
+            models.WebtoonEpisode.episode_number,
+            models.WebtoonEpisode.title,
+            models.WebtoonEpisode.is_published,
+        )
+        .filter(models.WebtoonEpisode.webtoon_id == webtoon_id)
+        .order_by(models.WebtoonEpisode.episode_number.asc())
+        .all()
+    )
+    return [
+        {
+            "id": int(r.id),
+            "webtoon_id": int(r.webtoon_id),
+            "episode_number": float(r.episode_number) if r.episode_number is not None else 0,
+            "title": r.title or "",
+            "is_published": bool(r.is_published),
+        }
+        for r in rows
+    ]
+
+
+_REFUSAL_PHRASES = (
+    "i cannot",
+    "i'm sorry, i cannot",
+    "as an ai language model",
+    "üzgünüm, bu içeriği",
+)
+_HEALTH_SCAN_ITEM_LIMIT = 100
+_SHORT_CHAPTER_THRESHOLD = 1200
+
+
+def _inspect_local_static_file(raw_path: Optional[str]) -> Optional[str]:
+    """Yerel static dosyasını denetler; sorun varsa 'missing_file' veya 'empty_file' döner."""
+    if not raw_path:
+        return None
+    cleaned = str(raw_path).strip().replace("\\", "/")
+    if not cleaned or cleaned.startswith(("http://", "https://", "data:")):
+        return None
+
+    rel = cleaned.lstrip("/")
+    if rel.startswith("static/"):
+        rel = rel[len("static/"):]
+    if not rel:
+        return "missing_file"
+
+    static_root = os.path.realpath(media_utils.STATIC_ROOT)
+    candidate = os.path.realpath(os.path.join(static_root, rel))
+    if candidate != static_root and not candidate.startswith(static_root + os.sep):
+        return "missing_file"
+    if not os.path.isfile(candidate):
+        return "missing_file"
+    try:
+        if os.path.getsize(candidate) <= 0:
+            return "empty_file"
+    except OSError:
+        return "missing_file"
+    return None
+
+
+def _strip_html_plain_text(raw_html: Optional[str]) -> str:
+    without_tags = re.sub(r"<[^>]+>", " ", raw_html or "")
+    unescaped = html.unescape(without_tags)
+    return re.sub(r"\s+", " ", unescaped).strip()
+
+
+def _run_health_scan_sync(db: Session) -> dict:
+    broken_images: List[dict] = []
+    broken_images_total = 0
+
+    image_rows = (
+        db.query(
+            models.EpisodeImage.id,
+            models.EpisodeImage.episode_id,
+            models.EpisodeImage.image_url,
+            models.EpisodeImage.page_order,
+            models.WebtoonEpisode.episode_number,
+            models.Webtoon.id.label("webtoon_id"),
+            models.Webtoon.title.label("webtoon_title"),
+        )
+        .join(models.WebtoonEpisode, models.EpisodeImage.episode_id == models.WebtoonEpisode.id)
+        .join(models.Webtoon, models.WebtoonEpisode.webtoon_id == models.Webtoon.id)
+        .all()
+    )
+    for row in image_rows:
+        issue = _inspect_local_static_file(row.image_url)
+        if issue:
+            broken_images_total += 1
+            if len(broken_images) < _HEALTH_SCAN_ITEM_LIMIT:
+                broken_images.append(
+                    {
+                        "id": int(row.id),
+                        "episode_id": int(row.episode_id),
+                        "webtoon_id": int(row.webtoon_id),
+                        "webtoon_title": row.webtoon_title or "",
+                        "episode_number": row.episode_number,
+                        "page_order": int(row.page_order or 0),
+                        "image_url": row.image_url,
+                        "reason": issue,
+                    }
+                )
+
+    suspicious_chapters: List[dict] = []
+    short_chapters_total = 0
+    refusal_chapters_total = 0
+
+    chapter_rows = (
+        db.query(
+            models.NovelChapter.id,
+            models.NovelChapter.novel_id,
+            models.NovelChapter.chapter_number,
+            models.NovelChapter.title,
+            models.NovelChapter.content,
+            models.Novel.title.label("novel_title"),
+            models.Novel.slug.label("novel_slug"),
+        )
+        .join(models.Novel, models.NovelChapter.novel_id == models.Novel.id)
+        .filter(models.NovelChapter.is_published == True)
+        .all()
+    )
+    for ch in chapter_rows:
+        plain_text = _strip_html_plain_text(ch.content)
+        lower_text = plain_text.lower()
+        is_refusal = any(phrase in lower_text for phrase in _REFUSAL_PHRASES)
+        is_short = len(plain_text) < _SHORT_CHAPTER_THRESHOLD
+        if not is_refusal and not is_short:
+            continue
+
+        if is_refusal:
+            refusal_chapters_total += 1
+            reason = "refusal"
+        else:
+            short_chapters_total += 1
+            reason = "short"
+
+        if len(suspicious_chapters) < _HEALTH_SCAN_ITEM_LIMIT:
+            suspicious_chapters.append(
+                {
+                    "id": int(ch.id),
+                    "novel_id": int(ch.novel_id),
+                    "novel_title": ch.novel_title or "",
+                    "novel_slug": ch.novel_slug or "",
+                    "chapter_number": ch.chapter_number,
+                    "title": ch.title or "",
+                    "length": len(plain_text),
+                    "issue": reason,
+                    "reason": reason,
+                }
+            )
+
+    missing_covers: List[dict] = []
+    missing_covers_total = 0
+
+    for content_type, model_cls in (("webtoon", models.Webtoon), ("novel", models.Novel)):
+        series_rows = db.query(
+            model_cls.id,
+            model_cls.title,
+            model_cls.slug,
+            model_cls.cover_image,
+        ).all()
+        for series in series_rows:
+            issue = _inspect_local_static_file(series.cover_image)
+            if issue:
+                missing_covers_total += 1
+                if len(missing_covers) < _HEALTH_SCAN_ITEM_LIMIT:
+                    missing_covers.append(
+                        {
+                            "content_type": content_type,
+                            "id": int(series.id),
+                            "title": series.title or "",
+                            "slug": series.slug or "",
+                            "cover_image": series.cover_image,
+                            "reason": issue,
+                        }
+                    )
+
+    return {
+        "summary": {
+            "broken_images": broken_images_total,
+            "short_chapters": short_chapters_total,
+            "refusal_chapters": refusal_chapters_total,
+            "missing_covers": missing_covers_total,
+            "scanned_at": datetime.utcnow().replace(tzinfo=timezone.utc).isoformat(),
+        },
+        "broken_images": broken_images,
+        "suspicious_chapters": suspicious_chapters,
+        "missing_covers": missing_covers,
+    }
+
+
+@router.get("/health-scan")
+async def get_health_scan(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_editor),
+):
+    """Kırık sayfa görsellerini, eksik kapakları ve şüpheli/kısa roman bölümlerini tarar."""
+    return await run_in_threadpool(_run_health_scan_sync, db)

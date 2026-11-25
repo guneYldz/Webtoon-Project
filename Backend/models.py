@@ -92,6 +92,9 @@ class Webtoon(Base):
 
     type = Column(Enum(ContentType), default=ContentType.WEBTOON)
     source_url = Column(String(500), nullable=True)
+    rating_avg = Column(Float, nullable=False, default=0.0, server_default="0")
+    rating_count = Column(Integer, nullable=False, default=0, server_default="0")
+    translation_glossary = Column(Text, nullable=True)
 
     categories = relationship(
         "Category", 
@@ -353,6 +356,9 @@ class Novel(Base):
     is_featured = Column(Boolean, default=False)
     is_published = Column(Boolean, default=False)
     view_count = Column(Integer, default=0)
+    rating_avg = Column(Float, nullable=False, default=0.0, server_default="0")
+    rating_count = Column(Integer, nullable=False, default=0, server_default="0")
+    translation_glossary = Column(Text, nullable=True)
     favorites = relationship("Favorite", back_populates="novel")
     chapters = relationship("NovelChapter", back_populates="novel", cascade="all, delete-orphan")
     banner_image = Column(String, nullable=True)
@@ -465,3 +471,42 @@ class PasswordResetCode(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="password_reset_codes")
+
+
+# 14. SERİ PUANLAMALARI (1-5 Yıldız)
+class SeriesRating(Base):
+    __tablename__ = "series_ratings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    content_type = Column(String(16), nullable=False)  # webtoon | novel
+    series_id = Column(Integer, nullable=False)
+    score = Column(Integer, nullable=False)  # 1..5
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "content_type", "series_id", name="uq_user_series_rating"),
+        Index("ix_series_ratings_target", "content_type", "series_id"),
+    )
+
+
+# 15. ANASAYFA CANLI SOHBET MESAJLARI
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    content = Column(String(300), nullable=False)
+    is_deleted = Column(Boolean, nullable=False, default=False, server_default="false")
+    deleted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_chat_messages_deleted_id", "is_deleted", "id"),
+        Index("ix_chat_messages_user_created", "user_id", "created_at"),
+    )

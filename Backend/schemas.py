@@ -89,6 +89,8 @@ class WebtoonCard(BaseModel):
     cover_image: Optional[str] = None
     status: str      
     view_count: int = 0
+    rating_avg: float = 0.0
+    rating_count: int = 0
     type: ContentType
     is_featured: bool 
     is_published: bool = False
@@ -98,6 +100,16 @@ class WebtoonCard(BaseModel):
     # Anasayfada son bölümleri göstermek için
     episodes: List[EpisodeListSchema] = []
     categories: List[CategoryOut] = []
+
+    @field_validator("rating_avg", mode="before")
+    @classmethod
+    def coerce_rating_avg(cls, v):
+        return round(float(v), 2) if v is not None else 0.0
+
+    @field_validator("rating_count", mode="before")
+    @classmethod
+    def coerce_rating_count(cls, v):
+        return int(v) if v is not None else 0
     
     class Config:
         from_attributes = True
@@ -124,6 +136,8 @@ class NovelCard(BaseModel):
     cover_image: Optional[str] = None
     status: str
     view_count: int = 0
+    rating_avg: float = 0.0
+    rating_count: int = 0
     source_url: Optional[str] = None 
     is_published: bool = False
     created_at: Optional[datetime] = None
@@ -132,6 +146,16 @@ class NovelCard(BaseModel):
     # Anasayfada son bölümleri göstermek için
     chapters: List[NovelChapterListSchema] = []
     categories: List[CategoryOut] = []
+
+    @field_validator("rating_avg", mode="before")
+    @classmethod
+    def coerce_rating_avg(cls, v):
+        return round(float(v), 2) if v is not None else 0.0
+
+    @field_validator("rating_count", mode="before")
+    @classmethod
+    def coerce_rating_count(cls, v):
+        return int(v) if v is not None else 0
 
     class Config:
         from_attributes = True
@@ -180,6 +204,8 @@ class NovelDetail(BaseModel):
     banner_image: Optional[str] = None
     author: Optional[str] = None
     view_count: int = 0
+    rating_avg: float = 0.0
+    rating_count: int = 0
     is_featured: bool = False
     is_published: bool = False
     source_url: Optional[str] = None 
@@ -188,6 +214,16 @@ class NovelDetail(BaseModel):
     # 🔥 DÜZELTİLDİ: NovelChapterBase yerine NovelChapterListSchema
     chapters: List[NovelChapterListSchema] = []
     categories: List[CategoryOut] = []
+
+    @field_validator("rating_avg", mode="before")
+    @classmethod
+    def coerce_detail_rating_avg(cls, v):
+        return round(float(v), 2) if v is not None else 0.0
+
+    @field_validator("rating_count", mode="before")
+    @classmethod
+    def coerce_detail_rating_count(cls, v):
+        return int(v) if v is not None else 0
 
     class Config:
         from_attributes = True

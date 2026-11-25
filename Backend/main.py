@@ -40,6 +40,8 @@ from routers import (
     sitemap,
     reading_progress,
     recommendations,
+    ratings,
+    chat,
 )
 
 # 1. Yeni dev ortamları için eksik tabloları oluştur (şema göçleri Alembic ile yönetilir)
@@ -314,6 +316,8 @@ app.include_router(reactions.router)
 app.include_router(sitemap.router)
 app.include_router(reading_progress.router)
 app.include_router(recommendations.router)
+app.include_router(ratings.router)
+app.include_router(chat.router)
 
 @app.get("/")
 def ana_sayfa():

@@ -46,8 +46,8 @@ def rotate_key():
 
 client = get_gemini_client() if GOOGLE_API_KEYS else None
 
-# LOCALHOST AYARI: Docker'ın dışarı açtığı porta bağlanıyoruz.
-API_URL = "http://127.0.0.1:8000"
+# API adresi — .env üzerinden BOT_API_URL ile özelleştirilebilir.
+API_URL = os.getenv("BOT_API_URL", "http://127.0.0.1:8000").rstrip("/")
 
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 BOT_PASSWORD = os.getenv("BOT_PASSWORD")
@@ -287,16 +287,44 @@ def get_auth_token():
         print(f"❌ Sunucuya Bağlanılamadı (Local API): {e}")
         return None
 
-def get_last_chapter_number(token, novel_id, novel_slug):
-    headers = {"Authorization": f"Bearer {token}"}
-    for identifier in [novel_id, novel_slug]:
+def get_novel_bot_meta(token, novel_id, novel_slug):
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    if novel_slug:
         try:
-            res = requests.get(f"{API_URL}/novels/{identifier}", headers=headers)
+            res = requests.get(
+                f"{API_URL}/novels/{novel_slug}/latest-chapter",
+                headers=headers,
+                timeout=15,
+            )
             if res.status_code == 200:
-                chapters = res.json().get("chapters", [])
-                return max([ch["chapter_number"] for ch in chapters]) if chapters else 0
-        except: continue
-    return 0
+                return res.json()
+        except Exception:
+            pass
+
+    for identifier in [novel_id, novel_slug]:
+        if not identifier:
+            continue
+        try:
+            res = requests.get(f"{API_URL}/novels/{identifier}", headers=headers, timeout=15)
+            if res.status_code == 200:
+                data = res.json()
+                chapters = data.get("chapters", [])
+                latest = max([ch["chapter_number"] for ch in chapters]) if chapters else 0
+                return {
+                    "novel_id": data.get("id", novel_id),
+                    "slug": data.get("slug", novel_slug),
+                    "title": data.get("title"),
+                    "latest_chapter_number": latest,
+                    "chapter_count": len(chapters),
+                    "translation_glossary": data.get("translation_glossary"),
+                }
+        except Exception:
+            continue
+    return {"latest_chapter_number": 0, "translation_glossary": None}
+
+
+def get_last_chapter_number(token, novel_id, novel_slug):
+    return get_novel_bot_meta(token, novel_id, novel_slug).get("latest_chapter_number", 0)
 
 def get_all_novels(token):
     headers = {"Authorization": f"Bearer {token}"}
@@ -745,7 +773,8 @@ def translate_and_upload(token, novel, chapter_num, eng_title, eng_text, guncell
     elif "Lord of the Mysteries" in novel['title'] or "Lorm" in novel['title']:
         novel_key = "Lord of the Mysteries"
 
-    config = NOVEL_CONFIGS[novel_key]
+    db_glossary = (novel.get("translation_glossary") or "").strip()
+    config = db_glossary if db_glossary else NOVEL_CONFIGS[novel_key]
 
     # Başlıktaki özel ismi çıkar (örn: "Bölüm 1 - Nightmare Begins" → "Nightmare Begins")
     # Tire yoksa (düz "Bölüm 1") eng_isim boş kalır — o zaman başlık çevirisi istemeyiz
@@ -1112,6 +1141,10 @@ def repair_mode(kesin=False, sadece_telif=False, eksik_tara=False, hedef_bolum=N
         slug = novel['slug']
         print(f"\n📖 ONARIM KONTROLÜ: {novel['title']}")
 
+        bot_meta = get_novel_bot_meta(token, novel.get('id'), slug)
+        if bot_meta.get("translation_glossary"):
+            novel["translation_glossary"] = bot_meta["translation_glossary"]
+
         chapters = get_chapter_list(token, novel)
         if not chapters:
             print("   ⚠️ Bölüm listesi alınamadı, roman atlanıyor.")
@@ -1331,7 +1364,10 @@ if __name__ == "__main__":
 
             for novel in active_novels:
                 print(f"\n🔹 KONTROL: {novel['title']}")
-                last_ch = get_last_chapter_number(token, novel['id'], novel['slug'])
+                bot_meta = get_novel_bot_meta(token, novel['id'], novel['slug'])
+                if bot_meta.get("translation_glossary"):
+                    novel["translation_glossary"] = bot_meta["translation_glossary"]
+                last_ch = bot_meta.get("latest_chapter_number", 0)
                 current_ch = int(last_ch) + 1
 
                 # Art arda kaç hayalet/başarısız bölüm gördük?
