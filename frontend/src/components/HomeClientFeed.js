@@ -7,7 +7,6 @@ import { ArrowRight, Flame, Eye, Layers } from "lucide-react";
 import { resolveMediaUrl } from "@/lib/apiClient";
 import { formatTrNumber } from "@/lib/formatTr";
 import SeriesCard from "@/components/SeriesCard";
-import LiveChatBox from "@/components/LiveChatBox";
 import { Badge, badgeVariantFromSeriesType } from "@/components/ui";
 
 const UPDATE_TABS = [
@@ -134,10 +133,8 @@ export default function HomeClientFeed({ allSeries = [], popularList = [] }) {
         </section>
       </div>
 
-      {/* RIGHT: Live Community Chat & Trending Podium Sidebar */}
-      <aside className="w-full lg:w-80 xl:w-[340px] shrink-0 space-y-6">
-        <LiveChatBox />
-
+      {/* RIGHT: Trending Podium Sidebar */}
+      <aside className="w-full lg:w-80 xl:w-[340px] shrink-0">
         <div className="bg-surface/90 rounded-2xl border border-subtle p-5 shadow-2xl">
           <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-subtle">
             <h2 className="text-base font-bold text-ink-primary flex items-center gap-2">

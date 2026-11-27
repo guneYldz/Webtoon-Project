@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Layers,
   X,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import { Badge, Button } from "@/components/ui";
 
 const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
 const RANGE_CHUNK_SIZE = 100;
+const COLLAPSED_RANGE_LIMIT = 4;
 
 function isRecentlyPublished(dateStr, nowMs) {
   if (!dateStr || !nowMs) return false;
@@ -46,6 +48,7 @@ export default function ChapterDirectory({
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("desc"); // "desc" | "asc"
   const [nowMs, setNowMs] = useState(null);
+  const [directoryExpanded, setDirectoryExpanded] = useState(false);
 
   useEffect(() => {
     setNowMs(Date.now());
@@ -370,63 +373,133 @@ export default function ChapterDirectory({
       )}
 
       {/* Full Chapter Range Directory (Native <details> for 2-click UX jump & complete SSR crawlability) */}
-      {rangeGroups.length > 0 && (
-        <section
-          aria-label="Bölüm Dizini (Hızlı Geçiş)"
-          className="mt-10 pt-8 border-t border-subtle"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-            <h3 className="text-sm sm:text-base font-bold text-ink-primary flex items-center gap-2">
-              <Layers className="h-4 w-4 text-accent" aria-hidden="true" />
-              <span>Bölüm Dizini (Hızlı Geçiş)</span>
-            </h3>
-            <span className="text-xs text-ink-muted">
-              Tüm {items.length} bölüme aralık seçerek doğrudan ulaşın
-            </span>
-          </div>
+      {rangeGroups.length > 0 && (() => {
+        const hasOverflow = rangeGroups.length > COLLAPSED_RANGE_LIMIT;
+        const hiddenCount = Math.max(0, rangeGroups.length - COLLAPSED_RANGE_LIMIT);
 
-          <div className="space-y-2.5">
-            {rangeGroups.map((group) => (
-              <details
-                key={group.key}
-                className="group rounded-2xl border border-subtle bg-surface/80 overflow-hidden"
-              >
-                <summary className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none text-xs sm:text-sm font-semibold text-ink-primary hover:bg-elevated/60 transition list-none">
-                  <span className="inline-flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-accent/80" />
-                    <span>{group.label}</span>
-                  </span>
-                  <span className="inline-flex items-center gap-2 text-xs text-ink-muted font-medium">
-                    <span>{group.count} Bölüm</span>
-                    <ChevronDown
-                      className="h-4 w-4 text-ink-muted transition-transform duration-200 group-open:rotate-180"
-                      aria-hidden="true"
-                    />
-                  </span>
-                </summary>
+        return (
+          <section
+            aria-label="Bölüm Dizini (Hızlı Geçiş)"
+            className="mt-10 pt-8 border-t border-subtle"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <h3 className="text-sm sm:text-base font-bold text-ink-primary flex items-center gap-2">
+                <Layers className="h-4 w-4 text-accent" aria-hidden="true" />
+                <span>Bölüm Dizini (Hızlı Geçiş)</span>
+                <span className="text-xs font-medium text-ink-muted">
+                  ({rangeGroups.length} aralık)
+                </span>
+              </h3>
 
-                <div className="px-4 pb-4 pt-2 border-t border-subtle bg-canvas/40 grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
-                  {group.items.map((item) => {
-                    const num = getNumber(item);
-                    const displayTitle = getDisplayTitle(item);
-                    return (
-                      <Link
-                        key={item.id ?? num}
-                        href={getHref(item)}
-                        prefetch={false}
-                        title={`${displayTitle} Oku`}
-                        className="px-2 py-1.5 rounded-lg border border-subtle bg-surface hover:bg-elevated hover:border-accent-border text-center text-xs font-medium text-ink-secondary hover:text-ink-primary truncate tabular-nums transition"
-                      >
-                        Bölüm {num}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </details>
-            ))}
-          </div>
-        </section>
-      )}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-ink-muted">
+                  Tüm {items.length} bölüme aralık seçerek doğrudan ulaşın
+                </span>
+                {hasOverflow && directoryExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setDirectoryExpanded(false)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-subtle bg-surface hover:bg-elevated px-2.5 py-1 text-xs font-semibold text-ink-secondary hover:text-ink-primary transition"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
+                    <span>Daralt</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {(() => {
+              const renderRangeCard = (group) => (
+                <details
+                  key={group.key}
+                  className="group rounded-2xl border border-subtle bg-surface/80 overflow-hidden"
+                >
+                  <summary className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none text-xs sm:text-sm font-semibold text-ink-primary hover:bg-elevated/60 transition list-none">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-accent/80" />
+                      <span>{group.label}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-2 text-xs text-ink-muted font-medium">
+                      <span>{group.count} Bölüm</span>
+                      <ChevronDown
+                        className="h-4 w-4 text-ink-muted transition-transform duration-200 group-open:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </span>
+                  </summary>
+
+                  <div className="px-4 pb-4 pt-2 border-t border-subtle bg-canvas/40 grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-1.5">
+                    {group.items.map((item) => {
+                      const num = getNumber(item);
+                      const displayTitle = getDisplayTitle(item);
+                      return (
+                        <Link
+                          key={item.id ?? num}
+                          href={getHref(item)}
+                          prefetch={false}
+                          title={`${displayTitle} Oku`}
+                          className="px-2 py-1.5 rounded-lg border border-subtle bg-surface hover:bg-elevated hover:border-accent-border text-center text-xs font-medium text-ink-secondary hover:text-ink-primary truncate tabular-nums transition"
+                        >
+                          Bölüm {num}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+
+              const primaryGroups = rangeGroups.slice(0, COLLAPSED_RANGE_LIMIT);
+              const overflowGroups = rangeGroups.slice(COLLAPSED_RANGE_LIMIT);
+
+              return (
+                <>
+                  <div className="space-y-2.5">
+                    {primaryGroups.map(renderRangeCard)}
+                  </div>
+
+                  {overflowGroups.length > 0 && (
+                    <div
+                      aria-hidden={!directoryExpanded}
+                      className={
+                        directoryExpanded
+                          ? "mt-2.5 space-y-2.5"
+                          : "max-h-0 overflow-hidden opacity-0 pointer-events-none"
+                      }
+                    >
+                      {overflowGroups.map(renderRangeCard)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {hasOverflow && (
+              <div className="mt-3 flex justify-center">
+                <button
+                  type="button"
+                  aria-expanded={directoryExpanded}
+                  onClick={() => setDirectoryExpanded((prev) => !prev)}
+                  className="inline-flex items-center justify-center gap-2 w-full sm:w-auto min-w-[240px] rounded-xl border border-subtle bg-surface hover:bg-elevated hover:border-accent-border px-5 py-2.5 text-xs sm:text-sm font-semibold text-ink-primary transition-all shadow-sm"
+                >
+                  {directoryExpanded ? (
+                    <>
+                      <ChevronUp className="h-4 w-4 text-accent" aria-hidden="true" />
+                      <span>Bölüm Dizinini Daralt</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4 text-accent" aria-hidden="true" />
+                      <span>
+                        Aşağı Genişlet ({hiddenCount} aralık daha • Toplam {items.length} bölüm)
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </section>
+        );
+      })()}
     </div>
   );
 }

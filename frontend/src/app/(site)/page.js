@@ -1,5 +1,6 @@
 import HomeSlider from "@/components/HomeSlider";
 import ContinueReadingRail from "@/components/ContinueReadingRail";
+import LiveChatBox from "@/components/LiveChatBox";
 import HomeClientFeed from "@/components/HomeClientFeed";
 import { apiFetch } from "@/lib/apiClient";
 
@@ -132,6 +133,11 @@ export default async function Home() {
 
         {/* CONTINUE READING RAIL (Hydrated from localStorage) */}
         <ContinueReadingRail />
+
+        {/* LIVE COMMUNITY CHAT */}
+        <section aria-label="Canlı Sohbet" className="mb-10">
+          <LiveChatBox />
+        </section>
 
         {/* INTERACTIVE UPDATES & TRENDING FEED */}
         <HomeClientFeed allSeries={allSeries} popularList={popularList} />

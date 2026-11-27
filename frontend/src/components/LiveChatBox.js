@@ -432,7 +432,7 @@ export default function LiveChatBox() {
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
-            className="h-[290px] sm:h-[330px] overflow-y-auto p-3.5 space-y-2.5 bg-canvas/40"
+            className="h-[240px] sm:h-[260px] overflow-y-auto p-3.5 space-y-2.5 bg-canvas/40"
           >
             {loading ? (
               <div className="h-full flex flex-col items-center justify-center gap-2 text-ink-muted text-xs">
